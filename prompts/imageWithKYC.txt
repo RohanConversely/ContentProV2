@@ -124,8 +124,3 @@ Generate **6–7 final, photorealistic images** based on the uploaded product im
 
 **using the shared Product KYC JSON**, aligned with **Indian context**, **Amazon India listing format**, and including **one mandatory storytelling image**.
 
-Tool used: OpenAI API (gpt-image-1)
-
-Inputs:
-- Product KYC (JSON)
-- Product image
