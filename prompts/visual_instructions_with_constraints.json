@@ -1,0 +1,222 @@
+{
+  "visual_instructions": {
+    "product_lock": {
+      "description": "The uploaded product image is the single source of truth. Generated images must match exactly with zero deviation.",
+      "constraints": [
+        "Product design is strictly locked - do not change, alter, redesign, or modify in any way",
+        "Shape, size, proportions, color tones, material finish, surface texture, branding placement, logos, text, edges, curves, thickness, transparency, reflections, shadows, and overall geometry must remain identical to reference image",
+        "Only background, environment, camera angle, lighting, and context may vary where permitted"
+      ]
+    },
+    "realism_standard": {
+      "description": "All images must look 100% realistic, not artificial, stylized, or AI-generated.",
+      "constraints": [
+        "Use professional DSLR or mirrorless camera quality",
+        "Backgrounds must be photorealistic - not 3D, illustrated, or cartoon-style",
+        "Enhance clarity, lighting, and realism only - do not distort, reshape, recolor, or modify product"
+      ]
+    },
+    "orientation_requirements": {
+      "description": "Generate mix of orientations while maintaining full product visibility",
+      "constraints": [
+        "Include both portrait (vertical) and landscape (horizontal) orientations",
+        "Maintain full product visibility and composition quality in all orientations"
+      ]
+    },
+    "image_dimensions": {
+      "description": "Strict size compliance for Amazon listings",
+      "constraints": [
+        "Do not resize, crop, pad, stretch, upscale, or alter aspect ratio"
+      ]
+    }
+  },
+  "constraint_blocks": {
+    "product_constraints": {
+      "source": "KYC",
+      "content": "Product design must remain exactly the same, with white marble base and golden brass cross-frame holder as shown; branding placement unchanged."
+    },
+    "shot_type_requirements": {
+      "source": "Combined",
+      "content": "Generate product in-use (Indian lifestyle context), lifestyle background (India-relevant environment), and one mandatory storytelling image"
+    },
+    "storytelling_image": {
+      "source": "Prompt",
+      "mandatory": true,
+      "requirements": [
+        "Uses Product KYC theme and keywords",
+        "Shows product naturally integrated into Indian real-life scenario",
+        "Communicates emotion, purpose, and benefit in single frame",
+        "Feels authentic, relatable, and aspirational",
+        "Supports Amazon listing narrative and improves conversion",
+        "Does not look staged, artificial, or over-designed"
+      ]
+    },
+    "handmade_handcrafted_realism": {
+      "source": "Prompt",
+      "applicable_when": "Product is handmade or handcrafted",
+      "requirements": [
+        "Clearly reflect human touch",
+        "Show subtle natural imperfections - hand-finished textures, slight asymmetry, organic material variations",
+        "Avoid machine-perfect or factory-polished appearance",
+        "Include gentle human interaction where appropriate to emphasize craftsmanship and scale"
+      ]
+    },
+    "indian_context_enforcement": {
+      "source": "Combined",
+      "requirements": [
+        "All contexts, environments, and usage scenarios must align with Indian context defined in Product KYC",
+        "Use warm, earthy Indian home settings",
+        "Depict product in modern Indian urban homes",
+        "Show during Indian festivals (Diwali, Raksha Bandhan) where appropriate",
+        "Avoid non-Indian cultural props or irrelevant settings"
+      ]
+    },
+    "amazon_a_plus_style": {
+      "source": "Combined",
+      "requirements": [
+        "Clean, uncluttered backgrounds with warm tones",
+        "Premium, professional lighting",
+        "Focus on product and usage clarity",
+        "Text overlays minimal with premium font styles",
+        "Sophisticated and clutter-free layout",
+        "Fully compliant with Amazon India listing and A+ Content standards"
+      ]
+    },
+    "lighting_requirements": {
+      "source": "KYC",
+      "content": "Use warm, soft professional lighting to emphasize marble texture and brass sheen, ensuring realistic reflections and minimal shadows mimicking Indian natural or lamp light settings."
+    },
+    "prohibited_elements": {
+      "source": "Combined",
+      "constraints": [
+        "Do not change product colors or finishes",
+        "Avoid overly cluttered accessory placement",
+        "Avoid bright or harsh lighting causing reflections",
+        "Avoid busy backgrounds distracting from product",
+        "Avoid over-designed or artificial looking compositions"
+      ]
+    }
+  },
+  "image_composition": {
+    "recommended_angles": {
+      "source": "KYC",
+      "options": [
+        "Front close-up of marble base and holder",
+        "Side profile angle showing depth and material texture",
+        "Top-down view displaying accessory placement",
+        "Lifestyle scene with hands placing jewelry or keys",
+        "Full view in Indian dressing table environment"
+      ]
+    },
+    "recommended_environments": {
+      "source": "KYC",
+      "indoor_spaces": [
+        "Modern Indian dressing table",
+        "Entryway console table",
+        "Bedroom bedside table",
+        "Minimalist work desk for accessories"
+      ],
+      "contextual_settings": [
+        "Festive decorated home corner",
+        "Home interiors with warm, earthy tones",
+        "Urban apartments with mix of traditional and modern décor",
+        "Well-lit dressing area with natural sunlight or warm lamp light"
+      ]
+    },
+    "suitable_backgrounds": {
+      "source": "KYC",
+      "options": [
+        "Neutral beige or warm cream walls",
+        "Light wooden furniture surfaces",
+        "Soft fabrics like linen or cotton in muted tones",
+        "Festive décor elements like marigold garlands subtly blurred",
+        "Indian home interiors with minimal distractions"
+      ]
+    },
+    "lifestyle_scenarios": {
+      "source": "KYC",
+      "options": [
+        "Woman placing bangles and watch on the stand",
+        "Keys hung on the holder near entrance door",
+        "Morning routine setup with jewelry and accessories",
+        "Festive gifting moment showing wrapped box beside product",
+        "Organized dressing table with mirror and soft lighting"
+      ]
+    },
+    "text_placement": {
+      "source": "KYC",
+      "guidelines": "Use bottom or top third of images without overlapping product area; clean margins only; ideally on plain background sections"
+    },
+    "emotions_to_convey": {
+      "source": "KYC",
+      "options": [
+        "Calm and organized lifestyle",
+        "Pride in elegant home décor",
+        "Joy of gifting and celebrations",
+        "Simplicity and sophistication",
+        "Trust in quality and craftsmanship"
+      ]
+    }
+  },
+  "product_kyc_reference": {
+    "note": "The following KYC data provides context for image generation - use keywords, themes, and context specified herein",
+    "product_name": "Tatsya Marble Jewelry & Key Holder Stand with Brass Finish for Organizer & Decor",
+    "brand_name": "Tatsya",
+    "product_category": "Home & Kitchen > Home Décor > Decorative Organizers",
+    "target_audience": "Urban Indian homemakers, young professionals, and gift shoppers aged 20-45",
+    "primary_use_case": "Organizing and displaying jewelry, keys, and small accessories in a stylish manner",
+    "cultural_relevance": "Compact and elegant use of marble and brass reflects traditional Indian materials with a modern design aesthetic suitable for Indian homes",
+    "lifestyle_theme": "Minimalistic yet elegant lifestyle accessory resonating with contemporary Indian urban aesthetics and practical daily habits",
+    "emotional_value": "Brings order and sophistication to personal spaces, tapping into Indian buyers' preference for harmony, style, and convenience",
+    "visual_keywords": {
+      "product_appearance": [
+        "white marble base with brass finish",
+        "cross-shaped jewelry and key holder",
+        "minimalistic Indian home dresser setup",
+        "accessories on brass frame holder",
+        "neutral background with warm light"
+      ],
+      "lifestyle_context": [
+        "urban Indian dressing table",
+        "modern home décor",
+        "festive gifting seasons",
+        "daily routine organization",
+        "compact home organization"
+      ]
+    },
+    "listing_strategy": {
+      "title": "Tatsya Marble Jewelry & Key Holder Stand with Brass Frame – Elegant Organizer for Watches, Bracelets & Keys, Perfect Gift for Indian Festivals & Home Décor",
+      "key_benefits": [
+        "Premium Marble Base and Brass Frame – Stylish and durable design blending traditional Indian materials",
+        "Multi-Functional Organizer – Holds watches, bracelets, bangles, rings, and keys in one place",
+        "Compact & Space-Saving – Ideal for small Indian homes",
+        "Perfect Gift Option – For Diwali, Raksha Bandhan, housewarmings, and weddings",
+        "Easy to Clean & Maintain – Polished marble surface and brass frame"
+      ]
+    },
+    "differentiation": {
+      "must_include": [
+        "Showcase marble texture and brass shine in close-ups",
+        "Use warm, earthy Indian home settings for lifestyle shots",
+        "Highlight use during Indian festivals and gifting",
+        "Keep backgrounds minimalistic but warm and inviting",
+        "Include real-life usage clutter-free setups"
+      ],
+      "emotional_messaging": [
+        "Focus on emotional value of gifting and daily use",
+        "Emphasize premium materials linked to Indian tradition",
+        "Clearly communicate multi-functionality in simple terms",
+        "Highlight ease of maintenance for Indian home environments",
+        "Use culturally relevant festive gifting language"
+      ]
+    }
+  },
+  "output_specification": {
+    "image_count": 3,
+    "required_components": [
+      "2 lifestyle/product-in-use images with Indian context",
+      "1 mandatory storytelling image"
+    ],
+    "quality_standard": "Professional Amazon A+ Content quality - studio finish, fully compliant with Amazon India listing standards"
+  }
+}
