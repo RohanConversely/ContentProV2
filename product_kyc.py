@@ -6,8 +6,10 @@ import mimetypes
 from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
+from logger import JsonLogger, log_usage
 
 load_dotenv()
+logger = JsonLogger()
 
 
 def load_prompt(prompt_file: str) -> str:
@@ -67,6 +69,11 @@ def generate_image_kyc(
     image_b64 = base64.b64encode(image_bytes).decode("utf-8")
     image_data_url = f"data:{mime_type};base64,{image_b64}"
 
+    logger.info(
+        "Requesting Product KYC.",
+        {"image_path": image_path, "brand_name": brand_name, "brand_website": brand_website},
+    )
+
     response = client.responses.create(
         model="gpt-4.1-mini",
         input=[
@@ -84,6 +91,7 @@ def generate_image_kyc(
         text={"format": {"type": "json_object"}},
     )
 
+    log_usage(logger, response, {"operation": "product_kyc"})
     kyc_json = json.loads(response.output_text)
 
     image_name = Path(image_path).stem
@@ -93,6 +101,7 @@ def generate_image_kyc(
 
     print(f"KYC saved to: {output_file}")
     print(f"Brand: {brand_name}")
+    logger.info("KYC saved.", {"output_file": str(output_file), "brand_name": brand_name})
 
     return kyc_json
 
