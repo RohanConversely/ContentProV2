@@ -108,7 +108,7 @@ def generate_image_kyc(
 
 def main():
     generate_image_kyc(
-        image_path=__file__.rsplit("/", 1)[0] + "/tatsya_product.jpg",
+        image_path=__file__.rsplit("/", 1)[0] + "/tatsya_product2.jpg",
         brand_name="Tatsya",
         brand_website="https://tatsya.com/",
     )

@@ -22,6 +22,7 @@ Using that **exact image as the base** and **strictly following the shared Produ
 ## **IMAGE REQUIREMENTS**
 
 - Images must look **100% realistic** — not artificial, stylized, or AI-generated.
+- **Do not depict photorealistic children in any generated image under any circumstance.**
 - Use the product in **different real-life contexts, angles, and environments**.
 - All contexts, environments, and usage scenarios must be created **according to the Indian context or product theme defined in the Product KYC**.
 - Keep the product's **exact shape, color, branding, proportions, and details unchanged**.
@@ -123,4 +124,3 @@ Follow the KYC strictly when generating images.
 Generate **6–7 final, photorealistic images** based on the uploaded product image,
 
 **using the shared Product KYC JSON**, aligned with **Indian context**, **Amazon India listing format**, and including **one mandatory storytelling image**.
-

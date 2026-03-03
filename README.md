@@ -1,17 +1,19 @@
 # Image Generation Pipeline
 
-A pipeline for generating Amazon A+ content images with KYC (Know Your Customer) documentation.
+A pipeline for generating Amazon A+ content images with KYC (Know Your Customer) documentation, video prompts, and video frames.
 
 ## Pipeline Steps
 
 1. **Image KYC Generation** - Generate product KYC from product image, brand name, and brand website
 2. **A+ Image Generation** - Generate 6-7 realistic product images using the KYC
-3. **Per-Image Prompt Generation** - Generate Veo video prompts for each image
+3. **Per-Image Prompt Generation** - Generate Veo video prompts for each generated image
+4. **Video Frame Generation** - Generate video frames from images using Veo 3.1
 
 ## Prerequisites
 
 - Python 3.10+
 - OpenAI API key
+- Gemini API key (for video generation)
 
 ## Setup
 
@@ -25,16 +27,17 @@ pip install -r requirements.txt
 
 2. **Configure environment variables:**
 
-Copy `.env.example` to `.env` and add your OpenAI API key:
+Copy `.env.example` to `.env` and add your API keys:
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and replace `your_api_key_here` with your actual OpenAI API key:
+Edit `.env` and replace with your actual API keys:
 
 ```
 OPENAI_API_KEY=sk-your-actual-api-key
+GEMINI_API_KEY=your-gemini-api-key
 ```
 
 ## Usage
@@ -51,11 +54,55 @@ python product_kyc.py
 This will:
 - Read the product image (`tatsya_product.jpg`)
 - Use brand name "Tatsya" and website "https://tatsya.com/"
-- Generate a KYC JSON and save it to `Tatsya_kyc/kyc.json`
+- Generate a KYC JSON and save it to `product_kycs/`
+
+### Step 2: Generate A+ Content Images
+
+Run the image generation script:
+
+```bash
+source venv/bin/activate
+python image_gen_with_KYC.py
+```
+
+This will:
+- Read the product image and KYC JSON
+- Generate 4 A+ content images
+- Save them to `generated_images/`
+
+### Step 3: Generate Video Prompts
+
+Run the video prompt generation script:
+
+```bash
+source venv/bin/activate
+python video_prompt_generation.py
+```
+
+This will:
+- Read the first image from `generated_images/`
+- Use `prompts/perImagePromptGen.txt` as the prompt
+- Generate video prompts using GPT-4.1 mini
+- Save them to `video_frame_prompts/`
+
+### Step 4: Generate Video Frames
+
+Run the video generation script:
+
+```bash
+source venv/bin/activate
+python video_gen.py
+```
+
+This will:
+- Read the image from `generated_images/`
+- Use the KYC JSON as the prompt
+- Generate video frames using Veo 3.1 fast model
+- Save them to `video_frames/`
 
 ### Custom Brand Configuration
 
-Edit the `main()` function in `product_kyc.py` to change the brand details:
+Edit the `main()` function in each script to change the brand details:
 
 ```python
 def main():
@@ -70,24 +117,31 @@ def main():
 
 ```
 project_root/
-├── Tatsya_kyc/
-│   └── kyc.json          # Generated KYC data
+├── product_kycs/
+│   └── <brand>_<product>_kyc.json    # Generated KYC data
+├── generated_images/
+│   └── <brand>_<product>_<n>.png      # Generated A+ images
+├── video_frame_prompts/
+│   └── <image_name>_prompt.json       # Video prompts for Veo
+├── video_frames/
+│   └── <image_name>_video.mp4        # Generated video frames
 ├── prompts/
-│   ├── imageKYC.txt       # KYC generation prompt
-│   ├── imageWithKYC.txt  # A+ image generation prompt
-│   └── perImagePromptGen.txt  # Veo prompt generation
-├── product_kyc.py         # Step 1 script
-└── .env                   # API keys (not committed)
+│   ├── imageKYC.txt                   # KYC generation prompt
+│   ├── imageWithKYC.txt              # A+ image generation prompt
+│   └── perImagePromptGen.txt         # Veo prompt generation
+├── product_kyc.py                     # Step 1 script
+├── image_gen_with_KYC.py              # Step 2 script
+├── video_prompt_generation.py         # Step 3 script
+├── video_gen.py                       # Step 4 script
+└── .env                               # API keys (not committed)
 ```
 
-## Prompts
+## Scripts
 
-- `prompts/imageKYC.txt` - Generates product KYC with Amazon India focus
-- `prompts/imageWithKYC.txt` - Generates 6-7 A+ content images
-- `prompts/perImagePromptGen.txt` - Generates video prompts for each image
+| Script | Purpose | API |
+|--------|---------|-----|
+| `product_kyc.py` | Generate product KYC | OpenAI GPT-4.1 mini |
+| `image_gen_with_KYC.py` | Generate A+ images | OpenAI gpt-image-1 |
+| `video_prompt_generation.py` | Generate video prompts | OpenAI GPT-4.1 mini |
+| `video_gen.py` | Generate video frames | Google Veo 3.1 fast |
 
-## Notes
-
-- The KYC JSON output is stored in `<brand_name>_kyc/kyc.json`
-- Subsequent pipeline steps read from this JSON file
-- Do not commit `.env` to version control (it's in `.gitignore`)

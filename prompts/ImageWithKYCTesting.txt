@@ -2,7 +2,7 @@
 
 I will upload a **product image** along with a **Product KYC document** (provided as JSON).
 
-Using that **exact image as the base** and **strictly following the shared Product KYC**, generate **3 different realistic images** of the product.
+Using that **exact image as the base** and **strictly following the shared Product KYC**, generate **4 different realistic images** of the product.
 
 ---
 
@@ -22,6 +22,7 @@ Using that **exact image as the base** and **strictly following the shared Produ
 ## **IMAGE REQUIREMENTS**
 
 - Images must look **100% realistic** — not artificial, stylized, or AI-generated.
+- **Do not depict photorealistic children in any generated image under any circumstance.**
 - Use the product in **different real-life contexts, angles, and environments**.
 - All contexts, environments, and usage scenarios must be created **according to the Indian context or product theme defined in the Product KYC**.
 - Keep the product's **exact shape, color, branding, proportions, and details unchanged**.
@@ -45,6 +46,7 @@ Using that **exact image as the base** and **strictly following the shared Produ
 
 - Product in-use (Indian lifestyle context)
 - Lifestyle background (India-relevant environment)
+- Clean enhanced studio shot (Amazon listing ready)
 - **One storytelling image (mandatory)**
 
 ---
@@ -106,7 +108,6 @@ Follow the KYC strictly when generating images.
 
 ## **FINAL OUTPUT**
 
-Generate **3 final, photorealistic images** based on the uploaded product image,
+Generate **4 final, photorealistic images** based on the uploaded product image,
 
 **using the shared Product KYC JSON**, aligned with **Indian context**, **Amazon India listing format**, and including **one mandatory storytelling image**.
-
