@@ -30,7 +30,7 @@ def generate_images(
     image_path: str,
     brand_name: str,
     kyc_path: str,
-    num_images: int = 3,
+    num_images: int = 4,
     output_dir: str = "generated_images",
 ) -> list[str]:
     """
@@ -40,7 +40,7 @@ def generate_images(
         image_path: Path to the product image
         brand_name: Name of the brand
         kyc_path: Path to the KYC JSON file
-        num_images: Number of images to generate (default: 3)
+        num_images: Number of images to generate (default: 4)
         output_dir: Output directory for generated images
 
     Returns:
