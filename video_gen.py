@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
+import argparse
 import os
 import json
+import sys
 import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from typing import Any
 from dotenv import load_dotenv
 
 load_dotenv()
 
-from google import genai
-from google.genai import types
+from logger import JsonLogger
 
-from logger import JsonLogger, log_usage
-
-logger = JsonLogger()
+DEFAULT_RESULT_PREFIX = "__RESULT__"
 
 
 def _extract_video_bytes_and_uri(video_obj):
@@ -66,11 +66,28 @@ def _redact_key_from_url(url: str) -> str:
     return parsed._replace(query=new_query).geturl()
 
 
+def build_logger(job_log_file: str | None) -> JsonLogger:
+    if job_log_file:
+        return JsonLogger(
+            job_log_file=job_log_file,
+            include_global_when_job_active=False,
+        )
+    return JsonLogger()
+
+
+def with_context(base: dict[str, Any] | None, extra: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base or {})
+    merged.update(extra)
+    return merged
+
+
 def generate_video_frame(
     image_path: str,
     kyc_path: str,
     output_dir: str = "video_frames",
     max_wait_seconds: int = 480,
+    logger_obj: JsonLogger | None = None,
+    log_context: dict[str, Any] | None = None,
 ) -> str | None:
     """
     Generate video frame from an image using Gemini Veo 3.1 fast model.
@@ -83,11 +100,16 @@ def generate_video_frame(
     Returns:
         Path to the generated video file
     """
+    stage_logger = logger_obj or JsonLogger()
+
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise ValueError(
             "GEMINI_API_KEY not found in environment. Please set it in .env file."
         )
+
+    from google import genai
+    from google.genai import types
 
     client = genai.Client(api_key=api_key)
 
@@ -106,9 +128,17 @@ def generate_video_frame(
         prompt_json, indent=2, ensure_ascii=False
     )
 
-    logger.info(
+    stage_logger.info(
         "Requesting video generation with Veo 3.1.",
-        {"image_path": image_path, "kyc_path": kyc_path},
+        with_context(
+            log_context,
+            {
+                "image_path": str(Path(image_path).resolve()),
+                "kyc_path": str(Path(kyc_path).resolve()),
+                "output_dir": str(output_path.resolve()),
+                "max_wait_seconds": max_wait_seconds,
+            },
+        ),
     )
 
     operation = client.models.generate_videos(
@@ -123,55 +153,73 @@ def generate_video_frame(
     )
 
     if getattr(operation, "name", None):
-        logger.info("Video generation operation created.", {"operation_name": operation.name})
+        stage_logger.info(
+            "Video generation operation created.",
+            with_context(log_context, {"operation_name": operation.name}),
+        )
 
     start_time = time.time()
     try:
         while not operation.done:
             if time.time() - start_time > max_wait_seconds:
-                logger.error(
+                stage_logger.error(
                     "Video generation timed out.",
-                    {
-                        "operation_name": getattr(operation, "name", None),
-                        "max_wait_seconds": max_wait_seconds,
-                    },
+                    with_context(
+                        log_context,
+                        {
+                            "operation_name": getattr(operation, "name", None),
+                            "max_wait_seconds": max_wait_seconds,
+                        },
+                    ),
                 )
                 if hasattr(client, "operations") and hasattr(client.operations, "cancel"):
                     try:
                         client.operations.cancel(operation)
-                        logger.info(
+                        stage_logger.info(
                             "Cancellation requested for timed-out operation.",
-                            {"operation_name": getattr(operation, "name", None)},
+                            with_context(
+                                log_context,
+                                {"operation_name": getattr(operation, "name", None)},
+                            ),
                         )
                     except Exception as cancel_err:
-                        logger.error(
+                        stage_logger.error(
                             "Failed to cancel timed-out operation.",
-                            {"error": str(cancel_err)},
+                            with_context(log_context, {"error": str(cancel_err)}),
                         )
                 return None
             time.sleep(2)
             operation = client.operations.get(operation)
     except KeyboardInterrupt:
-        logger.warning(
+        stage_logger.warning(
             "Interrupted by user. Attempting to cancel operation.",
-            {"operation_name": getattr(operation, "name", None)},
+            with_context(
+                log_context,
+                {"operation_name": getattr(operation, "name", None)},
+            ),
         )
         if hasattr(client, "operations") and hasattr(client.operations, "cancel"):
             try:
                 client.operations.cancel(operation)
-                logger.info(
+                stage_logger.info(
                     "Cancellation requested after interrupt.",
-                    {"operation_name": getattr(operation, "name", None)},
+                    with_context(
+                        log_context,
+                        {"operation_name": getattr(operation, "name", None)},
+                    ),
                 )
             except Exception as cancel_err:
-                logger.error(
+                stage_logger.error(
                     "Failed to cancel operation after interrupt.",
-                    {"error": str(cancel_err)},
+                    with_context(log_context, {"error": str(cancel_err)}),
                 )
         return None
 
     if operation.error:
-        logger.error("Video generation failed.", {"error": str(operation.error)})
+        stage_logger.error(
+            "Video generation failed.",
+            with_context(log_context, {"error": str(operation.error)}),
+        )
         print(f"Error: {operation.error}")
         return None
 
@@ -184,7 +232,10 @@ def generate_video_frame(
             download_url = _build_download_url(video_uri, api_key)
             safe_url = _redact_key_from_url(download_url)
 
-            logger.info("Video returned as URI; attempting download.", {"uri": safe_url})
+            stage_logger.info(
+                "Video returned as URI; attempting download.",
+                with_context(log_context, {"uri": safe_url}),
+            )
             try:
                 request = urllib.request.Request(download_url)
                 if api_key:
@@ -192,47 +243,120 @@ def generate_video_frame(
                 with urllib.request.urlopen(request) as response_stream:
                     video_data = response_stream.read()
             except Exception as download_err:
-                logger.error(
+                stage_logger.error(
                     "Failed to download video from URI.",
-                    {"uri": safe_url, "error": str(download_err)},
+                    with_context(
+                        log_context,
+                        {"uri": safe_url, "error": str(download_err)},
+                    ),
                 )
                 print("Error: Failed to download video from URI.")
                 return None
 
         if not video_data:
-            logger.error("No video bytes found on response.", {"video": str(video)})
+            stage_logger.error(
+                "No video bytes found on response.",
+                with_context(log_context, {"video": str(video)}),
+            )
             print("Error: No video bytes found on response.")
             return None
 
         image_name = Path(image_path).stem
-        output_file = output_path / f"{image_name}_video.mp4"
+        output_file = (output_path / f"{image_name}_video.mp4").resolve()
 
         with open(output_file, "wb") as f:
             f.write(video_data)
 
         print(f"Video saved to: {output_file}")
-        logger.info("Video generated.", {"output_file": str(output_file)})
+        stage_logger.info(
+            "Video generated.",
+            with_context(log_context, {"output_file": str(output_file)}),
+        )
 
         return str(output_file)
     else:
-        logger.error("No video generated.", {"response": str(operation.result)})
+        stage_logger.error(
+            "No video generated.",
+            with_context(log_context, {"response": str(operation.result)}),
+        )
         return None
 
 
-def main():
+def run_cli(args: argparse.Namespace) -> int:
+    stage_logger = build_logger(args.job_log_file)
+    context = {"job_id": args.job_id, "stage": args.stage_name}
+
+    try:
+        image_path = str(Path(args.image_path).resolve())
+        kyc_path = str(Path(args.kyc_path).resolve())
+        output_dir = str(Path(args.output_dir).resolve())
+
+        video_path = generate_video_frame(
+            image_path=image_path,
+            kyc_path=kyc_path,
+            output_dir=output_dir,
+            max_wait_seconds=args.max_wait_seconds,
+            logger_obj=stage_logger,
+            log_context=context,
+        )
+        if not video_path:
+            raise RuntimeError("Video generation returned no output path.")
+
+        result = {
+            "ok": True,
+            "video_path": str(Path(video_path).resolve()),
+            "image_path": image_path,
+            "prompt_path": kyc_path,
+        }
+        print(f"{args.result_prefix}{json.dumps(result, ensure_ascii=False)}")
+        return 0
+    except Exception as exc:
+        stage_logger.error("Stage failed.", with_context(context, {"error": str(exc)}))
+        print(f"Error: {exc}")
+        return 1
+
+
+def run_default() -> int:
     script_dir = Path(__file__).parent
     image_path = script_dir / "generated_images" / "Tatsya_tatsya_product2_3.png"
     kyc_path = script_dir / "video_frame_prompts" / "Tatsya_tatsya_product2_3_prompt.json"
 
     if not image_path.exists():
         print(f"Image not found: {image_path}")
-        return
+        return 1
 
     if not kyc_path.exists():
         print(f"KYC file not found: {kyc_path}")
-        return
+        return 1
 
     generate_video_frame(image_path=str(image_path), kyc_path=str(kyc_path))
+    return 0
+
+
+def main() -> None:
+    if len(sys.argv) == 1:
+        raise SystemExit(run_default())
+
+    parser = argparse.ArgumentParser(description="Generate video from image + prompt JSON.")
+    parser.add_argument("--image-path", required=True, help="Path to generated image")
+    parser.add_argument("--kyc-path", required=True, help="Path to video prompt JSON")
+    parser.add_argument("--output-dir", default="video_frames", help="Output directory")
+    parser.add_argument(
+        "--max-wait-seconds",
+        type=int,
+        default=480,
+        help="Max wait time for video operation completion",
+    )
+    parser.add_argument("--job-id", default=None, help="Pipeline job id")
+    parser.add_argument("--stage-name", default="stage_4", help="Pipeline stage name")
+    parser.add_argument("--job-log-file", default=None, help="Shared job log file path")
+    parser.add_argument(
+        "--result-prefix",
+        default=DEFAULT_RESULT_PREFIX,
+        help="Machine-readable result prefix for stdout",
+    )
+    args = parser.parse_args()
+    raise SystemExit(run_cli(args))
 
 
 if __name__ == "__main__":
