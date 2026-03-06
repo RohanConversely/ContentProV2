@@ -8,7 +8,6 @@ You will receive:
 
 Follow the KYC strictly when generating images.
 Using that **exact image as the base** and **strictly following the shared Product KYC**, generate **6 different realistic images** of the product.
----
 
 ## **CRITICAL REFERENCE IMAGE CONSTRAINT (STRICT — NON-NEGOTIABLE)**
 
@@ -20,7 +19,6 @@ Using that **exact image as the base** and **strictly following the shared Produ
 - No design changes, corrections, smoothing, exaggeration, or creative alterations to the product itself are allowed.
 - The product must appear as the **same physical object**, photographed again in different scenarios — not a redesigned, regenerated, or edited version.
 - **Only the background, environment, camera angle, lighting, and context may vary**, and only where already permitted by this prompt and the Product KYC.
----
 
 ## **IMAGE REQUIREMENTS**
 
@@ -30,7 +28,6 @@ Using that **exact image as the base** and **strictly following the shared Produ
 - All contexts, environments, and usage scenarios must be created **according to the Indian context or product theme defined in the Product KYC**.
 - Visuals must align with the **Amazon India listing strategy** mentioned in the Product KYC.
 - **Vary composition/framing within square canvas, while maintaining full product visibility and composition quality.**
----
 
 ## **AMAZON A+ CONTENT STYLE**
 
@@ -40,7 +37,6 @@ Using that **exact image as the base** and **strictly following the shared Produ
 - Professional lighting
 - Studio-quality finish
 - Fully compliant with **Amazon India listing & A+ Content standards**
----
 
 ## **ALLOWED SHOT TYPES**
 
@@ -50,7 +46,6 @@ Using that **exact image as the base** and **strictly following the shared Produ
 - Close-up detail
 - Hero image
 - **One storytelling image (mandatory)**
----
 
 ## **STORYTELLING IMAGE (MANDATORY)**
 
@@ -61,7 +56,6 @@ Generate **one dedicated storytelling image** that:
 - Feels authentic, relatable, and aspirational
 - Supports the **Amazon listing narrative** and improves conversion
 - Does **not** look staged, artificial, or over-designed
----
 
 ## **HANDMADE / HANDCRAFTED REALISM (IF APPLICABLE)**
 
@@ -70,7 +64,6 @@ If the product is handmade or handcrafted:
 - Show subtle, natural imperfections such as hand-finished textures, slight asymmetry, organic material variations, stitching or brush inconsistencies, and warm natural lighting
 - Avoid machine-perfect or factory-polished appearance
 - Where appropriate, include **gentle human interaction** (hands holding, using, arranging, or working with the product) to emphasize craftsmanship and scale — without distracting from the product
----
 
 ## **ENHANCEMENT RULES**
 
@@ -79,7 +72,6 @@ If the product is handmade or handcrafted:
 - Backgrounds must be **photorealistic**, not 3D, illustrated, or cartoon-style
 - Final images must look like they were shot using a **professional DSLR or mirrorless camera**
 - All enhancements must support **Amazon listing clarity and trust-building**
----
 
 ## **IMAGE SIZE COMPLIANCE (STRICT)**
 
@@ -88,11 +80,9 @@ If the product is handmade or handcrafted:
 - Output images in the **exact pixel size specified**, with zero deviation
 
 **Image size:** **220 × 220 pixels**
----
 
 ## **OUTPUT FORMAT (STRICTLY FOLLOW)**
 - Generate **6 final, photorealistic images** based on the uploaded product image
 - Use the **Product KYC JSON** provided as input
 - Align with **Indian context**, **Amazon India listing format**
 - Include **one mandatory storytelling image**
----

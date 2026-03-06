@@ -79,6 +79,7 @@ def log_usage(logger: JsonLogger, response: Any, context: Optional[Dict[str, Any
     output_tokens = usage_dict.get("output_tokens")
     total_tokens = usage_dict.get("total_tokens")
     cache_tokens = None
+    output_details = usage_dict.get("output_tokens_details")
 
     input_details = usage_dict.get("input_tokens_details") or {}
     if isinstance(input_details, dict):
@@ -92,5 +93,7 @@ def log_usage(logger: JsonLogger, response: Any, context: Optional[Dict[str, Any
             "output_tokens": output_tokens,
             "total_tokens": total_tokens,
             "cached_tokens": cache_tokens,
+            "input_tokens_details": input_details if isinstance(input_details, dict) else None,
+            "output_tokens_details": output_details if isinstance(output_details, dict) else None,
         },
     )
