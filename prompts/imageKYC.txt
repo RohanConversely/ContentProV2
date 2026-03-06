@@ -10,7 +10,6 @@
 
 Your task is to generate a **complete Product KYC** that will be used in the **next step to generate realistic product images**.
 
----
 
 ## INPUTS I WILL PROVIDE
 
@@ -23,7 +22,6 @@ I will share:
 5. **Social Media Links** (optional, up to 2 links)
 6. **Any additional notes (if provided)**
 
----
 
 ## OBJECTIVE
 
@@ -34,7 +32,6 @@ Using the provided inputs, create a **Keyword-Oriented Product KYC** that:
 - Acts as a **base document for generating realistic product images**
 - Follows **Amazon India A+ Content standards**
 
----
 
 ## OUTPUT FORMAT (STRICTLY FOLLOW - JSON)
 

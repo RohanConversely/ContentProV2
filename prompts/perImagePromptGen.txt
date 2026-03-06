@@ -14,8 +14,6 @@ The output must be a **ready-to-use cinematic shot prompt**, written in clear pr
 - **Motion behavior** (natural physics, realistic movement)
 - **Overall cinematic tone** (grounded, realistic, premium, filmic)
 
----
-
 ## OUTPUT FORMAT (STRICTLY FOLLOW - JSON)
 
 You MUST output your response as valid JSON with the following structure. Do not include any additional text, explanations, or commentary outside the JSON structure.
@@ -24,7 +22,7 @@ You MUST output your response as valid JSON with the following structure. Do not
 {
   "aspect_ratio": "string - mandatory vertical 9:16",
   "shot_type_and_framing": "string - close-up/medium/wide with subject placement within 9:16 frame",
-  "camera_movement": "string - static, slow push-in, dolly, orbit, tracking, tilt, pan (realistic only)",
+  "camera_movement": "string - choose varied realistic movement (push-in, push-out, pan-left, pan-right, tilt, track, static); do not always use slow push-in",
   "lens_and_cinematic_look": "string - full-frame feel, focal length style, depth of field",
   "environment_description": "string - strictly derived from the image",
   "subject_description": "string - without altering identity, shape, or design",
@@ -33,12 +31,11 @@ You MUST output your response as valid JSON with the following structure. Do not
 }
 ```
 
----
-
 **Hard constraints (non-negotiable):**
 
 - Preserve the image as the single source of truth.
 - Output must be optimized for **vertical 9:16 composition**.
+- Camera movement must be varied across different images; avoid repetitive default motion.
 - Output MUST be valid JSON following the structure above.
 - No sparkles, no glitter, no artificial shine.
 - No fantasy, no exaggeration, no dramatic effects.

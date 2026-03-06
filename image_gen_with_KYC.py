@@ -112,6 +112,7 @@ def generate_images(
         with_context(
             log_context,
             {
+                "model": "gpt-4.1",
                 "image_path": str(Path(image_path).resolve()),
                 "brand_name": brand_name,
                 "kyc_path": str(Path(kyc_path).resolve()),
@@ -124,7 +125,7 @@ def generate_images(
     )
 
     response = client.responses.create(
-        model="gpt-4.1-mini",
+        model="gpt-4.1",
         input=[
             {
                 "role": "user",
@@ -143,7 +144,7 @@ def generate_images(
             {
                 "type": "image_generation",
                 "size": "1024x1024",
-                "quality": "low",
+                "quality": "high",
             }
         ],
         tool_choice={"type": "image_generation"},

@@ -113,6 +113,43 @@ def ensure_result_path(path_str: str, stage_name: str, label: str) -> Path:
     return resolved
 
 
+def run_pricing_subprocess(job_dir: Path, job_log_file: Path, logger: JsonLogger) -> bool:
+    command = [
+        sys.executable,
+        str((Path(__file__).parent / "job_pricing.py").resolve()),
+        "--job-dir",
+        str(job_dir.resolve()),
+        "--job-log-file",
+        str(job_log_file.resolve()),
+        "--output-file",
+        str((job_dir / "price.json").resolve()),
+    ]
+    result = subprocess.run(command, capture_output=True, text=True)
+    stdout = result.stdout.strip()
+    stderr = result.stderr.strip()
+
+    if stdout:
+        logger.info("Pricing stdout captured.", {"stage": "pricing", "stdout": stdout[-4000:]})
+    if stderr:
+        logger.warning("Pricing stderr captured.", {"stage": "pricing", "stderr": stderr[-4000:]})
+
+    if result.returncode != 0:
+        logger.error(
+            "Pricing generation failed.",
+            {"stage": "pricing", "return_code": result.returncode},
+        )
+        return False
+
+    logger.info(
+        "Pricing generated.",
+        {
+            "stage": "pricing",
+            "price_file": str((job_dir / "price.json").resolve()),
+        },
+    )
+    return True
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Orchestrate the 4-stage image-to-video pipeline.")
     parser.add_argument("brand_name", help="Brand name")
@@ -122,6 +159,12 @@ def main() -> None:
     parser.add_argument("product_image_path", help="Path to raw product image")
     parser.add_argument("--social-link-1", default=None, help="Optional social media link 1")
     parser.add_argument("--social-link-2", default=None, help="Optional social media link 2")
+    parser.add_argument(
+        "--video-duration-seconds",
+        type=int,
+        default=8,
+        help="Requested video duration for stage 4",
+    )
     args = parser.parse_args()
 
     image_path = Path(args.product_image_path).resolve()
@@ -152,6 +195,8 @@ def main() -> None:
             "product_category": args.product_category,
             "social_link_1": args.social_link_1,
             "social_link_2": args.social_link_2,
+            "video_duration_seconds": args.video_duration_seconds,
+            "video_generate_audio": False,
             "image_path": str(image_path),
             "job_dir": str(job_dir),
             "output_dir": str(job_dir),
@@ -327,6 +372,8 @@ def main() -> None:
                     str(prompt_json_path),
                     "--output-dir",
                     str(video_frames_dir),
+                    "--duration-seconds",
+                    str(args.video_duration_seconds),
                 ],
                 job_id=job_id,
                 job_log_file=job_log_file,
@@ -364,6 +411,17 @@ def main() -> None:
         )
         print(f"Pipeline stopped due to unexpected error: {exc}")
         sys.exit(1)
+    finally:
+        if job_log_file.exists():
+            pricing_ok = run_pricing_subprocess(
+                job_dir=job_dir,
+                job_log_file=job_log_file,
+                logger=logger,
+            )
+            if pricing_ok:
+                print(f"Pricing file generated: {job_dir / 'price.json'}")
+            else:
+                print("Warning: Failed to generate pricing file. Check job.log for details.")
 
 
 if __name__ == "__main__":
