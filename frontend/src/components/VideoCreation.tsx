@@ -84,13 +84,16 @@ const videoStyles = [
   { id: "storytelling", label: "Story Arc", desc: "Narrative flow with text overlays" },
 ];
 
+interface VideoCreationProps {
+  productData: ProductFormData;
+  images: string[];
+  onBack: () => void;
+  onStartOver: () => void;
+}
+
 const VideoCreation = ({
-  kycData,
-  prompt,
+  productData,
   images,
-  genre,
-  theme,
-  outputType,
   onBack,
   onStartOver,
 }: VideoCreationProps) => {
@@ -174,7 +177,7 @@ const VideoCreation = ({
             </h2>
             <p className="text-sm text-muted-foreground mt-0.5">
               Transform your A+ images into a cinematic video for{" "}
-              <span className="text-primary font-semibold">{kycData.companyName}</span>
+              <span className="text-primary font-semibold">{productData.brandName}</span>
             </p>
           </div>
         </div>
@@ -248,47 +251,6 @@ const VideoCreation = ({
             </div>
           </div>
 
-          {/* Video Duration */}
-          <div className="space-y-2">
-            <span className="text-xs font-medium text-muted-foreground">Duration</span>
-            <div className="flex gap-2">
-              {videoDurations.map((d) => (
-                <button
-                  key={d.value}
-                  onClick={() => setSelectedDuration(d.value)}
-                  className={`flex-1 py-2.5 rounded-xl border text-center transition-all ${
-                    selectedDuration === d.value
-                      ? "border-primary bg-primary/10 shadow-glow"
-                      : "border-border bg-card hover:border-primary/30"
-                  }`}
-                >
-                  <p className={`text-sm font-semibold ${selectedDuration === d.value ? "text-primary" : ""}`}>{d.label}</p>
-                  <p className="text-[10px] text-muted-foreground">{d.desc}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Video Style */}
-          <div className="space-y-2">
-            <span className="text-xs font-medium text-muted-foreground">Video Style</span>
-            <div className="grid grid-cols-2 gap-2">
-              {videoStyles.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => setSelectedStyle(s.id)}
-                  className={`p-3 rounded-xl border text-left transition-all ${
-                    selectedStyle === s.id
-                      ? "border-primary bg-primary/10 shadow-glow"
-                      : "border-border bg-card hover:border-primary/30"
-                  }`}
-                >
-                  <p className={`text-xs font-semibold ${selectedStyle === s.id ? "text-primary" : ""}`}>{s.label}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">{s.desc}</p>
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
 
         {/* Right: Music Selection (3 cols) */}
@@ -446,28 +408,20 @@ const VideoCreation = ({
             <p className="text-xs font-medium text-muted-foreground">Project Summary</p>
             <div className="grid grid-cols-3 gap-3 text-xs">
               <div className="space-y-0.5">
-                <span className="text-muted-foreground">Client</span>
-                <p className="font-medium truncate">{kycData.companyName || "—"}</p>
+                <span className="text-muted-foreground">Brand</span>
+                <p className="font-medium truncate">{productData.brandName || "—"}</p>
               </div>
               <div className="space-y-0.5">
-                <span className="text-muted-foreground">Industry</span>
-                <p className="font-medium">{industries.find((i) => i.id === kycData.industry)?.label || "—"}</p>
+                <span className="text-muted-foreground">Product</span>
+                <p className="font-medium truncate">{productData.productName || "—"}</p>
               </div>
               <div className="space-y-0.5">
-                <span className="text-muted-foreground">Genre</span>
-                <p className="font-medium">{genre ? genre.charAt(0).toUpperCase() + genre.slice(1) : "—"}</p>
+                <span className="text-muted-foreground">Category</span>
+                <p className="font-medium truncate">{productData.productCategory || "—"}</p>
               </div>
               <div className="space-y-0.5">
-                <span className="text-muted-foreground">Theme</span>
-                <p className="font-medium">{theme ? theme.charAt(0).toUpperCase() + theme.slice(1) : "—"}</p>
-              </div>
-              <div className="space-y-0.5">
-                <span className="text-muted-foreground">Style</span>
-                <p className="font-medium">{videoStyles.find((s) => s.id === selectedStyle)?.label || "—"}</p>
-              </div>
-              <div className="space-y-0.5">
-                <span className="text-muted-foreground">Duration</span>
-                <p className="font-medium">{selectedDuration}s</p>
+                <span className="text-muted-foreground">Images</span>
+                <p className="font-medium">{images.length} selected</p>
               </div>
             </div>
           </div>
@@ -524,7 +478,7 @@ const VideoCreation = ({
               <div>
                 <p className="text-sm font-semibold">Video Ready!</p>
                 <p className="text-xs text-muted-foreground">
-                  {selectedDuration}s {videoStyles.find((s) => s.id === selectedStyle)?.label} — {images.length} frames
+                  {images.length} frames selected
                 </p>
               </div>
             </div>
@@ -544,7 +498,7 @@ const VideoCreation = ({
       ) : (
         <div className="flex items-center justify-between pt-4 border-t border-border">
           <p className="text-xs text-muted-foreground">
-            {images.length} images • {selectedDuration}s • {videoStyles.find((s) => s.id === selectedStyle)?.label}
+            {images.length} images selected
           </p>
           <button
             onClick={handleGenerate}
