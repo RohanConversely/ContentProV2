@@ -4,19 +4,13 @@ import {
   ArrowLeft,
   Download,
   RefreshCw,
-  Eye,
-  Star,
-  Camera,
-  Home,
   Sparkles,
-  Search,
-  Image as ImageIcon,
-  BookOpen,
   Maximize2,
   X,
   Globe,
   Building2,
   Film,
+  Check,
 } from "lucide-react";
 import { type ProductFormData } from "./CreationWizard";
 
@@ -28,58 +22,6 @@ interface GenerationResultsProps {
   onCreateVideo?: () => void;
 }
 
-const shotTypes = [
-  {
-    id: "hero",
-    label: "Hero Image",
-    desc: "Primary listing image — clean, bold, conversion-focused",
-    icon: Star,
-    orientation: "landscape" as const,
-  },
-  {
-    id: "lifestyle",
-    label: "Lifestyle",
-    desc: "Product in a real-life Indian context setting",
-    icon: Home,
-    orientation: "landscape" as const,
-  },
-  {
-    id: "studio",
-    label: "Studio Shot",
-    desc: "Clean enhanced studio — Amazon listing ready",
-    icon: Camera,
-    orientation: "portrait" as const,
-  },
-  {
-    id: "closeup",
-    label: "Close-up Detail",
-    desc: "Texture, finish, and craftsmanship macro shot",
-    icon: Search,
-    orientation: "portrait" as const,
-  },
-  {
-    id: "inuse",
-    label: "Product In-Use",
-    desc: "Realistic usage scenario with human interaction",
-    icon: Eye,
-    orientation: "landscape" as const,
-  },
-  {
-    id: "storytelling",
-    label: "Storytelling",
-    desc: "Emotion-driven narrative — aspirational & relatable",
-    icon: BookOpen,
-    orientation: "landscape" as const,
-  },
-  {
-    id: "infographic",
-    label: "Infographic",
-    desc: "Key features & benefits highlighted visually",
-    icon: ImageIcon,
-    orientation: "portrait" as const,
-  },
-];
-
 const GenerationResults = ({
   productData,
   mode,
@@ -87,24 +29,37 @@ const GenerationResults = ({
   onStartOver,
   onCreateVideo,
 }: GenerationResultsProps) => {
-  const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(shotTypes.map((s) => [s.id, true]))
+  const [loadingStates, setLoadingStates] = useState<Record<number, boolean>>(() => 
+    Object.fromEntries([0,1,2,3,4,5].map((i) => [i, true]))
   );
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [selectedImages, setSelectedImages] = useState<number[]>([]);
 
-  // Simulate staggered generation
+  // Simulate staggered generation - show 6 images
   useEffect(() => {
-    shotTypes.forEach((shot, i) => {
+    [0,1,2,3,4,5].forEach((i) => {
       setTimeout(() => {
-        setLoadingStates((prev) => ({ ...prev, [shot.id]: false }));
-      }, 2000 + i * 800);
+        setLoadingStates((prev) => ({ ...prev, [i]: false }));
+      }, 1500 + i * 500);
     });
   }, []);
 
   const allDone = Object.values(loadingStates).every((v) => !v);
 
-  // Use uploaded images as placeholders
+  // Use uploaded images as placeholders (cycle through if less than 6)
   const images = productData.productImages;
+  const displayImages = Array.from({ length: 6 }, (_, i) => images[i % Math.max(images.length, 1)]);
+
+  const toggleImageSelection = (index: number) => {
+    setSelectedImages(prev => 
+      prev.includes(index) 
+        ? prev.filter(i => i !== index)
+        : [...prev, index]
+    );
+  };
+
+  const canCreateVideo = selectedImages.length >= 3;
+  const isVideoMode = mode === "video";
 
   return (
     <motion.div
@@ -150,7 +105,8 @@ const GenerationResults = ({
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               onClick={onCreateVideo}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-primary text-primary-foreground text-sm font-semibold shadow-glow hover:opacity-90 transition-opacity"
+              disabled={isVideoMode && !canCreateVideo}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-primary text-primary-foreground text-sm font-semibold shadow-glow hover:opacity-90 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed"
             >
               <Film className="h-4 w-4" /> Create Video
             </motion.button>
@@ -176,8 +132,7 @@ const GenerationResults = ({
               Generating A+ content images…
             </span>
             <span>
-              {Object.values(loadingStates).filter((v) => !v).length} /{" "}
-              {shotTypes.length}
+              6
             </span>
           </div>
           <div className="h-1.5 w-full rounded-full bg-secondary overflow-hidden">
@@ -186,9 +141,7 @@ const GenerationResults = ({
               initial={{ width: "0%" }}
               animate={{
                 width: `${
-                  (Object.values(loadingStates).filter((v) => !v).length /
-                    shotTypes.length) *
-                  100
+                  (Object.values(loadingStates).filter((v) => !v).length / 6) * 100
                 }%`,
               }}
               transition={{ duration: 0.5, ease: "easeOut" }}
@@ -197,36 +150,48 @@ const GenerationResults = ({
         </div>
       )}
 
-      {/* Image Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {shotTypes.map((shot, i) => {
-          const ShotIcon = shot.icon;
-          const isLoading = loadingStates[shot.id];
-          // Use uploaded images as placeholders for demo
-          const demoSrc = images.length > 0 ? images[i % images.length] : null;
+      {/* Selection message for video mode */}
+      {allDone && isVideoMode && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-xl border border-primary/30 bg-primary/5 p-4 flex items-center justify-between"
+        >
+          <p className="text-sm font-medium">
+            Select at least <span className="text-primary">3 images</span> for video generation
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {selectedImages.length}/6 selected
+          </p>
+        </motion.div>
+      )}
+
+      {/* Image Grid - 6 images, 1:1 aspect ratio */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        {displayImages.map((src, i) => {
+          const isLoading = loadingStates[i];
+          const isSelected = selectedImages.includes(i);
 
           return (
             <motion.div
-              key={shot.id}
+              key={i}
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.08 }}
               className={`group relative rounded-xl border overflow-hidden transition-all duration-300 ${
-                shot.orientation === "landscape"
-                  ? "aspect-[4/3]"
-                  : "aspect-[3/4]"
-              } ${
                 isLoading
-                  ? "border-border bg-card"
-                  : "border-border hover:border-primary/40 bg-card hover:shadow-glow"
-              }`}
+                  ? "border-border bg-card aspect-square"
+                  : isSelected
+                  ? "border-primary bg-card ring-2 ring-primary shadow-glow"
+                  : "border-border hover:border-primary/40 bg-card hover:shadow-glow cursor-pointer"
+              } aspect-square`}
             >
               {isLoading ? (
                 /* Loading state */
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-4">
                   <div className="relative">
                     <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                      <ShotIcon className="h-5 w-5 text-primary" />
+                      <Sparkles className="h-5 w-5 text-primary" />
                     </div>
                     <motion.div
                       className="absolute -inset-1 rounded-xl border-2 border-primary/30"
@@ -235,46 +200,53 @@ const GenerationResults = ({
                     />
                   </div>
                   <div className="text-center">
-                    <p className="text-sm font-medium">{shot.label}</p>
+                    <p className="text-sm font-medium">Image {i + 1}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       Generating…
                     </p>
-                  </div>
-                  {/* Shimmer bars */}
-                  <div className="w-full space-y-2 px-6">
-                    <div className="h-2 rounded-full bg-secondary animate-pulse" />
-                    <div className="h-2 rounded-full bg-secondary animate-pulse w-3/4" />
                   </div>
                 </div>
               ) : (
                 /* Generated image */
                 <>
-                  {demoSrc ? (
-                    <img
-                      src={demoSrc}
-                      alt={shot.label}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="absolute inset-0 bg-gradient-card flex items-center justify-center">
-                      <ShotIcon className="h-10 w-10 text-muted-foreground/30" />
+                  <img
+                    src={src}
+                    alt={`Generated Image ${i + 1}`}
+                    className="h-full w-full object-cover"
+                    onClick={() => isVideoMode && toggleImageSelection(i)}
+                  />
+
+                  {/* Selection overlay for video mode */}
+                  {isVideoMode && (
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleImageSelection(i);
+                        }}
+                        className={`absolute top-3 left-3 z-10 h-6 w-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                          isSelected
+                            ? "bg-primary border-primary"
+                            : "bg-white/80 border-gray-400 hover:border-primary"
+                        }`}
+                      >
+                        {isSelected && <Check className="h-3.5 w-3.5 text-white" />}
+                      </button>
                     </div>
                   )}
 
                   {/* Overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
 
                   {/* Bottom label */}
                   <div className="absolute bottom-0 left-0 right-0 p-3 flex items-end justify-between">
                     <div className="translate-y-2 group-hover:translate-y-0 opacity-0 group-hover:opacity-100 transition-all duration-300">
-                      <p className="text-sm font-semibold">{shot.label}</p>
-                      <p className="text-xs text-muted-foreground line-clamp-1">
-                        {shot.desc}
-                      </p>
+                      <p className="text-sm font-semibold">Image {i + 1}</p>
+                      <p className="text-xs text-muted-foreground">1024 × 1024</p>
                     </div>
                     <div className="flex items-center gap-1.5 translate-y-2 group-hover:translate-y-0 opacity-0 group-hover:opacity-100 transition-all duration-300">
                       <button
-                        onClick={() => demoSrc && setPreviewImage(demoSrc)}
+                        onClick={() => src && setPreviewImage(src)}
                         className="h-8 w-8 rounded-lg bg-card/80 backdrop-blur border border-border flex items-center justify-center hover:bg-secondary transition-colors"
                       >
                         <Maximize2 className="h-3.5 w-3.5" />
@@ -285,13 +257,15 @@ const GenerationResults = ({
                     </div>
                   </div>
 
-                  {/* Top-left badge */}
-                  <div className="absolute top-2 left-2">
-                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-card/80 backdrop-blur border border-border text-xs">
-                      <ShotIcon className="h-3 w-3 text-primary" />
-                      <span className="font-medium">{shot.label}</span>
+                  {/* Top-right badge */}
+                  {isVideoMode && isSelected && (
+                    <div className="absolute top-3 right-3 z-10">
+                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-medium">
+                        <Check className="h-3 w-3" />
+                        Selected
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </>
               )}
             </motion.div>
@@ -299,8 +273,8 @@ const GenerationResults = ({
         })}
       </div>
 
-          {/* Summary footer */}
-          {allDone && (
+      {/* Summary footer */}
+      {allDone && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -317,7 +291,7 @@ const GenerationResults = ({
                       {productData.productName || "Untitled Project"}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {shotTypes.length} images generated
+                      6 images generated (1024 × 1024)
                     </p>
                   </div>
                 </div>
@@ -354,20 +328,38 @@ const GenerationResults = ({
                   <p className="font-medium truncate">{productData.productCategory || "—"}</p>
                 </div>
                 <div className="space-y-1">
-                  <span className="text-muted-foreground">Images</span>
-                  <p className="font-medium">{images.length} uploaded</p>
+                  <span className="text-muted-foreground">Dimensions</span>
+                  <p className="font-medium truncate">
+                    {productData.dimensionLength && productData.dimensionBreadth && productData.dimensionHeight
+                      ? `${productData.dimensionLength} × ${productData.dimensionBreadth} × ${productData.dimensionHeight} ${productData.dimensionUnit}`
+                      : "—"}
+                  </p>
                 </div>
               </div>
 
+              {/* Description */}
+              {productData.productDescription && (
+                <div className="pt-2 border-t border-border space-y-1">
+                  <span className="text-xs text-muted-foreground">Description</span>
+                  <p className="text-xs">{productData.productDescription}</p>
+                </div>
+              )}
+
               {/* Social links */}
-              {(productData.socialLink1 || productData.socialLink2) && (
+              {(productData.socialLinkInstagram || productData.socialLinkFacebook || productData.socialLinkLinkedin || productData.socialLinkX) && (
                 <div className="pt-3 border-t border-border flex flex-wrap items-center gap-3">
                   <span className="text-xs text-muted-foreground">Socials:</span>
-                  {productData.socialLink1 && (
-                    <a href={productData.socialLink1} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">Link 1</a>
+                  {productData.socialLinkInstagram && (
+                    <a href={productData.socialLinkInstagram} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">Instagram</a>
                   )}
-                  {productData.socialLink2 && (
-                    <a href={productData.socialLink2} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">Link 2</a>
+                  {productData.socialLinkFacebook && (
+                    <a href={productData.socialLinkFacebook} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">Facebook</a>
+                  )}
+                  {productData.socialLinkLinkedin && (
+                    <a href={productData.socialLinkLinkedin} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">LinkedIn</a>
+                  )}
+                  {productData.socialLinkX && (
+                    <a href={productData.socialLinkX} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">X</a>
                   )}
                 </div>
               )}

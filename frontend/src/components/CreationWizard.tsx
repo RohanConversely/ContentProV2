@@ -11,6 +11,12 @@ import {
   Link2,
   Upload,
   X,
+  Instagram,
+  Facebook,
+  Linkedin,
+  Twitter,
+  Ruler,
+  AlignLeft,
 } from "lucide-react";
 import GenerationResults from "./GenerationResults";
 import VideoCreation from "./VideoCreation";
@@ -20,8 +26,15 @@ export interface ProductFormData {
   brandWebsite: string;
   productName: string;
   productCategory: string;
-  socialLink1: string;
-  socialLink2: string;
+  socialLinkInstagram: string;
+  socialLinkFacebook: string;
+  socialLinkLinkedin: string;
+  socialLinkX: string;
+  dimensionUnit: string;
+  dimensionLength: string;
+  dimensionBreadth: string;
+  dimensionHeight: string;
+  productDescription: string;
   productImages: string[];
 }
 
@@ -35,10 +48,24 @@ const emptyFormData: ProductFormData = {
   brandWebsite: "",
   productName: "",
   productCategory: "",
-  socialLink1: "",
-  socialLink2: "",
+  socialLinkInstagram: "",
+  socialLinkFacebook: "",
+  socialLinkLinkedin: "",
+  socialLinkX: "",
+  dimensionUnit: "cm",
+  dimensionLength: "",
+  dimensionBreadth: "",
+  dimensionHeight: "",
+  productDescription: "",
   productImages: [],
 };
+
+const dimensionUnits = [
+  { value: "mm", label: "Millimeters (mm)" },
+  { value: "cm", label: "Centimeters (cm)" },
+  { value: "inches", label: "Inches (in)" },
+  { value: "feet", label: "Feet (ft)" },
+];
 
 const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
   const [formData, setFormData] = useState<ProductFormData>(emptyFormData);
@@ -49,6 +76,12 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
   const updateField = (field: keyof ProductFormData, value: string | string[]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
+
+  const hasAnyDimension =
+    formData.dimensionLength || formData.dimensionBreadth || formData.dimensionHeight;
+
+  const hasAllDimensions =
+    formData.dimensionLength && formData.dimensionBreadth && formData.dimensionHeight;
 
   const handleImageUpload = useCallback((files: FileList) => {
     const newImages: string[] = [];
@@ -80,7 +113,8 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
     formData.brandWebsite.trim().length > 0 &&
     formData.productName.trim().length > 0 &&
     formData.productCategory.trim().length > 0 &&
-    formData.productImages.length > 0;
+    formData.productImages.length > 0 &&
+    (!hasAnyDimension || hasAllDimensions);
 
   const handleGenerate = () => {
     if (!canGenerate) return;
@@ -146,7 +180,6 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
         </div>
       </div>
 
-      {/* Form */}
       <div className="space-y-6">
         {/* Brand Details */}
         <div className="space-y-4">
@@ -220,6 +253,69 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
           </div>
         </div>
 
+        {/* Product Dimensions */}
+        <div className="space-y-4">
+          <h3 className="font-display text-lg font-semibold flex items-center gap-2">
+            <Ruler className="h-5 w-5 text-primary" />
+            Product Dimensions <span className="text-muted-foreground text-sm font-normal">(Optional)</span>
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Unit</label>
+              <select
+                value={formData.dimensionUnit}
+                onChange={(e) => updateField("dimensionUnit", e.target.value)}
+                className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+              >
+                {dimensionUnits.map((unit) => (
+                  <option key={unit.value} value={unit.value}>
+                    {unit.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Length</label>
+              <input
+                type="number"
+                value={formData.dimensionLength}
+                onChange={(e) => updateField("dimensionLength", e.target.value)}
+                placeholder="0"
+                min="0"
+                className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Breadth</label>
+              <input
+                type="number"
+                value={formData.dimensionBreadth}
+                onChange={(e) => updateField("dimensionBreadth", e.target.value)}
+                placeholder="0"
+                min="0"
+                className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Height</label>
+              <input
+                type="number"
+                value={formData.dimensionHeight}
+                onChange={(e) => updateField("dimensionHeight", e.target.value)}
+                placeholder="0"
+                min="0"
+                className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+              />
+            </div>
+          </div>
+          {hasAnyDimension && !hasAllDimensions && (
+            <p className="text-sm text-destructive flex items-center gap-2">
+              <X className="h-4 w-4" />
+              Please provide all three dimensions (length, breadth, height)
+            </p>
+          )}
+        </div>
+
         {/* Product Image Upload */}
         <div className="space-y-4">
           <h3 className="font-display text-lg font-semibold flex items-center gap-2">
@@ -278,6 +374,28 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
           )}
         </div>
 
+        {/* Short Product Description */}
+        <div className="space-y-2">
+          <label className="text-sm font-medium flex items-center gap-2">
+            <AlignLeft className="h-4 w-4 text-muted-foreground" />
+            Short Product Description <span className="text-muted-foreground font-normal">(Optional)</span>
+          </label>
+          <textarea
+            value={formData.productDescription}
+            onChange={(e) => {
+              if (e.target.value.length <= 150) {
+                updateField("productDescription", e.target.value);
+              }
+            }}
+            placeholder="Enter a brief description of your product..."
+            rows={3}
+            className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all resize-none"
+          />
+          <p className="text-xs text-muted-foreground text-right">
+            {formData.productDescription.length}/150 characters
+          </p>
+        </div>
+
         {/* Social Links */}
         <div className="space-y-4">
           <h3 className="font-display text-lg font-semibold flex items-center gap-2">
@@ -286,22 +404,54 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Social Link 1</label>
+              <label className="text-sm font-medium flex items-center gap-2">
+                <Instagram className="h-4 w-4 text-muted-foreground" />
+                Instagram
+              </label>
               <input
                 type="url"
-                value={formData.socialLink1}
-                onChange={(e) => updateField("socialLink1", e.target.value)}
+                value={formData.socialLinkInstagram}
+                onChange={(e) => updateField("socialLinkInstagram", e.target.value)}
                 placeholder="https://instagram.com/brand"
                 className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Social Link 2</label>
+              <label className="text-sm font-medium flex items-center gap-2">
+                <Facebook className="h-4 w-4 text-muted-foreground" />
+                Facebook
+              </label>
               <input
                 type="url"
-                value={formData.socialLink2}
-                onChange={(e) => updateField("socialLink2", e.target.value)}
+                value={formData.socialLinkFacebook}
+                onChange={(e) => updateField("socialLinkFacebook", e.target.value)}
                 placeholder="https://facebook.com/brand"
+                className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium flex items-center gap-2">
+                <Linkedin className="h-4 w-4 text-muted-foreground" />
+                LinkedIn
+              </label>
+              <input
+                type="url"
+                value={formData.socialLinkLinkedin}
+                onChange={(e) => updateField("socialLinkLinkedin", e.target.value)}
+                placeholder="https://linkedin.com/company/brand"
+                className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium flex items-center gap-2">
+                <Twitter className="h-4 w-4 text-muted-foreground" />
+                X (Twitter)
+              </label>
+              <input
+                type="url"
+                value={formData.socialLinkX}
+                onChange={(e) => updateField("socialLinkX", e.target.value)}
+                placeholder="https://x.com/brand"
                 className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
               />
             </div>
@@ -328,7 +478,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
             </>
           ) : (
             <>
-              <Wand2 className="h-4 w-4" /> Generate {mode === "images" ? "Images" : "Video"}
+              <Wand2 className="h-4 w-4" /> Generate Images
             </>
           )}
         </button>
