@@ -20,16 +20,11 @@ import {
   Check,
   Wand2,
 } from "lucide-react";
-import type { ClientKycData } from "./ClientKycStep";
-import { industries } from "./ClientKycStep";
+import { type ProductFormData } from "./CreationWizard";
 
 interface VideoCreationProps {
-  kycData: ClientKycData;
-  prompt: string;
+  productData: ProductFormData;
   images: string[];
-  genre: string | null;
-  theme: string | null;
-  outputType: string | null;
   onBack: () => void;
   onStartOver: () => void;
 }

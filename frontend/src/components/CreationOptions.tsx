@@ -29,7 +29,7 @@ const CreationOptions = ({ onSelect }: CreationOptionsProps) => {
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-5xl mx-auto">
       {options.map((option, i) => (
         <motion.button
           key={option.title}

@@ -18,18 +18,14 @@ import {
   Building2,
   Film,
 } from "lucide-react";
-import { type ClientKycData, industries } from "./ClientKycStep";
+import { type ProductFormData } from "./CreationWizard";
 
 interface GenerationResultsProps {
-  kycData: ClientKycData;
-  prompt: string;
-  images: string[];
-  genre: string | null;
-  theme: string | null;
-  outputType: string | null;
+  productData: ProductFormData;
+  mode: string;
   onBack: () => void;
   onStartOver: () => void;
-  onCreateVideo: () => void;
+  onCreateVideo?: () => void;
 }
 
 const shotTypes = [
@@ -85,12 +81,8 @@ const shotTypes = [
 ];
 
 const GenerationResults = ({
-  kycData,
-  prompt,
-  images,
-  genre,
-  theme,
-  outputType,
+  productData,
+  mode,
   onBack,
   onStartOver,
   onCreateVideo,
@@ -110,6 +102,9 @@ const GenerationResults = ({
   }, []);
 
   const allDone = Object.values(loadingStates).every((v) => !v);
+
+  // Use uploaded images as placeholders
+  const images = productData.productImages;
 
   return (
     <motion.div
@@ -133,7 +128,7 @@ const GenerationResults = ({
             <p className="text-sm text-muted-foreground mt-0.5">
               A+ Content for{" "}
               <span className="text-primary font-semibold">
-                {kycData.companyName}
+                {productData.brandName}
               </span>
             </p>
           </div>
@@ -150,7 +145,7 @@ const GenerationResults = ({
               <RefreshCw className="h-4 w-4" /> New Project
             </motion.button>
           )}
-          {allDone && (
+          {allDone && onCreateVideo && (
             <motion.button
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -304,94 +299,80 @@ const GenerationResults = ({
         })}
       </div>
 
-      {/* Summary footer */}
-      {allDone && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="rounded-xl border border-border bg-card/60 backdrop-blur p-5 space-y-4"
-        >
-          {/* Header row */}
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                <Building2 className="h-5 w-5 text-primary" />
+          {/* Summary footer */}
+          {allDone && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-xl border border-border bg-card/60 backdrop-blur p-5 space-y-4"
+            >
+              {/* Header row */}
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <Building2 className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">
+                      {productData.productName || "Untitled Project"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {shotTypes.length} images generated
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {productData.brandWebsite && (
+                    <a
+                      href={productData.brandWebsite.startsWith("http") ? productData.brandWebsite : `https://${productData.brandWebsite}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs text-primary hover:bg-secondary transition-colors"
+                    >
+                      <Globe className="h-3.5 w-3.5" />
+                      {productData.brandWebsite.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                    </a>
+                  )}
+                  <button className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-primary text-primary-foreground text-sm font-semibold shadow-glow hover:opacity-90 transition-opacity">
+                    <RefreshCw className="h-4 w-4" /> Regenerate All
+                  </button>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-semibold">
-                  {kycData.companyName || "Untitled Project"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {shotTypes.length} images generated
-                </p>
+
+              {/* Details grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-3 border-t border-border">
+                <div className="space-y-1">
+                  <span className="text-muted-foreground">Brand</span>
+                  <p className="font-medium truncate">{productData.brandName || "—"}</p>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-muted-foreground">Product</span>
+                  <p className="font-medium truncate">{productData.productName || "—"}</p>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-muted-foreground">Category</span>
+                  <p className="font-medium truncate">{productData.productCategory || "—"}</p>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-muted-foreground">Images</span>
+                  <p className="font-medium">{images.length} uploaded</p>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {kycData.website && (
-                <a
-                  href={kycData.website.startsWith("http") ? kycData.website : `https://${kycData.website}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs text-primary hover:bg-secondary transition-colors"
-                >
-                  <Globe className="h-3.5 w-3.5" />
-                  {kycData.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}
-                </a>
-              )}
-              <button className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-primary text-primary-foreground text-sm font-semibold shadow-glow hover:opacity-90 transition-opacity">
-                <RefreshCw className="h-4 w-4" /> Regenerate All
-              </button>
-            </div>
-          </div>
 
-          {/* Details grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs pt-3 border-t border-border">
-            <div className="space-y-1">
-              <span className="text-muted-foreground">Client</span>
-              <p className="font-medium truncate">{kycData.companyName || "—"}</p>
-            </div>
-            <div className="space-y-1">
-              <span className="text-muted-foreground">Industry</span>
-              <p className="font-medium">{industries.find(i => i.id === kycData.industry)?.label || "—"}</p>
-            </div>
-            <div className="space-y-1">
-              <span className="text-muted-foreground">Category</span>
-              <p className="font-medium truncate">{kycData.productCategory || "—"}</p>
-            </div>
-            <div className="space-y-1">
-              <span className="text-muted-foreground">Genre</span>
-              <p className="font-medium">{genre ? genre.charAt(0).toUpperCase() + genre.slice(1) : "—"}</p>
-            </div>
-            <div className="space-y-1">
-              <span className="text-muted-foreground">Theme</span>
-              <p className="font-medium">{theme ? theme.charAt(0).toUpperCase() + theme.slice(1) : "—"}</p>
-            </div>
-            <div className="space-y-1">
-              <span className="text-muted-foreground">Output</span>
-              <p className="font-medium">{outputType || "—"}</p>
-            </div>
-          </div>
-
-          {/* Social links */}
-          {(kycData.instagram || kycData.facebook || kycData.linkedin || kycData.twitter) && (
-            <div className="pt-3 border-t border-border flex flex-wrap items-center gap-3">
-              <span className="text-xs text-muted-foreground">Socials:</span>
-              {kycData.instagram && (
-                <a href={kycData.instagram} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">Instagram</a>
+              {/* Social links */}
+              {(productData.socialLink1 || productData.socialLink2) && (
+                <div className="pt-3 border-t border-border flex flex-wrap items-center gap-3">
+                  <span className="text-xs text-muted-foreground">Socials:</span>
+                  {productData.socialLink1 && (
+                    <a href={productData.socialLink1} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">Link 1</a>
+                  )}
+                  {productData.socialLink2 && (
+                    <a href={productData.socialLink2} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">Link 2</a>
+                  )}
+                </div>
               )}
-              {kycData.facebook && (
-                <a href={kycData.facebook} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">Facebook</a>
-              )}
-              {kycData.linkedin && (
-                <a href={kycData.linkedin} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">LinkedIn</a>
-              )}
-              {kycData.twitter && (
-                <a href={kycData.twitter} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">X / Twitter</a>
-              )}
-            </div>
+            </motion.div>
           )}
-        </motion.div>
-      )}
 
       {/* Lightbox */}
       {previewImage && (
