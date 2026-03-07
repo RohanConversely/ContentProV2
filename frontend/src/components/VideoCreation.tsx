@@ -44,7 +44,6 @@ const musicSources: { id: MusicSource; label: string; icon: typeof Music; desc: 
   { id: "trending", label: "Instagram Trending", icon: TrendingUp, desc: "Hot reels audio" },
   { id: "royalty-free", label: "Royalty Free", icon: Library, desc: "Licensed tracks" },
   { id: "upload", label: "Custom Upload", icon: Upload, desc: "Your own audio" },
-  { id: "ai-generated", label: "AI Generated", icon: Sparkles, desc: "Custom AI music" },
 ];
 
 const trendingTracks: MusicTrack[] = [
@@ -369,37 +368,7 @@ const VideoCreation = ({
                 </div>
               )}
 
-              {/* AI Generated */}
-              {activeSource === "ai-generated" && (
-                <div className="space-y-4">
-                  <div className="relative">
-                    <textarea
-                      value={aiMusicPrompt}
-                      onChange={(e) => setAiMusicPrompt(e.target.value)}
-                      placeholder="Describe the music you want... e.g., 'Cinematic orchestral build-up with soft piano intro'"
-                      className="w-full h-28 rounded-xl border border-border bg-card p-4 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 resize-none transition-all"
-                    />
-                    <div className="absolute bottom-3 right-3">
-                      <Sparkles className="h-4 w-4 text-primary/40" />
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {aiPromptSuggestions.map((suggestion) => (
-                      <button
-                        key={suggestion}
-                        onClick={() => setAiMusicPrompt(suggestion)}
-                        className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
-                          aiMusicPrompt === suggestion
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/30"
-                        }`}
-                      >
-                        {suggestion.substring(0, 40)}…
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+
             </motion.div>
           </AnimatePresence>
 

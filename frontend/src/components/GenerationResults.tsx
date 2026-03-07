@@ -307,9 +307,6 @@ const GenerationResults = ({
                       {productData.brandWebsite.replace(/^https?:\/\//, "").replace(/\/$/, "")}
                     </a>
                   )}
-                  <button className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-primary text-primary-foreground text-sm font-semibold shadow-glow hover:opacity-90 transition-opacity">
-                    <RefreshCw className="h-4 w-4" /> Regenerate All
-                  </button>
                 </div>
               </div>
 
