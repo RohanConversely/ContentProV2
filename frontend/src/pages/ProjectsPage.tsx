@@ -1,106 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FolderOpen, Image, Video, Clock, Trash2, Download, ExternalLink,
   ArrowLeft, Building2, Globe, Play, Maximize2, X,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
-
-interface ProjectDetail {
-  brandName: string;
-  productName: string;
-  productCategory: string;
-  productDescription?: string;
-  brandWebsite?: string;
-  dimensions?: string;
-  images: string[];
-  videoUrl?: string;
-}
-
-interface Project {
-  id: string;
-  name: string;
-  type: "images" | "video";
-  status: "processing" | "completed" | "failed";
-  createdAt: string;
-  thumbnail: string;
-  detail: ProjectDetail;
-}
-
-const mockProjects: Project[] = [
-  {
-    id: "1",
-    name: "Tatsya Marble Jewelry Stand",
-    type: "video",
-    status: "completed",
-    createdAt: "2024-01-15T10:30:00Z",
-    thumbnail: "https://images.unsplash.com/photo-1617038220319-276d3cfab638?w=400&h=300&fit=crop",
-    detail: {
-      brandName: "Tatsya",
-      productName: "Marble Jewelry Stand",
-      productCategory: "Home & Decor",
-      productDescription: "Premium marble jewelry organizer stand with a minimalist aesthetic, perfect for displaying rings, necklaces, and bracelets.",
-      brandWebsite: "tatsya.com",
-      dimensions: "12 × 8 × 20 cm",
-      images: [
-        "https://images.unsplash.com/photo-1617038220319-276d3cfab638?w=600&h=600&fit=crop",
-        "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=600&h=600&fit=crop",
-        "https://images.unsplash.com/photo-1611085583191-a3b181a88401?w=600&h=600&fit=crop",
-        "https://images.unsplash.com/photo-1599643477877-530eb83abc8e?w=600&h=600&fit=crop",
-        "https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=600&h=600&fit=crop",
-        "https://images.unsplash.com/photo-1602173574767-37ac01994b2a?w=600&h=600&fit=crop",
-      ],
-      videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4",
-    },
-  },
-  {
-    id: "2",
-    name: "Bath Set Collection",
-    type: "images",
-    status: "completed",
-    createdAt: "2024-01-14T14:20:00Z",
-    thumbnail: "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=400&h=300&fit=crop",
-    detail: {
-      brandName: "LuxeBath",
-      productName: "Bath Set Collection",
-      productCategory: "Personal Care",
-      productDescription: "A curated collection of premium bath products including body wash, bath salts, and loofah sponge.",
-      brandWebsite: "luxebath.in",
-      dimensions: "30 × 20 × 10 cm",
-      images: [
-        "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=600&h=600&fit=crop",
-        "https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=600&h=600&fit=crop",
-        "https://images.unsplash.com/photo-1571781926291-c477ebfd024b?w=600&h=600&fit=crop",
-        "https://images.unsplash.com/photo-1600857544200-b2f666a9a2ec?w=600&h=600&fit=crop",
-        "https://images.unsplash.com/photo-1583947215259-38e31be8751f?w=600&h=600&fit=crop",
-        "https://images.unsplash.com/photo-1570194065650-d99fb4b8ccab?w=600&h=600&fit=crop",
-      ],
-    },
-  },
-  {
-    id: "3",
-    name: "Trinket Plate Organizer",
-    type: "video",
-    status: "processing",
-    createdAt: "2024-01-16T09:00:00Z",
-    thumbnail: "https://images.unsplash.com/photo-1617038220319-276d3cfab638?w=400&h=300&fit=crop",
-    detail: {
-      brandName: "Nestify",
-      productName: "Trinket Plate Organizer",
-      productCategory: "Home & Decor",
-      productDescription: "Handcrafted ceramic trinket plate for organizing small jewellery and desk accessories.",
-      dimensions: "15 × 15 × 2 cm",
-      images: [
-        "https://images.unsplash.com/photo-1617038220319-276d3cfab638?w=600&h=600&fit=crop",
-        "https://images.unsplash.com/photo-1610701596007-11502861dcfa?w=600&h=600&fit=crop",
-        "https://images.unsplash.com/photo-1563170446-3a1eeb8eb1c4?w=600&h=600&fit=crop",
-        "https://images.unsplash.com/photo-1598524374912-6b0f2f1a1d1d?w=600&h=600&fit=crop",
-        "https://images.unsplash.com/photo-1567696153798-9111f9cd3d0d?w=600&h=600&fit=crop",
-        "https://images.unsplash.com/photo-1604480133414-bec8e665f23c?w=600&h=600&fit=crop",
-      ],
-    },
-  },
-];
+import { getProjects, deleteProject, type Project } from "@/lib/api";
 
 /* ──────────────────────────────────────────────────── */
 /*  Project Detail View                                 */
@@ -303,8 +208,15 @@ const ProjectDetailView = ({
 /*  Projects Page                                       */
 /* ──────────────────────────────────────────────────── */
 const ProjectsPage = () => {
-  const [projects] = useState<Project[]>(mockProjects);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const data = await getProjects();
+      setProjects(data);
+    })();
+  }, []);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -429,7 +341,13 @@ const ProjectsPage = () => {
                         <button className="p-2 rounded-lg hover:bg-secondary transition-colors">
                           <Download className="h-4 w-4" />
                         </button>
-                        <button className="p-2 rounded-lg hover:bg-secondary transition-colors text-destructive">
+                        <button
+                          className="p-2 rounded-lg hover:bg-secondary transition-colors text-destructive"
+                          onClick={async () => {
+                            await deleteProject(project.id);
+                            setProjects((prev) => prev.filter((p) => p.id !== project.id));
+                          }}
+                        >
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>

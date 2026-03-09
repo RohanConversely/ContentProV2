@@ -1,28 +1,36 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Sparkles, Check, ImageIcon, Video, RefreshCw, Crown } from "lucide-react";
 import Navbar from "@/components/Navbar";
-
-const mockUsage = {
-  plan: "free" as "free" | "pro",
-  creditsUsed: 7,
-  creditsTotal: 10,
-  imagesThisMonth: 6,
-  videosThisMonth: 1,
-  resetDate: "April 1, 2026",
-};
-
-const proBenefits = [
-  "Unlimited images per month",
-  "Unlimited videos per month",
-  "Priority processing queue",
-  "4K resolution exports",
-];
+import { getUsageSummary, getProBenefits, type UsageSummary } from "@/lib/api";
 
 const SettingsPage = () => {
   const navigate = useNavigate();
-  const usagePercent = Math.round((mockUsage.creditsUsed / mockUsage.creditsTotal) * 100);
-  const isPro = mockUsage.plan === "pro";
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
+  const [benefits, setBenefits] = useState<string[]>([]);
+
+  useEffect(() => {
+    void (async () => {
+      const [usageData, benefitsData] = await Promise.all([getUsageSummary(), getProBenefits()]);
+      setUsage(usageData);
+      setBenefits(benefitsData);
+    })();
+  }, []);
+
+  if (!usage) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <div className="container pt-28 pb-16 max-w-2xl">
+          <p className="text-sm text-muted-foreground">Loading settings…</p>
+        </div>
+      </div>
+    );
+  }
+
+  const usagePercent = Math.round((usage.creditsUsed / usage.creditsTotal) * 100);
+  const isPro = usage.plan === "pro";
 
   return (
     <div className="min-h-screen bg-background">
@@ -45,7 +53,7 @@ const SettingsPage = () => {
               <div>
                 <p className="text-xs uppercase tracking-widest text-muted-foreground font-semibold mb-1">Current Plan</p>
                 <div className="flex items-center gap-2">
-                  <h2 className="font-display text-xl font-bold capitalize">{mockUsage.plan}</h2>
+                  <h2 className="font-display text-xl font-bold capitalize">{usage.plan}</h2>
                   {isPro && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/15 text-primary text-xs font-semibold">
                       <Crown className="h-3 w-3" /> Pro
@@ -67,7 +75,7 @@ const SettingsPage = () => {
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Credits used</span>
                 <span className="font-semibold tabular-nums">
-                  {mockUsage.creditsUsed} / {mockUsage.creditsTotal}
+                  {usage.creditsUsed} / {usage.creditsTotal}
                 </span>
               </div>
               <div className="h-2 w-full rounded-full bg-secondary overflow-hidden">
@@ -100,7 +108,7 @@ const SettingsPage = () => {
                 </div>
                 <p className="text-sm font-medium">Images generated</p>
               </div>
-              <span className="text-sm font-semibold tabular-nums">{mockUsage.imagesThisMonth} this month</span>
+              <span className="text-sm font-semibold tabular-nums">{usage.imagesThisMonth} this month</span>
             </div>
             <div className="px-6 py-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -109,7 +117,7 @@ const SettingsPage = () => {
                 </div>
                 <p className="text-sm font-medium">Videos generated</p>
               </div>
-              <span className="text-sm font-semibold tabular-nums">{mockUsage.videosThisMonth} this month</span>
+              <span className="text-sm font-semibold tabular-nums">{usage.videosThisMonth} this month</span>
             </div>
             <div className="px-6 py-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -118,7 +126,7 @@ const SettingsPage = () => {
                 </div>
                 <p className="text-sm font-medium">Credits reset</p>
               </div>
-              <span className="text-sm font-semibold">{mockUsage.resetDate}</span>
+              <span className="text-sm font-semibold">{usage.resetDate}</span>
             </div>
           </div>
 
@@ -130,7 +138,7 @@ const SettingsPage = () => {
                 <h3 className="font-display text-xl font-bold">Unlock unlimited content creation</h3>
               </div>
               <ul className="space-y-2.5">
-                {proBenefits.map((b) => (
+                {benefits.map((b) => (
                   <li key={b} className="flex items-center gap-2.5 text-sm">
                     <Check className="h-4 w-4 text-primary shrink-0" />
                     {b}

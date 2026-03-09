@@ -1,18 +1,31 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { LogOut, Mail, User, Shield, Settings } from "lucide-react";
 import Navbar from "@/components/Navbar";
-
-const mockUser = {
-  name: "Alex Johnson",
-  email: "alex@example.com",
-  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Alex",
-  plan: "free" as "free" | "pro",
-  memberSince: "January 2026",
-};
+import { getCurrentUser, type UserProfile } from "@/lib/api";
 
 const ProfilePage = () => {
   const navigate = useNavigate();
+  const [user, setUser] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const data = await getCurrentUser();
+      setUser(data);
+    })();
+  }, []);
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <div className="container pt-28 pb-16 max-w-2xl">
+          <p className="text-sm text-muted-foreground">Loading profile…</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -28,23 +41,23 @@ const ProfilePage = () => {
           <div className="rounded-xl border border-border bg-card/60 backdrop-blur p-8 flex flex-col sm:flex-row items-center sm:items-start gap-6">
             <div className="shrink-0">
               <img
-                src={mockUser.avatar}
-                alt={mockUser.name}
+                src={user.avatar}
+                alt={user.name}
                 className="h-24 w-24 rounded-full border-2 border-primary/30 bg-secondary"
               />
             </div>
             <div className="text-center sm:text-left space-y-1 flex-1">
-              <h1 className="font-display text-2xl font-bold">{mockUser.name}</h1>
-              <p className="text-muted-foreground text-sm">{mockUser.email}</p>
+              <h1 className="font-display text-2xl font-bold">{user.name}</h1>
+              <p className="text-muted-foreground text-sm">{user.email}</p>
               <span
                 className={`inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full text-xs font-semibold ${
-                  mockUser.plan === "pro"
+                  user.plan === "pro"
                     ? "bg-primary/15 text-primary"
                     : "bg-secondary text-muted-foreground"
                 }`}
               >
                 <Shield className="h-3 w-3" />
-                {mockUser.plan === "pro" ? "Pro Plan" : "Free Plan"}
+                {user.plan === "pro" ? "Pro Plan" : "Free Plan"}
               </span>
             </div>
           </div>
@@ -58,28 +71,28 @@ const ProfilePage = () => {
               <User className="h-4 w-4 text-muted-foreground shrink-0" />
               <div>
                 <p className="text-xs text-muted-foreground">Full Name</p>
-                <p className="text-sm font-medium">{mockUser.name}</p>
+                <p className="text-sm font-medium">{user.name}</p>
               </div>
             </div>
             <div className="px-6 py-4 flex items-center gap-3">
               <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
               <div>
                 <p className="text-xs text-muted-foreground">Email</p>
-                <p className="text-sm font-medium">{mockUser.email}</p>
+                <p className="text-sm font-medium">{user.email}</p>
               </div>
             </div>
             <div className="px-6 py-4 flex items-center gap-3">
               <Shield className="h-4 w-4 text-muted-foreground shrink-0" />
               <div>
                 <p className="text-xs text-muted-foreground">Plan</p>
-                <p className="text-sm font-medium capitalize">{mockUser.plan}</p>
+                <p className="text-sm font-medium capitalize">{user.plan}</p>
               </div>
             </div>
             <div className="px-6 py-4 flex items-center gap-3">
               <Settings className="h-4 w-4 text-muted-foreground shrink-0" />
               <div>
                 <p className="text-xs text-muted-foreground">Member Since</p>
-                <p className="text-sm font-medium">{mockUser.memberSince}</p>
+                <p className="text-sm font-medium">{user.memberSince}</p>
               </div>
             </div>
           </div>
