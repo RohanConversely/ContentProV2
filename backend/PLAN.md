@@ -54,7 +54,7 @@ backend/
 │   │   ├── product_kyc.py          # Stage 1 — GPT-4.1-mini KYC generation
 │   │   ├── image_gen.py            # Stage 2 — gpt-image-1 A+ content image gen
 │   │   ├── video_prompt.py         # Stage 3 (video only) — GPT-4.1-mini video prompt gen
-│   │   ├── video_gen_veo.py        # Stage 4 (video only) — Veo video generation [ACTIVE]
+│   │   ├── video_gen.py           # Stage 4 (video only) — Veo video generation [ACTIVE]
 │   │   ├── video_gen_sora.py       # Stage 4 alt — Sora 2 video generation [INACTIVE, kept for later]
 │   │   ├── video_trim_concat.py    # Stage 5 (video only) — Trim each video to 5s, concatenate all
 │   │   └── video_audio_replace.py  # Stage 6 (video only) — Strip existing audio, apply user-selected audio
@@ -92,7 +92,7 @@ backend/
 | Real-time updates | **Server-Sent Events (SSE)** | Stream job status from backend to frontend via `GET /jobs/{job_id}/events` |
 | File Storage | **DigitalOcean Spaces** (S3-compatible) | Images, videos, audio, KYC JSONs |
 | S3 Client | **boto3** | DO Spaces is fully S3v4 compatible |
-| Auth | **JWT (python-jose)** | Stateless; store user_id on jobs |
+| Auth | **JWT (python-jose) + Google OAuth** | Stateless; store user_id on jobs; Google SSO for user authentication |
 | Containerization | **Docker + docker-compose** | Local dev and DO App Platform |
 
 ---
@@ -104,8 +104,11 @@ erDiagram
     USERS {
         uuid id PK
         text email UK "not null"
-        text hashed_password "not null"
+        text google_id "unique, nullable — for Google OAuth"
+        text hashed_password "nullable — only for email/password auth"
         text display_name
+        text avatar_url
+        text plan "free|pro"
         timestamptz created_at
         timestamptz updated_at
     }
@@ -206,6 +209,19 @@ Body: { email, password }
 Returns: { access_token, token_type: "bearer" }
 ```
 
+### Auth  `POST /auth/google`
+```
+Body: { id_token: string }
+Action: Verify Google OAuth ID token, create user if not exists, return JWT
+Returns: { user_id, email, display_name, access_token, token_type: "bearer" }
+```
+
+### Auth  `GET /auth/me`
+```
+Auth: Bearer token
+Returns: { user_id, email, display_name, plan, member_since }
+```
+
 ---
 
 ### Jobs  `POST /jobs`
@@ -227,6 +243,13 @@ Returns: { job_id, status, job_type, created_at }
 Auth: Bearer token
 Query: ?status=completed&page=1&page_size=20
 Returns: paginated list of jobs for the authenticated user
+```
+
+### Jobs  `GET /jobs/recent`
+```
+Auth: Bearer token
+Query: ?limit=4
+Returns: [{ id, name, genre, theme, images, date, status }, ...]
 ```
 
 ### Jobs  `GET /jobs/{job_id}`
@@ -261,6 +284,45 @@ Returns: { job_id, status: "running", current_stage: "stage_6" }
 Auth: Bearer token
 Action: Soft-deletes job; marks all assets as is_deleted=true
 Returns: { ok: true }
+```
+
+### Jobs  `POST /jobs/{job_id}/assets`
+```
+Auth: Bearer token
+Body: multipart/form-data — file (product image)
+Action: Uploads raw product image to DO Spaces at jobs/{job_id}/raw/{filename}
+        Creates asset row (asset_type=raw_image) in DB
+Returns: { asset_id, storage_key, mime_type, url }
+```
+
+---
+
+### Usage  `GET /usage`
+```
+Auth: Bearer token
+Returns: { plan, credits_used, credits_total, images_this_month, videos_this_month, reset_date }
+```
+
+### Usage  `GET /benefits`
+```
+Auth: Bearer token
+Returns: [ "Unlimited images per month", "Unlimited videos per month", ... ]
+```
+
+---
+
+### Audio  `GET /audio/tracks`
+```
+Auth: Bearer token
+Returns: { trending: [{ id, title, artist, duration, mood, source }], royalty_free: [...] }
+```
+
+---
+
+### Video  `GET /video/presets`
+```
+Auth: Bearer token
+Returns: { durations: [{ value, label, desc }], styles: [{ id, label, desc }] }
 ```
 
 ---
@@ -384,8 +446,8 @@ finally:
 This avoids any shared state between concurrent jobs running on the same worker.
 
 ### 7. Video generation engine — Veo (active), Sora (standby)
-Both `pipeline/stages/video_gen_veo.py` and `pipeline/stages/video_gen_sora.py` are present.
-- **`video_gen_veo.py`** is the active implementation used by the orchestrator.
+Both `pipeline/stages/video_gen.py` (Veo) and `pipeline/stages/video_gen_sora.py` are present.
+- **`video_gen.py`** is the active implementation using Veo, used by the orchestrator.
 - **`video_gen_sora.py`** is kept as-is for future use. To switch engines, change one import line in `orchestrator.py`. No other code changes needed.
 
 ### 8. New Stage 5 — `video_trim_concat.py`
@@ -508,15 +570,16 @@ Current stages use `Path(__file__).parent / "prompts"`. This still works since t
 - [ ] Extract core prompt generation function
 - [ ] Same cleanup as above
 
-### `pipeline/stages/video_gen_veo.py`
+### `pipeline/stages/video_gen.py`
 - [ ] Create new file adapting Veo API calls into the standard `async def run(ctx, logger) -> StageResult` interface
-- [ ] Outputs one video file per generated image (Stage 2 output)
-- [ ] Stores raw video files in `ctx.job_dir/stage_4/`
+- Outputs one video file per generated image (Stage 2 output)
+- Stores raw video files in `ctx.job_dir/stage_4/`
+- Note: This file uses Veo for video generation
 
 ### `pipeline/stages/video_gen_sora.py`
 - [ ] Keep file as-is (already copied)
 - [ ] No active integration — standby for future use
-- [ ] Add a module-level comment: `# INACTIVE — use video_gen_veo.py. Switch import in orchestrator.py to activate.`
+- [ ] Add a module-level comment: `# INACTIVE — use video_gen.py (Veo). Switch import in orchestrator.py to activate.`
 
 ### `pipeline/stages/video_trim_concat.py`  _(new)_
 - [ ] Create new file
@@ -622,6 +685,10 @@ Copy `.env.example` to `.env` and fill in all values:
 JWT_SECRET=<random 32+ char secret>
 JWT_EXPIRE_MINUTES=1440
 
+# ── Auth ──────────────────────────────────────────────────────────────
+GOOGLE_CLIENT_ID=<Google OAuth client ID>
+GOOGLE_CLIENT_SECRET=<Google OAuth client secret>
+
 # ── Database ─────────────────────────────────────────────────────────
 DATABASE_URL=postgresql+asyncpg://user:password@host:5432/contentpro
 
@@ -685,6 +752,7 @@ Step 9 ── Smoke test: POST /jobs with a sample product image
 | Decision | Choice | Notes |
 |---|---|---|
 | **Auth scope** | Multi-user SaaS | Full JWT auth with `users` table; every job is scoped to a `user_id` |
+| **Auth method** | JWT + Google OAuth | Email/password registration + Google SSO for easy login |
 | **Stage gating** | Fully automatic | No user confirmation between stages; SSE keeps frontend informed in real time |
 | **Temp local storage** | `tempfile.mkdtemp()` per job | Isolated per-job scratch dir; cleaned up in `finally` block after pipeline completes or fails |
 | **Video audio generation** | Not a pipeline parameter | AI-generated audio is not used; user always supplies their own audio file via `POST /jobs/{job_id}/apply-audio` |
