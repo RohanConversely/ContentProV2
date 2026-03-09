@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import Navbar from "@/components/Navbar";
 import CreationOptions from "@/components/CreationOptions";
 import CreationWizard from "@/components/CreationWizard";
+import BatchCreationWizard from "@/components/BatchCreationWizard";
 import heroBg from "@/assets/hero-bg.jpg";
 
 const Index = () => {
@@ -68,7 +69,18 @@ const Index = () => {
                 </div>
               </motion.div>
             ) : (
-              <CreationWizard mode={selectedMode} onBack={() => setSelectedMode(null)} />
+              (() => {
+                const isBatch = selectedMode.endsWith("-batch");
+                const baseMode = (isBatch ? selectedMode.replace(/-batch$/, "") : selectedMode) as
+                  | "images"
+                  | "video";
+
+                return isBatch ? (
+                  <BatchCreationWizard mode={baseMode} onBack={() => setSelectedMode(null)} />
+                ) : (
+                  <CreationWizard mode={baseMode} onBack={() => setSelectedMode(null)} />
+                );
+              })()
             )}
           </AnimatePresence>
         </div>
