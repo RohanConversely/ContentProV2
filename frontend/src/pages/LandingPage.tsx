@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -8,6 +9,7 @@ import {
   ArrowRight,
   Check,
 } from "lucide-react";
+import { getLandingGalleryImages, type LandingGalleryImage } from "@/lib/api";
 
 const features = [
   {
@@ -38,6 +40,14 @@ const proBenefits = ["Unlimited images", "Unlimited videos", "4K export", "Prior
 
 const LandingPage = () => {
   const navigate = useNavigate();
+  const [galleryImages, setGalleryImages] = useState<LandingGalleryImage[]>([]);
+
+  useEffect(() => {
+    void (async () => {
+      const imgs = await getLandingGalleryImages();
+      setGalleryImages(imgs);
+    })();
+  }, []);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -119,31 +129,30 @@ const LandingPage = () => {
           </div>
 
           {/* Floating preview cards */}
-          <motion.div
-            initial={{ opacity: 0, y: 40 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.4 }}
-            className="mt-20 grid grid-cols-2 md:grid-cols-3 gap-4 max-w-2xl mx-auto"
-          >
-            {[
-              "https://images.unsplash.com/photo-1617038220319-276d3cfab638?w=400&h=400&fit=crop",
-              "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=400&h=400&fit=crop",
-              "https://images.unsplash.com/photo-1611085583191-a3b181a88401?w=400&h=400&fit=crop",
-              "https://images.unsplash.com/photo-1599643477877-530eb83abc8e?w=400&h=400&fit=crop",
-              "https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=400&h=400&fit=crop",
-              "https://images.unsplash.com/photo-1602173574767-37ac01994b2a?w=400&h=400&fit=crop",
-            ].map((src, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, scale: 0.92 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.45 + i * 0.07 }}
-                className="aspect-square rounded-xl overflow-hidden border border-border/50 bg-card"
-              >
-                <img src={src} alt="" className="h-full w-full object-cover opacity-70 hover:opacity-100 transition-opacity duration-500" />
-              </motion.div>
-            ))}
-          </motion.div>
+          {galleryImages.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.4 }}
+              className="mt-20 grid grid-cols-2 md:grid-cols-3 gap-4 max-w-2xl mx-auto"
+            >
+              {galleryImages.map((img, i) => (
+                <motion.div
+                  key={img.id}
+                  initial={{ opacity: 0, scale: 0.92 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.45 + i * 0.07 }}
+                  className="aspect-square rounded-xl overflow-hidden border border-border/50 bg-card"
+                >
+                  <img
+                    src={img.url}
+                    alt=""
+                    className="h-full w-full object-cover opacity-70 hover:opacity-100 transition-opacity duration-500"
+                  />
+                </motion.div>
+              ))}
+            </motion.div>
+          )}
         </div>
       </section>
 
@@ -190,9 +199,9 @@ const LandingPage = () => {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: i * 0.12 }}
-                className="text-center space-y-3"
+                className="text-center space-y-3 rounded-xl border border-border bg-card/60 p-6 hover:border-primary/30 hover:shadow-glow transition-all duration-300"
               >
-                <span className="text-5xl font-display font-bold text-primary/20">{s.number}</span>
+                <span className="text-5xl font-display font-bold text-primary">{s.number}</span>
                 <h3 className="font-display text-xl font-semibold">{s.title}</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">{s.desc}</p>
               </motion.div>

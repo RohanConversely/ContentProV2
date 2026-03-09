@@ -1,46 +1,18 @@
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Clock, MoreHorizontal, Image as ImageIcon } from "lucide-react";
-
-const recentProjects = [
-  {
-    id: 1,
-    name: "Premium Watch Collection",
-    genre: "Luxury",
-    theme: "Dark & Moody",
-    images: 8,
-    date: "2 hours ago",
-    status: "completed",
-  },
-  {
-    id: 2,
-    name: "Organic Skincare Line",
-    genre: "Lifestyle",
-    theme: "Pastel",
-    images: 12,
-    date: "1 day ago",
-    status: "completed",
-  },
-  {
-    id: 3,
-    name: "Tech Gadgets Bundle",
-    genre: "Tech",
-    theme: "Cool Tones",
-    images: 6,
-    date: "3 days ago",
-    status: "in-progress",
-  },
-  {
-    id: 4,
-    name: "Fitness Equipment Set",
-    genre: "Studio",
-    theme: "Neutral",
-    images: 10,
-    date: "5 days ago",
-    status: "completed",
-  },
-];
+import { getRecentProjects, type RecentProjectSummary } from "@/lib/api";
 
 const RecentProjects = () => {
+  const [projects, setProjects] = useState<RecentProjectSummary[]>([]);
+
+  useEffect(() => {
+    void (async () => {
+      const data = await getRecentProjects();
+      setProjects(data);
+    })();
+  }, []);
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -52,7 +24,7 @@ const RecentProjects = () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {recentProjects.map((project, i) => (
+        {projects.map((project, i) => (
           <motion.div
             key={project.id}
             initial={{ opacity: 0, y: 15 }}

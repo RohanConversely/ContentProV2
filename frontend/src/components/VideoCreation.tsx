@@ -21,6 +21,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { type ProductFormData } from "./CreationWizard";
+import { getAudioTracks, getVideoPresets } from "@/lib/api";
 
 interface VideoCreationProps {
   productData: ProductFormData;
@@ -31,36 +32,10 @@ interface VideoCreationProps {
 
 type MusicSource = "trending" | "royalty-free" | "upload" | "ai-generated";
 
-interface MusicTrack {
-  id: string;
-  title: string;
-  artist: string;
-  duration: string;
-  mood: string;
-  source: MusicSource;
-}
-
 const musicSources: { id: MusicSource; label: string; icon: typeof Music; desc: string }[] = [
   { id: "trending", label: "Instagram Trending", icon: TrendingUp, desc: "Hot reels audio" },
   { id: "royalty-free", label: "Royalty Free", icon: Library, desc: "Licensed tracks" },
   { id: "upload", label: "Custom Upload", icon: Upload, desc: "Your own audio" },
-];
-
-const trendingTracks: MusicTrack[] = [
-  { id: "t1", title: "Aesthetic Vibes", artist: "Reel Audio", duration: "0:30", mood: "Trendy", source: "trending" },
-  { id: "t2", title: "Main Character Energy", artist: "Viral Sounds", duration: "0:25", mood: "Upbeat", source: "trending" },
-  { id: "t3", title: "Soft Glow", artist: "Insta Beats", duration: "0:35", mood: "Calm", source: "trending" },
-  { id: "t4", title: "Luxury Drop", artist: "Premium Audio", duration: "0:20", mood: "Elegant", source: "trending" },
-  { id: "t5", title: "Product Reveal", artist: "Trend Studio", duration: "0:30", mood: "Dramatic", source: "trending" },
-];
-
-const royaltyFreeTracks: MusicTrack[] = [
-  { id: "r1", title: "Cinematic Rise", artist: "StockAudio Pro", duration: "1:00", mood: "Cinematic", source: "royalty-free" },
-  { id: "r2", title: "Gentle Morning", artist: "Ambient Lab", duration: "0:45", mood: "Calm", source: "royalty-free" },
-  { id: "r3", title: "Urban Pulse", artist: "Beat Factory", duration: "0:30", mood: "Energetic", source: "royalty-free" },
-  { id: "r4", title: "Elegant Piano", artist: "Classical Cuts", duration: "0:50", mood: "Sophisticated", source: "royalty-free" },
-  { id: "r5", title: "Lo-Fi Dreams", artist: "Chill Waves", duration: "1:00", mood: "Relaxed", source: "royalty-free" },
-  { id: "r6", title: "Corporate Upbeat", artist: "Biz Tunes", duration: "0:40", mood: "Professional", source: "royalty-free" },
 ];
 
 const aiPromptSuggestions = [
@@ -68,19 +43,6 @@ const aiPromptSuggestions = [
   "Lo-fi chill beat for lifestyle product showcase",
   "Upbeat trendy pop for social media reel",
   "Elegant ambient piano for premium brand video",
-];
-
-const videoDurations = [
-  { value: 15, label: "15s", desc: "Instagram Story" },
-  { value: 30, label: "30s", desc: "Reel / Short" },
-  { value: 60, label: "60s", desc: "Full Reel" },
-];
-
-const videoStyles = [
-  { id: "slideshow", label: "Smooth Slideshow", desc: "Ken Burns pan & zoom transitions" },
-  { id: "cinematic", label: "Cinematic Cuts", desc: "Quick cuts with motion blur" },
-  { id: "reveal", label: "Product Reveal", desc: "Dramatic zoom-in reveal sequence" },
-  { id: "storytelling", label: "Story Arc", desc: "Narrative flow with text overlays" },
 ];
 
 interface VideoCreationProps {
@@ -108,6 +70,10 @@ const VideoCreation = ({
   const [generationProgress, setGenerationProgress] = useState(0);
   const [videoReady, setVideoReady] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [trendingTracks, setTrendingTracks] = useState<Awaited<ReturnType<typeof getAudioTracks>>["trending"]>([]);
+  const [royaltyFreeTracks, setRoyaltyFreeTracks] = useState<Awaited<ReturnType<typeof getAudioTracks>>["royaltyFree"]>([]);
+  const [durations, setDurations] = useState<Awaited<ReturnType<typeof getVideoPresets>>["durations"]>([]);
+  const [styles, setStyles] = useState<Awaited<ReturnType<typeof getVideoPresets>>["styles"]>([]);
 
   // Simulate slideshow preview
   useEffect(() => {
@@ -117,6 +83,23 @@ const VideoCreation = ({
     }, 2500);
     return () => clearInterval(interval);
   }, [isPlaying, images.length]);
+
+  // Load audio tracks & video presets (mock API)
+  useEffect(() => {
+    void (async () => {
+      const [tracks, presets] = await Promise.all([getAudioTracks(), getVideoPresets()]);
+      setTrendingTracks(tracks.trending);
+      setRoyaltyFreeTracks(tracks.royaltyFree);
+      setDurations(presets.durations);
+      setStyles(presets.styles);
+      if (!selectedDuration && presets.durations.length > 0) {
+        setSelectedDuration(presets.durations[0].value);
+      }
+      if (!selectedStyle && presets.styles.length > 0) {
+        setSelectedStyle(presets.styles[0].id);
+      }
+    })();
+  }, []);
 
   // Simulate generation progress
   useEffect(() => {

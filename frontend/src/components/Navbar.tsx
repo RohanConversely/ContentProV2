@@ -1,22 +1,26 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Sparkles, FolderOpen, User, Settings, LogOut, ChevronDown } from "lucide-react";
+import { getCurrentUser, type UserProfile } from "@/lib/api";
 
 const navItems = [
   { label: "Create", icon: Sparkles, path: "/dashboard" },
   { label: "Projects", icon: FolderOpen, path: "/projects" },
 ];
 
-const mockUser = {
-  name: "Alex Johnson",
-  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Alex",
-};
-
 const Navbar = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const [user, setUser] = useState<UserProfile | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const data = await getCurrentUser();
+      setUser(data);
+    })();
+  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -76,8 +80,8 @@ const Navbar = () => {
               className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-2.5 py-1.5 hover:bg-secondary transition-colors"
             >
               <img
-                src={mockUser.avatar}
-                alt={mockUser.name}
+                src={user?.avatar ?? "https://api.dicebear.com/7.x/avataaars/svg?seed=Alex"}
+                alt={user?.name ?? "User"}
                 className="h-7 w-7 rounded-full bg-secondary"
               />
               <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${dropdownOpen ? "rotate-180" : ""}`} />
@@ -86,8 +90,8 @@ const Navbar = () => {
             {dropdownOpen && (
               <div className="absolute right-0 mt-2 w-48 rounded-xl border border-border bg-card shadow-lg overflow-hidden z-50">
                 <div className="px-4 py-3 border-b border-border">
-                  <p className="text-sm font-semibold truncate">{mockUser.name}</p>
-                  <p className="text-xs text-muted-foreground">Free Plan</p>
+                  <p className="text-sm font-semibold truncate">{user?.name ?? "User"}</p>
+                  <p className="text-xs text-muted-foreground">{user?.plan === "pro" ? "Pro Plan" : "Free Plan"}</p>
                 </div>
                 <div className="py-1">
                   <button
