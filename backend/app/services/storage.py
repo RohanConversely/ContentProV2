@@ -81,6 +81,17 @@ class StorageService:
         await asyncio.to_thread(shutil.copyfile, source, destination_path)
         return destination_path
 
+    async def download_bytes(self, storage_key: str) -> bytes:
+        if self._client:
+            response = await asyncio.to_thread(
+                self._client.get_object,
+                Bucket=settings.do_spaces_bucket,
+                Key=storage_key,
+            )
+            return await asyncio.to_thread(response["Body"].read)
+        source = self._full_local_path(storage_key)
+        return await asyncio.to_thread(source.read_bytes)
+
     async def delete_file(self, storage_key: str) -> bool:
         if self._client:
             await asyncio.to_thread(

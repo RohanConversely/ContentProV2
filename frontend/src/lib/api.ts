@@ -104,6 +104,7 @@ interface BackendJobResponse extends BackendJobSummaryResponse {
   social_link_2?: string | null;
   social_link_3?: string | null;
   social_link_4?: string | null;
+  additional_input?: Record<string, unknown> | null;
   video_duration_seconds: number;
   error_message?: string | null;
   storage_prefix: string;
@@ -136,6 +137,7 @@ export interface GenerateImagesInput {
   socialLink2?: string;
   socialLink3?: string;
   socialLink4?: string;
+  additionalInput?: Record<string, unknown>;
 }
 
 export interface JobEventPayload {
@@ -257,6 +259,29 @@ function assetUrl(asset: BackendAssetResponse): string | null {
 }
 
 function mapProject(job: BackendJobResponse): Project {
+  const additionalInput = job.additional_input ?? {};
+  const dimensions =
+    typeof additionalInput.dimensions === "string" ? additionalInput.dimensions : undefined;
+  const productDescription =
+    typeof additionalInput.product_description === "string"
+      ? additionalInput.product_description
+      : undefined;
+  const additionalInfo = Object.fromEntries(
+    Object.entries(additionalInput).filter(
+      ([key, value]) =>
+        key !== "dimensions" &&
+        key !== "product_description" &&
+        value !== null &&
+        value !== undefined &&
+        String(value).trim().length > 0,
+    ),
+  ) as Record<string, string>;
+  const socialLinks = [
+    job.social_link_1,
+    job.social_link_2,
+    job.social_link_3,
+    job.social_link_4,
+  ].filter((value): value is string => Boolean(value));
   const generatedImages = job.assets
     .filter((asset) => asset.asset_type === "generated_image" && !asset.is_deleted)
     .map((asset) => assetUrl(asset))
@@ -284,7 +309,11 @@ function mapProject(job: BackendJobResponse): Project {
       brandName: job.brand_name,
       productName: job.product_name,
       productCategory: job.product_category,
+      productDescription,
       brandWebsite: job.brand_website,
+      dimensions,
+      socialLinks,
+      additionalInfo,
       images: generatedImages,
     },
   };
@@ -409,6 +438,7 @@ export async function createJob(input: Omit<GenerateImagesInput, "imageFile">): 
         social_link_2: input.socialLink2,
         social_link_3: input.socialLink3,
         social_link_4: input.socialLink4,
+        additional_input: input.additionalInput,
       }),
     },
     true,
@@ -559,6 +589,22 @@ export async function downloadFile(url: string, fallbackFilename = "download.bin
   const anchor = document.createElement("a");
   anchor.href = blobUrl;
   anchor.download = inferFilename(url, fallbackFilename);
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.URL.revokeObjectURL(blobUrl);
+}
+
+export async function downloadJobImagesArchive(
+  jobId: string,
+  fallbackFilename: string,
+): Promise<void> {
+  const response = await apiFetch(`/jobs/${encodeURIComponent(jobId)}/download/images`, {}, true);
+  const blob = await response.blob();
+  const blobUrl = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = blobUrl;
+  anchor.download = `${fallbackFilename}.zip`;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();

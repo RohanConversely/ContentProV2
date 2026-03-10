@@ -17,6 +17,7 @@ class JobCreateRequest(BaseModel):
     social_link_2: str | None = None
     social_link_3: str | None = None
     social_link_4: str | None = None
+    additional_input: dict | None = None
     video_duration_seconds: int = Field(default=8, ge=1, le=60)
 
 
@@ -52,6 +53,7 @@ class JobResponse(JobSummaryResponse):
     social_link_2: str | None = None
     social_link_3: str | None = None
     social_link_4: str | None = None
+    additional_input: dict | None = None
     video_duration_seconds: int
     error_message: str | None = None
     storage_prefix: str

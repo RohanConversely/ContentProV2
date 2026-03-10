@@ -5,7 +5,7 @@ import {
   ArrowLeft, Building2, Globe, Play, Maximize2, X,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
-import { getProjects, deleteProject, downloadFile, type Project } from "@/lib/api";
+import { getProjects, deleteProject, downloadFile, downloadJobImagesArchive, type Project } from "@/lib/api";
 
 /* ──────────────────────────────────────────────────── */
 /*  Project Detail View                                 */
@@ -21,6 +21,9 @@ const ProjectDetailView = ({
   const { detail } = project;
   const handleDownloadImage = async (src: string, index: number) => {
     await downloadFile(src, `${project.name || "project-image"}-${index + 1}.png`);
+  };
+  const handleDownloadAll = async () => {
+    await downloadJobImagesArchive(project.id, `${detail.brandName}_${detail.productName}`);
   };
 
   return (
@@ -75,6 +78,15 @@ const ProjectDetailView = ({
           )}
         </div>
 
+        <div className="flex justify-end">
+          <button
+            onClick={() => void handleDownloadAll()}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-xs font-medium hover:bg-secondary transition-colors"
+          >
+            <Download className="h-3.5 w-3.5" /> Download All
+          </button>
+        </div>
+
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-3 border-t border-border">
           <div className="space-y-1">
             <span className="text-muted-foreground">Brand</span>
@@ -98,6 +110,37 @@ const ProjectDetailView = ({
           <div className="pt-2 border-t border-border space-y-1">
             <span className="text-xs text-muted-foreground">Description</span>
             <p className="text-xs">{detail.productDescription}</p>
+          </div>
+        )}
+
+        {detail.socialLinks && detail.socialLinks.length > 0 && (
+          <div className="pt-3 border-t border-border flex flex-wrap items-center gap-3">
+            <span className="text-xs text-muted-foreground">Social Links:</span>
+            {detail.socialLinks.map((link) => (
+              <a
+                key={link}
+                href={link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary hover:underline break-all"
+              >
+                {link}
+              </a>
+            ))}
+          </div>
+        )}
+
+        {detail.additionalInfo && Object.keys(detail.additionalInfo).length > 0 && (
+          <div className="pt-3 border-t border-border space-y-2">
+            <span className="text-xs text-muted-foreground">Additional Information</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-xs">
+              {Object.entries(detail.additionalInfo).map(([key, value]) => (
+                <div key={key} className="space-y-0.5">
+                  <p className="text-muted-foreground">{key}</p>
+                  <p className="break-words">{value}</p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -346,13 +389,7 @@ const ProjectsPage = () => {
                         </button>
                         <button
                           className="p-2 rounded-lg hover:bg-secondary transition-colors"
-                          onClick={() =>
-                            void Promise.all(
-                              project.detail.images.map((src, index) =>
-                                downloadFile(src, `${project.name || "project-image"}-${index + 1}.png`),
-                              ),
-                            )
-                          }
+                          onClick={() => void downloadJobImagesArchive(project.id, `${project.detail.brandName}_${project.detail.productName}`)}
                         >
                           <Download className="h-4 w-4" />
                         </button>

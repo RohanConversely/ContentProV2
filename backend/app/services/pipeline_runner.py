@@ -200,7 +200,7 @@ async def run_pipeline_task(job_id: str) -> None:
             image_path=local_raw_image,
             social_link_1=job.social_link_1,
             social_link_2=job.social_link_2,
-            additional_info=None,
+            additional_info=job.additional_input_json,
             num_images=4,
             temperature=0.1,
             workspace_root=workspace,

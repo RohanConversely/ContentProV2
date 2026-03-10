@@ -1,6 +1,10 @@
+import io
+import zipfile
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
@@ -22,6 +26,7 @@ from app.schemas.job import (
     UsageResponse,
 )
 from app.services.pipeline_runner import hydrate_job_assets, subscribe
+from app.services.storage import storage_service
 
 router = APIRouter(tags=["jobs"])
 
@@ -61,6 +66,7 @@ async def create_job(
         social_link_2=payload.social_link_2,
         social_link_3=payload.social_link_3,
         social_link_4=payload.social_link_4,
+        additional_input_json=payload.additional_input,
         video_duration_seconds=payload.video_duration_seconds,
         status="pending_upload",
         current_stage="queued",
@@ -158,6 +164,7 @@ async def get_job(
         social_link_2=job.social_link_2,
         social_link_3=job.social_link_3,
         social_link_4=job.social_link_4,
+        additional_input=job.additional_input_json,
         video_duration_seconds=job.video_duration_seconds,
         status=job.status,
         current_stage=job.current_stage,
@@ -227,6 +234,43 @@ async def get_pricing(
         total_output_tokens=pricing.total_output_tokens,
         created_at=pricing.created_at,
     )
+
+
+@router.get("/jobs/{job_id}/download/images")
+async def download_job_images_archive(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(select(Job).where(Job.job_id == job_id, Job.user_id == current_user.id))
+    job = result.scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
+    asset_result = await db.execute(
+        select(Asset)
+        .where(
+            Asset.job_id == job.id,
+            Asset.asset_type == "generated_image",
+            Asset.is_deleted.is_(False),
+        )
+        .order_by(Asset.created_at.asc())
+    )
+    assets = asset_result.scalars().all()
+    if not assets:
+        raise HTTPException(status_code=404, detail="No generated images available for this job.")
+
+    archive_bytes = io.BytesIO()
+    with zipfile.ZipFile(archive_bytes, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for asset in assets:
+            file_bytes = await storage_service.download_bytes(asset.storage_key)
+            archive_name = asset.original_filename or Path(asset.storage_key).name
+            archive.writestr(archive_name, file_bytes)
+
+    archive_bytes.seek(0)
+    archive_name = f"{job.brand_name}_{job.product_name}".replace("/", "_").replace("\\", "_")
+    headers = {"Content-Disposition": f'attachment; filename="{archive_name}.zip"'}
+    return StreamingResponse(archive_bytes, media_type="application/zip", headers=headers)
 
 
 @router.get("/usage", response_model=UsageResponse)

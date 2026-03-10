@@ -1,82 +1,102 @@
 # Backend Implementation Plan
 
-## Table of Contents
-1. [Folder Structure](#folder-structure)
-2. [Technology Stack](#technology-stack)
-3. [Database Schema](#database-schema)
-4. [API Endpoints](#api-endpoints)
-5. [Pipeline Integration Tasks](#pipeline-integration-tasks)
-6. [File-by-File Build Tasks](#file-by-file-build-tasks)
-7. [Storage Layout (DO Spaces)](#storage-layout-do-spaces)
-8. [Environment Variables](#environment-variables)
-9. [Deployment Order](#deployment-order)
-10. [Open Questions / Decisions](#open-questions--decisions)
+## Current Implementation Status
 
----
+This repo is no longer only in planning state. The following parts are already implemented in the codebase:
 
-## Folder Structure
+- Google OAuth login is wired end to end.
+- JWT-protected FastAPI backend is live.
+- Jobs, assets, pricing snapshots, and pipeline logs are persisted.
+- Single image generation uses the persisted `/jobs` flow.
+- Batch image generation uses the persisted `/jobs` flow, one backend job per selected row.
+- Only image pipeline Step 1 (Product KYC) and Step 2 (Image Generation) are active.
+- Video Steps 3 and 4 remain excluded from execution.
+- Per-job workspaces are created under `backend/storage/job_runs/<job_id>`.
+- Per-job `job.log` and `pricing.json` are generated and stored.
+- Local development storage works from `backend/storage/objects`.
+- Remote-image batch rows can be ingested from spreadsheet URLs, including Google Drive share links normalized into downloadable URLs.
+- Frontend project history, project detail pages, SSE job progress, and generated-image rendering are integrated with the backend.
 
-```
+## Current Project Structure
+
+What currently matters in the live implementation:
+
+```text
 backend/
 ├── app/
-│   ├── __init__.py
-│   ├── main.py                     # FastAPI app factory, mounts routers
-│   ├── config.py                   # Pydantic Settings, reads from .env
-│   ├── database.py                 # SQLAlchemy async engine + session factory
+│   ├── main.py
+│   ├── config.py
+│   ├── database.py
 │   ├── models/
-│   │   ├── __init__.py
-│   │   ├── job.py                  # Job ORM model
-│   │   ├── asset.py                # Asset ORM model (images, videos, audio)
-│   │   └── pricing.py              # Pricing snapshot ORM model
-│   ├── schemas/
-│   │   ├── __init__.py
-│   │   ├── job.py                  # Pydantic request/response schemas for jobs
-│   │   └── asset.py                # Pydantic schemas for assets
+│   │   ├── user.py
+│   │   ├── job.py
+│   │   ├── asset.py
+│   │   └── pricing.py
 │   ├── routers/
-│   │   ├── __init__.py
-│   │   ├── jobs.py                 # Job CRUD + trigger endpoints
-│   │   └── assets.py               # Asset upload, list, presigned URL endpoints
+│   │   ├── auth.py
+│   │   ├── jobs.py
+│   │   ├── assets.py
+│   │   ├── meta.py
+│   │   └── image_jobs.py
+│   ├── schemas/
+│   │   ├── job.py
+│   │   ├── asset.py
+│   │   └── image_jobs.py
 │   ├── services/
-│   │   ├── __init__.py
-│   │   ├── storage.py              # DO Spaces (S3-compatible) upload/download/presign
-│   │   └── pipeline_runner.py      # asyncio background tasks: calls pipeline/orchestrator.py
+│   │   ├── auth.py
+│   │   ├── storage.py
+│   │   ├── pipeline_runner.py
+│   │   └── image_pipeline.py
 │   └── utils/
-│       ├── __init__.py
-│       └── presigned_urls.py       # Helper to generate time-limited access URLs
-│
-├── pipeline/                       # Cleaned copy of imageGenScript/pipeline/
-│   ├── __init__.py
-│   ├── orchestrator.py             # Refactored main_sora.py — no argparse, no subprocess
-│   ├── logger.py                   # JsonLogger (unchanged from original)
-│   ├── pricing.py                  # job_pricing.py (unchanged from original)
-│   ├── stages/
-│   │   ├── __init__.py
-│   │   ├── product_kyc.py          # Stage 1 — GPT-4.1-mini KYC generation
-│   │   ├── image_gen.py            # Stage 2 — gpt-image-1 A+ content image gen
-│   │   ├── video_prompt.py         # Stage 3 (video only) — GPT-4.1-mini video prompt gen
-│   │   ├── video_gen.py           # Stage 4 (video only) — Veo video generation [ACTIVE]
-│   │   ├── video_gen_sora.py       # Stage 4 alt — Sora 2 video generation [INACTIVE, kept for later]
-│   │   ├── video_trim_concat.py    # Stage 5 (video only) — Trim each video to 5s, concatenate all
-│   │   └── video_audio_replace.py  # Stage 6 (video only) — Strip existing audio, apply user-selected audio
-│   └── prompts/
-│       ├── imageKYC.txt
-│       ├── ImageWithKYCTesting.txt
-│       └── perImagePromptGen.txt
-│
-├── migrations/                     # Alembic migration scripts
-│   ├── env.py
-│   ├── script.py.mako
-│   └── versions/
-│
-├── .env                            # Secrets — never commit
-├── .env.example                    # Template with all required keys
-├── .gitignore
-├── Dockerfile
-├── docker-compose.yml              # Postgres + Redis + backend service
-├── requirements.txt                # All Python dependencies
-├── alembic.ini
-└── PLAN.md                         # This file
+│       └── presigned_urls.py
+├── pipeline/
+│   ├── orchestrator.py
+│   ├── image_single_orchestrator.py
+│   ├── image_batch_orchestrator.py
+│   ├── pricing.py
+│   └── stages/
+│       ├── product_kyc.py
+│       └── image_gen_with_KYC.py
+└── storage/
+    ├── job_runs/
+    └── objects/
 ```
+
+## Implemented Behavior
+
+- `POST /jobs` creates a persisted image job.
+- `POST /jobs/{job_id}/assets` uploads a local raw image and queues processing.
+- `POST /jobs/{job_id}/assets/remote` downloads a remote image URL into a persisted job and queues processing.
+- `GET /jobs/{job_id}/events` streams live SSE updates.
+- `GET /jobs/{job_id}` returns assets, pricing snapshot, status, and persisted job metadata.
+- `GET /jobs/{job_id}/download/images` returns a ZIP of generated images.
+- `GET /jobs/recent` and `GET /jobs` back the frontend project history.
+- Extra user input metadata is now persisted in the job record and passed into the image pipeline as `additional_info`.
+
+## Remaining Work
+
+The main items still left before production deployment are:
+
+- Switch the database from local SQLite to managed PostgreSQL.
+- Switch asset storage from local disk to DigitalOcean Spaces in the production environment.
+- Backfill old local assets into Spaces if historical jobs must remain fully downloadable after deploy.
+- Add formal Alembic migrations instead of relying on startup schema patching for new columns.
+- Add production-grade background execution strategy if higher throughput is needed.
+- Add deployment configuration for DigitalOcean runtime, secrets, and health checks.
+- Add stronger monitoring, alerting, and structured error reporting.
+- Add production cleanup/retention rules for local temp and workspace files.
+- If video is later approved, implement Steps 3 and 4 behind a separately approved execution path.
+
+## Table of Contents
+1. [Technology Stack](#technology-stack)
+2. [Database Schema](#database-schema)
+3. [API Endpoints](#api-endpoints)
+4. [Pipeline Integration Tasks](#pipeline-integration-tasks)
+5. [File-by-File Build Tasks](#file-by-file-build-tasks)
+6. [Storage Layout (DO Spaces)](#storage-layout-do-spaces)
+7. [Environment Variables](#environment-variables)
+8. [Deployment Order](#deployment-order)
+9. [Open Questions / Decisions](#open-questions--decisions)
 
 ---
 

@@ -37,6 +37,8 @@ export interface ProjectDetail {
   productDescription?: string;
   brandWebsite?: string;
   dimensions?: string;
+  socialLinks?: string[];
+  additionalInfo?: Record<string, string>;
   images: string[];
   videoUrl?: string;
 }
