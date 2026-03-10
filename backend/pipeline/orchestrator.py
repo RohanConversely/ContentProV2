@@ -1,16 +1,22 @@
-#!/usr/bin/env python3
-import argparse
+from __future__ import annotations
+
+import asyncio
 import json
-import subprocess
-import sys
+import shutil
+import tempfile
 import uuid
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from logger import JsonLogger
+from .logger import JsonLogger
+from .stages.image_gen_with_KYC import generate_images
+from .stages.product_kyc import generate_image_kyc
 
-RESULT_PREFIX = "__RESULT__"
+
+class PipelineStageError(RuntimeError):
+    pass
 
 
 def build_job_id() -> str:
@@ -18,411 +24,190 @@ def build_job_id() -> str:
     return f"{ts}_{uuid.uuid4().hex[:8]}"
 
 
-def confirm_stage(prompt: str) -> bool:
-    while True:
-        answer = input(f"{prompt} (Y/N): ").strip().lower()
-        if answer in {"y", "yes"}:
-            return True
-        if answer in {"n", "no"}:
-            return False
-        print("Please enter Y or N.")
+@dataclass
+class JobContext:
+    job_id: str
+    brand_name: str
+    brand_website: str
+    product_name: str
+    product_category: str
+    image_path: Path
+    social_link_1: str | None = None
+    social_link_2: str | None = None
+    additional_info: dict[str, Any] | None = None
+    num_images: int = 4
+    temperature: float = 0.1
+    prompt_file: str = "ImageWithKYCTesting.txt"
+    workspace_root: Path | None = None
+    work_dir: Path = field(init=False)
+    product_kyc_dir: Path = field(init=False)
+    generated_images_dir: Path = field(init=False)
+    job_log_file: Path = field(init=False)
+
+    def __post_init__(self) -> None:
+        root = self.workspace_root
+        if root is None:
+            root = Path(tempfile.mkdtemp(prefix=f"contentpro_{self.job_id}_"))
+        else:
+            root = root.resolve()
+            root.mkdir(parents=True, exist_ok=True)
+        self.work_dir = root
+        self.product_kyc_dir = self.work_dir / "stage_1"
+        self.generated_images_dir = self.work_dir / "stage_2"
+        self.job_log_file = self.work_dir / "job.log"
+        self.product_kyc_dir.mkdir(parents=True, exist_ok=True)
+        self.generated_images_dir.mkdir(parents=True, exist_ok=True)
+
+    def cleanup(self) -> None:
+        shutil.rmtree(self.work_dir, ignore_errors=True)
 
 
-def extract_result_json(stdout: str) -> Any:
-    for line in reversed(stdout.splitlines()):
-        if line.startswith(RESULT_PREFIX):
-            payload = line[len(RESULT_PREFIX) :].strip()
-            return json.loads(payload)
-    raise ValueError("Result marker not found in subprocess output.")
+@dataclass
+class StageArtifact:
+    stage: str
+    type: str
+    path: str
 
 
-def run_stage_subprocess(
-    script_name: str,
-    stage_name: str,
-    script_args: list[str],
-    job_id: str,
-    job_log_file: Path,
-    logger: JsonLogger,
-) -> tuple[int, str, str]:
-    script_path = Path(__file__).parent / script_name
-    command = [
-        sys.executable,
-        str(script_path),
-        *script_args,
-        "--job-id",
-        job_id,
-        "--stage-name",
-        stage_name,
-        "--job-log-file",
-        str(job_log_file.resolve()),
-        "--result-prefix",
-        RESULT_PREFIX,
-    ]
-    logger.info("Starting stage.", {"job_id": job_id, "stage": stage_name, "script": script_name})
-    print(f"[{stage_name}] Running {script_name} ...")
+@dataclass
+class ImagePipelineResult:
+    job_id: str
+    status: str
+    kyc_json_path: str
+    filtered_kyc_json_path: str
+    generated_images: list[str]
+    artifacts: list[StageArtifact]
+    workspace: str
+    log_file: str
 
-    result = subprocess.run(command, capture_output=True, text=True)
-    stdout = result.stdout.strip()
-    stderr = result.stderr.strip()
+    def to_dict(self) -> dict[str, Any]:
+        payload = asdict(self)
+        payload["artifacts"] = [asdict(artifact) for artifact in self.artifacts]
+        return payload
 
-    if stdout:
-        logger.info(
-            "Stage stdout captured.",
-            {"job_id": job_id, "stage": stage_name, "stdout": stdout[-4000:]},
-        )
-    if stderr:
-        logger.warning(
-            "Stage stderr captured.",
-            {"job_id": job_id, "stage": stage_name, "stderr": stderr[-4000:]},
-        )
 
-    if result.returncode != 0:
-        logger.error(
-            "Stage failed.",
-            {"job_id": job_id, "stage": stage_name, "return_code": result.returncode},
-        )
-    else:
-        logger.info("Stage completed.", {"job_id": job_id, "stage": stage_name})
-
-    return result.returncode, stdout, stderr
+def build_logger(job_log_file: Path) -> JsonLogger:
+    return JsonLogger(job_log_file=str(job_log_file), include_global_when_job_active=False)
 
 
 def filter_kyc_for_stage2(source_path: Path, target_path: Path) -> Path:
     with open(source_path, "r", encoding="utf-8") as f:
         kyc_data = json.load(f)
 
-    comp = kyc_data.get("competitor_analysis")
-    if isinstance(comp, dict):
+    competitor_analysis = kyc_data.get("competitor_analysis")
+    if isinstance(competitor_analysis, dict):
         for key in (
             "competitor_approaches",
             "common_themes",
             "gaps_weaknesses",
             "overused_approaches",
         ):
-            comp.pop(key, None)
+            competitor_analysis.pop(key, None)
 
     with open(target_path, "w", encoding="utf-8") as f:
         json.dump(kyc_data, f, indent=2, ensure_ascii=False)
+
     return target_path.resolve()
 
 
-def ensure_result_path(path_str: str, stage_name: str, label: str) -> Path:
-    resolved = Path(path_str).resolve()
-    if not resolved.exists():
-        raise FileNotFoundError(f"{stage_name}: {label} path not found: {resolved}")
-    return resolved
-
-
-def run_pricing_subprocess(job_dir: Path, job_log_file: Path, logger: JsonLogger) -> bool:
-    command = [
-        sys.executable,
-        str((Path(__file__).parent / "job_pricing.py").resolve()),
-        "--job-dir",
-        str(job_dir.resolve()),
-        "--job-log-file",
-        str(job_log_file.resolve()),
-        "--output-file",
-        str((job_dir / "price.json").resolve()),
-    ]
-    result = subprocess.run(command, capture_output=True, text=True)
-    stdout = result.stdout.strip()
-    stderr = result.stderr.strip()
-
-    if stdout:
-        logger.info("Pricing stdout captured.", {"stage": "pricing", "stdout": stdout[-4000:]})
-    if stderr:
-        logger.warning("Pricing stderr captured.", {"stage": "pricing", "stderr": stderr[-4000:]})
-
-    if result.returncode != 0:
-        logger.error(
-            "Pricing generation failed.",
-            {"stage": "pricing", "return_code": result.returncode},
-        )
-        return False
-
-    logger.info(
-        "Pricing generated.",
-        {
-            "stage": "pricing",
-            "price_file": str((job_dir / "price.json").resolve()),
-        },
+async def _run_stage_1(ctx: JobContext, logger: JsonLogger) -> dict[str, Any]:
+    return await asyncio.to_thread(
+        generate_image_kyc,
+        image_path=str(ctx.image_path.resolve()),
+        brand_name=ctx.brand_name,
+        brand_website=ctx.brand_website,
+        product_name=ctx.product_name,
+        product_category=ctx.product_category,
+        social_link_1=ctx.social_link_1,
+        social_link_2=ctx.social_link_2,
+        additional_info=ctx.additional_info,
+        output_dir=str(ctx.product_kyc_dir),
+        logger_obj=logger,
+        log_context={"job_id": ctx.job_id, "stage": "stage_1_product_kyc"},
     )
-    return True
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Orchestrate the 4-stage image-to-video pipeline.")
-    parser.add_argument("brand_name", help="Brand name")
-    parser.add_argument("brand_website", help="Brand website URL")
-    parser.add_argument("product_name", help="Product name")
-    parser.add_argument("product_category", help="Product category")
-    parser.add_argument("product_image_path", help="Path to raw product image")
-    parser.add_argument("--social-link-1", default=None, help="Optional social media link 1")
-    parser.add_argument("--social-link-2", default=None, help="Optional social media link 2")
-    parser.add_argument(
-        "--video-duration-seconds",
-        type=int,
-        default=8,
-        help="Requested video duration for stage 4",
+async def _run_stage_2(ctx: JobContext, filtered_kyc_path: Path, logger: JsonLogger) -> dict[str, Any]:
+    return await asyncio.to_thread(
+        generate_images,
+        image_path=str(ctx.image_path.resolve()),
+        brand_name=ctx.brand_name,
+        kyc_path=str(filtered_kyc_path.resolve()),
+        num_images=ctx.num_images,
+        temperature=ctx.temperature,
+        output_dir=str(ctx.generated_images_dir),
+        prompt_file=ctx.prompt_file,
+        logger_obj=logger,
+        log_context={"job_id": ctx.job_id, "stage": "stage_2_image_generation"},
     )
-    args = parser.parse_args()
 
-    image_path = Path(args.product_image_path).resolve()
-    if not image_path.exists():
-        print(f"Error: Product image not found at {image_path}")
-        sys.exit(1)
 
-    job_id = build_job_id()
-    job_dir = (Path("jobs") / job_id).resolve()
-    kyc_dir = job_dir / "product_kycs"
-    generated_images_dir = job_dir / "generated_images"
-    video_prompts_dir = job_dir / "video_frame_prompts"
-    video_frames_dir = job_dir / "video_frames"
-    job_log_file = job_dir / "job.log"
-
-    for directory in (job_dir, kyc_dir, generated_images_dir, video_prompts_dir, video_frames_dir):
-        directory.mkdir(parents=True, exist_ok=True)
-
-    logger = JsonLogger(job_log_file=str(job_log_file), include_global_when_job_active=False)
+async def run_image_pipeline(ctx: JobContext) -> ImagePipelineResult:
+    logger = build_logger(ctx.job_log_file)
     logger.info(
         "Job initialized.",
         {
-            "job_id": job_id,
-            "stage": "orchestrator",
-            "brand_name": args.brand_name,
-            "brand_website": args.brand_website,
-            "product_name": args.product_name,
-            "product_category": args.product_category,
-            "social_link_1": args.social_link_1,
-            "social_link_2": args.social_link_2,
-            "video_duration_seconds": args.video_duration_seconds,
-            "video_generate_audio": False,
-            "image_path": str(image_path),
-            "job_dir": str(job_dir),
-            "output_dir": str(job_dir),
+            "job_id": ctx.job_id,
+            "brand_name": ctx.brand_name,
+            "brand_website": ctx.brand_website,
+            "product_name": ctx.product_name,
+            "product_category": ctx.product_category,
+            "image_path": str(ctx.image_path.resolve()),
+            "workspace": str(ctx.work_dir),
         },
     )
 
-    print(f"Job ID: {job_id}")
-    print(f"Workspace: {job_dir}")
-    print(f"Job log: {job_log_file}")
+    stage_1_result = await _run_stage_1(ctx, logger)
+    if not stage_1_result.get("ok"):
+        raise PipelineStageError("Stage 1 failed to generate KYC.")
 
-    try:
-        stage1_args = [
-            "--image-path",
-            str(image_path),
-            "--brand-name",
-            args.brand_name,
-            "--brand-website",
-            args.brand_website,
-            "--product-name",
-            args.product_name,
-            "--product-category",
-            args.product_category,
-            "--output-dir",
-            str(kyc_dir),
-        ]
-        if args.social_link_1:
-            stage1_args.extend(["--social-link-1", args.social_link_1])
-        if args.social_link_2:
-            stage1_args.extend(["--social-link-2", args.social_link_2])
+    kyc_json_path = Path(stage_1_result["kyc_json_path"]).resolve()
+    if not kyc_json_path.exists():
+        raise PipelineStageError(f"Stage 1 output missing: {kyc_json_path}")
 
-        rc1, stdout1, _ = run_stage_subprocess(
-            script_name="product_kyc.py",
-            stage_name="stage_1_product_kyc",
-            script_args=stage1_args,
-            job_id=job_id,
-            job_log_file=job_log_file,
-            logger=logger,
-        )
-        if rc1 != 0:
-            print("Pipeline stopped: Stage 1 failed.")
-            sys.exit(1)
+    filtered_kyc_path = filter_kyc_for_stage2(
+        kyc_json_path,
+        ctx.product_kyc_dir / f"{kyc_json_path.stem}_filtered.json",
+    )
+    logger.info(
+        "Filtered KYC prepared for image generation.",
+        {"job_id": ctx.job_id, "kyc_json_path": str(filtered_kyc_path)},
+    )
 
-        stage1_result = extract_result_json(stdout1)
-        if not isinstance(stage1_result, dict) or not stage1_result.get("ok"):
-            raise ValueError("Stage 1 produced invalid result payload.")
+    stage_2_result = await _run_stage_2(ctx, filtered_kyc_path, logger)
+    if not stage_2_result.get("ok"):
+        raise PipelineStageError("Stage 2 failed to generate images.")
 
-        stage1_kyc_path = ensure_result_path(
-            stage1_result["kyc_json_path"], "stage_1_product_kyc", "kyc_json_path"
-        )
-        logger.info(
-            "Stage 1 output resolved.",
-            {"job_id": job_id, "stage": "orchestrator", "kyc_path": str(stage1_kyc_path)},
-        )
-        print(f"[Stage 1] KYC JSON: {stage1_kyc_path}")
+    generated_images = stage_2_result.get("generated_images")
+    if not isinstance(generated_images, list) or not generated_images:
+        raise PipelineStageError("Stage 2 returned no generated images.")
 
-        filtered_kyc_path = filter_kyc_for_stage2(
-            stage1_kyc_path, job_dir / f"{stage1_kyc_path.stem}_filtered.json"
-        )
-        logger.info(
-            "Prepared filtered KYC for Stage 2.",
-            {"job_id": job_id, "stage": "orchestrator", "kyc_path": str(filtered_kyc_path)},
-        )
+    image_paths = [str(Path(path).resolve()) for path in generated_images]
+    for path in image_paths:
+        if not Path(path).exists():
+            raise PipelineStageError(f"Stage 2 output missing: {path}")
 
-        if not confirm_stage("Proceed to Stage 2 (image generation with KYC)?"):
-            logger.warning("Pipeline stopped by user before Stage 2.", {"job_id": job_id, "stage": "orchestrator"})
-            print("Pipeline stopped by user.")
-            sys.exit(0)
+    logger.info(
+        "Image pipeline completed.",
+        {"job_id": ctx.job_id, "generated_images": image_paths, "count": len(image_paths)},
+    )
 
-        rc2, stdout2, _ = run_stage_subprocess(
-            script_name="image_gen_with_KYC.py",
-            stage_name="stage_2_image_gen_with_kyc",
-            script_args=[
-                "--image-path",
-                str(image_path),
-                "--brand-name",
-                args.brand_name,
-                "--kyc-path",
-                str(filtered_kyc_path),
-                "--output-dir",
-                str(generated_images_dir),
-            ],
-            job_id=job_id,
-            job_log_file=job_log_file,
-            logger=logger,
-        )
-        if rc2 != 0:
-            print("Pipeline stopped: Stage 2 failed.")
-            sys.exit(1)
+    artifacts = [
+        StageArtifact(stage="stage_1", type="kyc_json", path=str(kyc_json_path)),
+        StageArtifact(stage="stage_1", type="filtered_kyc_json", path=str(filtered_kyc_path)),
+        *[
+            StageArtifact(stage="stage_2", type="generated_image", path=path)
+            for path in image_paths
+        ],
+    ]
 
-        stage2_result = extract_result_json(stdout2)
-        generated_images = (
-            stage2_result.get("generated_images")
-            if isinstance(stage2_result, dict)
-            else None
-        )
-        if not isinstance(generated_images, list) or not generated_images:
-            logger.error(
-                "Stage 2 produced no images.",
-                {"job_id": job_id, "stage": "orchestrator", "stage2_result": stage2_result},
-            )
-            print("Pipeline stopped: Stage 2 produced no images.")
-            sys.exit(1)
-
-        image_files = [
-            ensure_result_path(path, "stage_2_image_gen_with_kyc", "generated_image")
-            for path in generated_images
-            if str(path).lower().endswith(".png")
-        ]
-        if not image_files:
-            logger.error(
-                "No PNG images available for Stage 3/4.",
-                {"job_id": job_id, "stage": "orchestrator", "stage2_result": stage2_result},
-            )
-            print("Pipeline stopped: No PNG images available for video generation.")
-            sys.exit(1)
-
-        print(f"[Stage 2] Generated PNG images: {len(image_files)}")
-        logger.info(
-            "Stage 2 completed with PNGs.",
-            {"job_id": job_id, "stage": "orchestrator", "count": len(image_files)},
-        )
-
-        if not confirm_stage("Proceed to Stage 3/4 video loop?"):
-            logger.warning("Pipeline stopped by user before Stage 3/4 loop.", {"job_id": job_id, "stage": "orchestrator"})
-            print("Pipeline stopped by user.")
-            sys.exit(0)
-
-        for idx, png_path in enumerate(image_files, start=1):
-            print(f"[Loop {idx}/{len(image_files)}] Processing {png_path.name}")
-            logger.info(
-                "Loop iteration started.",
-                {
-                    "job_id": job_id,
-                    "stage": "orchestrator",
-                    "index": idx,
-                    "image_path": str(png_path),
-                },
-            )
-
-            rc3, stdout3, _ = run_stage_subprocess(
-                script_name="video_prompt_generation.py",
-                stage_name="stage_3_video_prompt_generation",
-                script_args=[
-                    "--image-path",
-                    str(png_path),
-                    "--output-dir",
-                    str(video_prompts_dir),
-                ],
-                job_id=job_id,
-                job_log_file=job_log_file,
-                logger=logger,
-            )
-            if rc3 != 0:
-                print("Pipeline stopped: Stage 3 failed.")
-                sys.exit(1)
-
-            stage3_result = extract_result_json(stdout3)
-            if not isinstance(stage3_result, dict) or not stage3_result.get("ok"):
-                raise ValueError("Stage 3 produced invalid result payload.")
-            prompt_json_path = ensure_result_path(
-                stage3_result["prompt_json_path"],
-                "stage_3_video_prompt_generation",
-                "prompt_json_path",
-            )
-
-            rc4, stdout4, _ = run_stage_subprocess(
-                script_name="video_gen.py",
-                stage_name="stage_4_video_gen",
-                script_args=[
-                    "--image-path",
-                    str(png_path),
-                    "--kyc-path",
-                    str(prompt_json_path),
-                    "--output-dir",
-                    str(video_frames_dir),
-                    "--duration-seconds",
-                    str(args.video_duration_seconds),
-                ],
-                job_id=job_id,
-                job_log_file=job_log_file,
-                logger=logger,
-            )
-            if rc4 != 0:
-                print("Pipeline stopped: Stage 4 failed.")
-                sys.exit(1)
-
-            stage4_result = extract_result_json(stdout4)
-            if not isinstance(stage4_result, dict) or not stage4_result.get("ok"):
-                raise ValueError("Stage 4 produced invalid result payload.")
-            video_path = ensure_result_path(
-                stage4_result["video_path"], "stage_4_video_gen", "video_path"
-            )
-
-            logger.info(
-                "Video generated successfully for image.",
-                {
-                    "job_id": job_id,
-                    "stage": "orchestrator",
-                    "image_path": str(png_path),
-                    "output_file": str(video_path),
-                },
-            )
-            print(f"[Loop {idx}/{len(image_files)}] Video generated: {video_path}")
-
-        logger.info("Pipeline completed successfully.", {"job_id": job_id, "stage": "orchestrator"})
-        print("Pipeline completed successfully.")
-
-    except Exception as exc:
-        logger.error(
-            "Unhandled pipeline exception.",
-            {"job_id": job_id, "stage": "orchestrator", "error": str(exc)},
-        )
-        print(f"Pipeline stopped due to unexpected error: {exc}")
-        sys.exit(1)
-    finally:
-        if job_log_file.exists():
-            pricing_ok = run_pricing_subprocess(
-                job_dir=job_dir,
-                job_log_file=job_log_file,
-                logger=logger,
-            )
-            if pricing_ok:
-                print(f"Pricing file generated: {job_dir / 'price.json'}")
-            else:
-                print("Warning: Failed to generate pricing file. Check job.log for details.")
-
-
-if __name__ == "__main__":
-    main()
+    return ImagePipelineResult(
+        job_id=ctx.job_id,
+        status="completed",
+        kyc_json_path=str(kyc_json_path),
+        filtered_kyc_json_path=str(filtered_kyc_path),
+        generated_images=image_paths,
+        artifacts=artifacts,
+        workspace=str(ctx.work_dir),
+        log_file=str(ctx.job_log_file),
+    )

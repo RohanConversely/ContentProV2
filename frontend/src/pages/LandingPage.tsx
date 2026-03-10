@@ -10,6 +10,7 @@ import {
   Check,
 } from "lucide-react";
 import { getLandingGalleryImages, type LandingGalleryImage } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 const features = [
   {
@@ -40,6 +41,7 @@ const proBenefits = ["Unlimited images", "Unlimited videos", "4K export", "Prior
 
 const LandingPage = () => {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const [galleryImages, setGalleryImages] = useState<LandingGalleryImage[]>([]);
 
   useEffect(() => {
@@ -61,10 +63,10 @@ const LandingPage = () => {
             <span className="font-display text-lg font-bold tracking-tight">ContentPro</span>
           </div>
           <button
-            onClick={() => navigate("/dashboard")}
+            onClick={() => navigate(isAuthenticated ? "/dashboard" : "/login")}
             className="bg-gradient-primary text-primary-foreground px-5 py-2 rounded-lg text-sm font-semibold shadow-glow hover:opacity-90 transition-opacity"
           >
-            Sign In
+            {isAuthenticated ? "Open App" : "Sign In"}
           </button>
         </div>
       </header>
@@ -119,7 +121,7 @@ const LandingPage = () => {
               className="flex flex-col sm:flex-row items-center justify-center gap-4"
             >
               <button
-                onClick={() => navigate("/dashboard")}
+                onClick={() => navigate(isAuthenticated ? "/dashboard" : "/login")}
                 className="flex items-center gap-2 bg-gradient-primary text-primary-foreground px-8 py-3.5 rounded-xl text-base font-semibold shadow-glow hover:opacity-90 transition-opacity"
               >
                 Get Started Free <ArrowRight className="h-4 w-4" />
@@ -237,7 +239,7 @@ const LandingPage = () => {
                 ))}
               </ul>
               <button
-                onClick={() => navigate("/dashboard")}
+                onClick={() => navigate(isAuthenticated ? "/dashboard" : "/login")}
                 className="w-full py-2.5 rounded-xl border border-border text-sm font-semibold hover:bg-secondary transition-colors"
               >
                 Get Started

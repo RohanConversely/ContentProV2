@@ -4,9 +4,11 @@ import { motion } from "framer-motion";
 import { LogOut, Mail, User, Shield, Settings } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { getCurrentUser, type UserProfile } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 const ProfilePage = () => {
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const [user, setUser] = useState<UserProfile | null>(null);
 
   useEffect(() => {
@@ -106,7 +108,10 @@ const ProfilePage = () => {
               <Settings className="h-4 w-4" /> Manage Subscription
             </button>
             <button
-              onClick={() => navigate("/")}
+              onClick={() => {
+                logout();
+                navigate("/");
+              }}
               className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl border border-destructive/40 text-destructive text-sm font-medium hover:bg-destructive/5 transition-colors"
             >
               <LogOut className="h-4 w-4" /> Sign Out

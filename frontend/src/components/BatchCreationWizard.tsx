@@ -503,92 +503,96 @@ export default function BatchCreationWizard({
           </div>
 
           <div className="rounded-xl border border-border overflow-hidden">
-            <div className="grid grid-cols-[42px,72px,1.4fr,1.2fr,1fr,1fr,1.2fr] gap-0 bg-secondary/50 text-xs font-medium text-muted-foreground">
-              <div className="p-3 flex items-center justify-center">
-                <Checkbox
-                  checked={allValidSelected}
-                  onCheckedChange={(v) => toggleSelectAll(Boolean(v))}
-                  aria-label="Select all valid rows"
-                />
-              </div>
-              <div className="p-3">Row</div>
-              <div className="p-3">Image link</div>
-              <div className="p-3">Brand</div>
-              <div className="p-3">Product</div>
-              <div className="p-3">Category</div>
-              <div className="p-3">Website</div>
-            </div>
-
-            <div className="divide-y divide-border">
-              {jobs.map((j) => {
-                const isValid = j.errors.length === 0;
-                const isChecked = selectedIds.has(j.id);
-                return (
-                  <div
-                    key={j.id}
-                    className={`grid grid-cols-[42px,72px,1.4fr,1.2fr,1fr,1fr,1.2fr] gap-0 text-sm ${
-                      isValid ? "bg-card" : "bg-destructive/5"
-                    }`}
-                  >
-                    <div className="p-3 flex items-start justify-center">
-                      <Checkbox
-                        disabled={!isValid}
-                        checked={isChecked}
-                        onCheckedChange={(v) => toggleSelect(j.id, Boolean(v))}
-                        aria-label={`Select row ${j.rowNumber}`}
-                      />
-                    </div>
-                    <div className="p-3 text-xs text-muted-foreground">{j.rowNumber}</div>
-                    <div className="p-3">
-                      {j.imageLink ? (
-                        <a
-                          href={j.imageLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-primary hover:underline truncate block"
-                          title={j.imageLink}
-                        >
-                          {j.imageLink}
-                        </a>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </div>
-                    <div className="p-3">
-                      <p className="font-medium truncate">{j.brandName || "—"}</p>
-                      {j.errors.length > 0 && (
-                        <p className="text-xs text-destructive mt-0.5 truncate">{j.errors.join(" · ")}</p>
-                      )}
-                    </div>
-                    <div className="p-3">
-                      <p className="truncate">{j.productName || "—"}</p>
-                      {j.productDescription && (
-                        <p className="text-xs text-muted-foreground mt-0.5 truncate">{j.productDescription}</p>
-                      )}
-                    </div>
-                    <div className="p-3">
-                      <p className="truncate">{j.productCategory || "—"}</p>
-                    </div>
-                    <div className="p-3">
-                      {j.brandWebsite ? (
-                        <a
-                          href={j.brandWebsite.startsWith("http") ? j.brandWebsite : `https://${j.brandWebsite}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                        >
-                          <Link2 className="h-3.5 w-3.5" />
-                          <span className="truncate">
-                            {j.brandWebsite.replace(/^https?:\/\//, "").replace(/\/$/, "")}
-                          </span>
-                        </a>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </div>
+            <div className="overflow-x-auto">
+              <div className="min-w-[1100px]">
+                <div className="grid grid-cols-[42px,72px,minmax(320px,1.8fr),minmax(160px,1fr),minmax(220px,1.2fr),minmax(160px,0.9fr),minmax(220px,1.2fr)] gap-0 bg-secondary/50 text-xs font-medium text-muted-foreground">
+                  <div className="p-3 flex items-center justify-center">
+                    <Checkbox
+                      checked={allValidSelected}
+                      onCheckedChange={(v) => toggleSelectAll(Boolean(v))}
+                      aria-label="Select all valid rows"
+                    />
                   </div>
-                );
-              })}
+                  <div className="p-3">Row</div>
+                  <div className="p-3">Image link</div>
+                  <div className="p-3">Brand</div>
+                  <div className="p-3">Product</div>
+                  <div className="p-3">Category</div>
+                  <div className="p-3">Website</div>
+                </div>
+
+                <div className="divide-y divide-border">
+                  {jobs.map((j) => {
+                    const isValid = j.errors.length === 0;
+                    const isChecked = selectedIds.has(j.id);
+                    return (
+                      <div
+                        key={j.id}
+                        className={`grid grid-cols-[42px,72px,minmax(320px,1.8fr),minmax(160px,1fr),minmax(220px,1.2fr),minmax(160px,0.9fr),minmax(220px,1.2fr)] gap-0 text-sm ${
+                          isValid ? "bg-card" : "bg-destructive/5"
+                        }`}
+                      >
+                        <div className="p-3 flex items-start justify-center">
+                          <Checkbox
+                            disabled={!isValid}
+                            checked={isChecked}
+                            onCheckedChange={(v) => toggleSelect(j.id, Boolean(v))}
+                            aria-label={`Select row ${j.rowNumber}`}
+                          />
+                        </div>
+                        <div className="p-3 text-xs text-muted-foreground">{j.rowNumber}</div>
+                        <div className="p-3">
+                          {j.imageLink ? (
+                            <a
+                              href={j.imageLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary hover:underline break-all block"
+                              title={j.imageLink}
+                            >
+                              {j.imageLink}
+                            </a>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </div>
+                        <div className="p-3">
+                          <p className="font-medium break-words">{j.brandName || "—"}</p>
+                          {j.errors.length > 0 && (
+                            <p className="text-xs text-destructive mt-0.5 break-words">{j.errors.join(" · ")}</p>
+                          )}
+                        </div>
+                        <div className="p-3">
+                          <p className="break-words">{j.productName || "—"}</p>
+                          {j.productDescription && (
+                            <p className="text-xs text-muted-foreground mt-0.5 break-words">{j.productDescription}</p>
+                          )}
+                        </div>
+                        <div className="p-3">
+                          <p className="break-words">{j.productCategory || "—"}</p>
+                        </div>
+                        <div className="p-3">
+                          {j.brandWebsite ? (
+                            <a
+                              href={j.brandWebsite.startsWith("http") ? j.brandWebsite : `https://${j.brandWebsite}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-start gap-1 text-xs text-primary hover:underline break-all"
+                            >
+                              <Link2 className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                              <span className="break-all">
+                                {j.brandWebsite.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                              </span>
+                            </a>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -596,4 +600,3 @@ export default function BatchCreationWizard({
     </motion.div>
   );
 }
-

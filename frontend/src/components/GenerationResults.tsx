@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -13,10 +13,17 @@ import {
   Check,
 } from "lucide-react";
 import { type ProductFormData } from "./CreationWizard";
+import { downloadFile } from "@/lib/api";
 
 interface GenerationResultsProps {
   productData: ProductFormData;
   mode: string;
+  generatedImages?: string[];
+  jobId?: string | null;
+  isLoading?: boolean;
+  error?: string | null;
+  statusStage?: string | null;
+  statusMessage?: string | null;
   onBack: () => void;
   onStartOver: () => void;
   onCreateVideo?: () => void;
@@ -25,30 +32,20 @@ interface GenerationResultsProps {
 const GenerationResults = ({
   productData,
   mode,
+  generatedImages,
+  jobId,
+  isLoading = false,
+  error = null,
+  statusStage = null,
+  statusMessage = null,
   onBack,
   onStartOver,
   onCreateVideo,
 }: GenerationResultsProps) => {
-  const [loadingStates, setLoadingStates] = useState<Record<number, boolean>>(() => 
-    Object.fromEntries([0,1,2,3,4,5].map((i) => [i, true]))
-  );
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [selectedImages, setSelectedImages] = useState<number[]>([]);
-
-  // Simulate staggered generation - show 6 images
-  useEffect(() => {
-    [0,1,2,3,4,5].forEach((i) => {
-      setTimeout(() => {
-        setLoadingStates((prev) => ({ ...prev, [i]: false }));
-      }, 1500 + i * 500);
-    });
-  }, []);
-
-  const allDone = Object.values(loadingStates).every((v) => !v);
-
-  // Use uploaded images as placeholders (cycle through if less than 6)
-  const images = productData.productImages;
-  const displayImages = Array.from({ length: 6 }, (_, i) => images[i % Math.max(images.length, 1)]);
+  const allDone = !isLoading && !error;
+  const displayImages = Array.isArray(generatedImages) ? generatedImages.filter(Boolean) : [];
 
   const toggleImageSelection = (index: number) => {
     setSelectedImages(prev => 
@@ -60,6 +57,16 @@ const GenerationResults = ({
 
   const canCreateVideo = selectedImages.length >= 3;
   const isVideoMode = mode === "video";
+
+  const handleDownloadImage = async (src: string, index: number) => {
+    await downloadFile(src, `${productData.productName || "generated-image"}-${index + 1}.png`);
+  };
+
+  const handleDownloadAll = async () => {
+    for (const [index, src] of displayImages.entries()) {
+      await handleDownloadImage(src, index);
+    }
+  };
 
   return (
     <motion.div
@@ -115,6 +122,7 @@ const GenerationResults = ({
             <motion.button
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
+              onClick={() => void handleDownloadAll()}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border text-sm font-medium hover:bg-secondary transition-colors"
             >
               <Download className="h-4 w-4" /> Download All
@@ -129,24 +137,24 @@ const GenerationResults = ({
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5">
               <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse" />
-              Generating A+ content images…
+              {statusMessage || "Generating A+ content images..."}
             </span>
-            <span>
-              6
-            </span>
+            <span>{statusStage || "..."}</span>
           </div>
           <div className="h-1.5 w-full rounded-full bg-secondary overflow-hidden">
             <motion.div
               className="h-full bg-gradient-primary rounded-full"
-              initial={{ width: "0%" }}
-              animate={{
-                width: `${
-                  (Object.values(loadingStates).filter((v) => !v).length / 6) * 100
-                }%`,
-              }}
+              initial={{ width: "20%" }}
+              animate={{ width: isLoading ? "75%" : "100%" }}
               transition={{ duration: 0.5, ease: "easeOut" }}
             />
           </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+          {error}
         </div>
       )}
 
@@ -161,7 +169,7 @@ const GenerationResults = ({
             Select at least <span className="text-primary">3 images</span> for video generation
           </p>
           <p className="text-sm text-muted-foreground">
-            {selectedImages.length}/6 selected
+            {selectedImages.length}/{displayImages.length} selected
           </p>
         </motion.div>
       )}
@@ -169,7 +177,6 @@ const GenerationResults = ({
       {/* Image Grid - 6 images, 1:1 aspect ratio */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {displayImages.map((src, i) => {
-          const isLoading = loadingStates[i];
           const isSelected = selectedImages.includes(i);
 
           return (
@@ -179,36 +186,12 @@ const GenerationResults = ({
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.08 }}
               className={`group relative rounded-xl border overflow-hidden transition-all duration-300 ${
-                isLoading
-                  ? "border-border bg-card aspect-square"
-                  : isSelected
+                isSelected
                   ? "border-primary bg-card ring-2 ring-primary shadow-glow"
                   : "border-border hover:border-primary/40 bg-card hover:shadow-glow cursor-pointer"
               } aspect-square`}
             >
-              {isLoading ? (
-                /* Loading state */
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-4">
-                  <div className="relative">
-                    <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                      <Sparkles className="h-5 w-5 text-primary" />
-                    </div>
-                    <motion.div
-                      className="absolute -inset-1 rounded-xl border-2 border-primary/30"
-                      animate={{ opacity: [0.3, 0.8, 0.3] }}
-                      transition={{ duration: 1.5, repeat: Infinity }}
-                    />
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm font-medium">Image {i + 1}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Generating…
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                /* Generated image */
-                <>
+              <>
                   <img
                     src={src}
                     alt={`Generated Image ${i + 1}`}
@@ -251,7 +234,10 @@ const GenerationResults = ({
                       >
                         <Maximize2 className="h-3.5 w-3.5" />
                       </button>
-                      <button className="h-8 w-8 rounded-lg bg-card/80 backdrop-blur border border-border flex items-center justify-center hover:bg-secondary transition-colors">
+                      <button
+                        onClick={() => void handleDownloadImage(src, i)}
+                        className="h-8 w-8 rounded-lg bg-card/80 backdrop-blur border border-border flex items-center justify-center hover:bg-secondary transition-colors"
+                      >
                         <Download className="h-3.5 w-3.5" />
                       </button>
                     </div>
@@ -266,12 +252,17 @@ const GenerationResults = ({
                       </div>
                     </div>
                   )}
-                </>
-              )}
+              </>
             </motion.div>
           );
         })}
       </div>
+
+      {allDone && displayImages.length === 0 && !error && (
+        <div className="rounded-xl border border-border bg-card/60 p-6 text-sm text-muted-foreground">
+          No generated images were returned by the backend.
+        </div>
+      )}
 
       {/* Summary footer */}
       {allDone && (
@@ -291,7 +282,7 @@ const GenerationResults = ({
                       {productData.productName || "Untitled Project"}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      6 images generated (1024 × 1024)
+                      {displayImages.length} images generated {jobId ? `· Job ${jobId}` : ""}
                     </p>
                   </div>
                 </div>

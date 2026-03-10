@@ -2,16 +2,26 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Clock, MoreHorizontal, Image as ImageIcon } from "lucide-react";
 import { getRecentProjects, type RecentProjectSummary } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 const RecentProjects = () => {
   const [projects, setProjects] = useState<RecentProjectSummary[]>([]);
+  const { user } = useAuth();
 
   useEffect(() => {
+    if (!user) {
+      setProjects([]);
+      return;
+    }
     void (async () => {
-      const data = await getRecentProjects();
-      setProjects(data);
+      try {
+        const data = await getRecentProjects();
+        setProjects(data);
+      } catch {
+        setProjects([]);
+      }
     })();
-  }, []);
+  }, [user?.id]);
 
   return (
     <div>

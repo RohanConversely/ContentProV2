@@ -1,0 +1,149 @@
+{
+  "job": {
+    "job_id": "20260310T112847Z_1dd59ed4",
+    "brand_name": "Fashiony",
+    "brand_website": "https://fashiony.in/",
+    "product_name": "Modern Geometric Diamond Stud Earrings",
+    "product_category": "Earwear",
+    "job_dir": "/home/anhad/edxso/contentpro/imageGenScript/backend/storage/job_runs/20260310T112847Z_1dd59ed4"
+  },
+  "currency": "USD",
+  "pricing_table": {
+    "openai": {
+      "gpt-4.1-mini": {
+        "input_per_million": 0.4,
+        "cached_input_per_million": 0.1,
+        "output_per_million": 1.6
+      },
+      "gpt-4.1": {
+        "input_per_million": 2.0,
+        "cached_input_per_million": 0.5,
+        "output_per_million": 8.0
+      }
+    },
+    "gemini": {
+      "veo-3.1-fast-generate-preview": {
+        "no_audio_per_second": 0.15,
+        "with_audio_per_second": 0.15
+      }
+    },
+    "sources": {
+      "openai_models": "OpenAI pricing",
+      "veo_model": "Gemini API pricing (ai.google.dev)"
+    }
+  },
+  "steps": [
+    {
+      "step": "step_1_product_kyc",
+      "model": "gpt-4.1-mini",
+      "usage_events": 1,
+      "usage": {
+        "input_tokens": 2161,
+        "output_tokens": 1771,
+        "total_tokens": 3932,
+        "cached_tokens": 0,
+        "billable_input_tokens": 2161,
+        "billable_cached_tokens": 0,
+        "billable_output_tokens": 1771
+      },
+      "rates": {
+        "input_per_million": 0.4,
+        "cached_input_per_million": 0.1,
+        "output_per_million": 1.6
+      },
+      "cost": {
+        "input": 0.000864,
+        "cached_input": 0.0,
+        "output": 0.002834,
+        "total": 0.003698
+      }
+    },
+    {
+      "step": "step_2_image_generation",
+      "model": "gpt-4.1",
+      "usage_events": 1,
+      "usage": {
+        "input_tokens": 5049,
+        "output_tokens": 1128,
+        "total_tokens": 6177,
+        "cached_tokens": 0,
+        "billable_input_tokens": 5049,
+        "billable_cached_tokens": 0,
+        "billable_output_tokens": 1128
+      },
+      "rates": {
+        "input_per_million": 2.0,
+        "cached_input_per_million": 0.5,
+        "output_per_million": 8.0
+      },
+      "cost": {
+        "input": 0.010098,
+        "cached_input": 0.0,
+        "output": 0.009024,
+        "total": 0.019122
+      }
+    },
+    {
+      "step": "step_3_video_prompt_generation",
+      "model": "gpt-4.1-mini",
+      "usage_events": 0,
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "cached_tokens": 0,
+        "billable_input_tokens": 0,
+        "billable_cached_tokens": 0,
+        "billable_output_tokens": 0
+      },
+      "rates": {
+        "input_per_million": 0.4,
+        "cached_input_per_million": 0.1,
+        "output_per_million": 1.6
+      },
+      "cost": {
+        "input": 0.0,
+        "cached_input": 0.0,
+        "output": 0.0,
+        "total": 0.0
+      }
+    },
+    {
+      "step": "step_4_video_generation",
+      "model": "veo-3.1-fast-generate-preview",
+      "usage": {
+        "generated_videos_count": 0,
+        "seconds_total": 0.0,
+        "duration_seconds_requested": 8,
+        "generate_audio_requested": false
+      },
+      "rates": {
+        "no_audio_per_second": 0.15,
+        "with_audio_per_second": 0.15,
+        "applied_rate_per_second": 0.15
+      },
+      "cost": {
+        "total": 0.0
+      }
+    }
+  ],
+  "totals": {
+    "token_usage": {
+      "input_tokens": 7210,
+      "output_tokens": 2899,
+      "cached_tokens": 0,
+      "total_tokens": 10109
+    },
+    "token_cost_total": 0.02282,
+    "video_cost_total": 0.0,
+    "grand_total": 0.02282
+  },
+  "assumptions": [
+    "Logged token totals are treated as billable totals when explicit image-token splits are unavailable.",
+    "Step 4 pricing is estimated as generated_videos_count * duration_seconds_requested * applied_rate_per_second.",
+    "If generate_audio is not present in logs, silent video pricing is used by default."
+  ],
+  "generated_from": {
+    "job_log_file": "/home/anhad/edxso/contentpro/imageGenScript/backend/storage/job_runs/20260310T112847Z_1dd59ed4/job.log"
+  }
+}

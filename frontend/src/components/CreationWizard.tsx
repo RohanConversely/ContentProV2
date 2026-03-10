@@ -20,6 +20,13 @@ import {
 } from "lucide-react";
 import GenerationResults from "./GenerationResults";
 import VideoCreation from "./VideoCreation";
+import {
+  createJob,
+  uploadJobAsset,
+  waitForJobCompletion,
+  type GeneratedImageResult,
+  type JobEventPayload,
+} from "@/lib/api";
 
 export interface ProductFormData {
   brandName: string;
@@ -70,9 +77,14 @@ const dimensionUnits = [
 
 const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
   const [formData, setFormData] = useState<ProductFormData>(emptyFormData);
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [showVideoCreation, setShowVideoCreation] = useState(false);
+  const [generationResult, setGenerationResult] = useState<GeneratedImageResult | null>(null);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobUpdate, setJobUpdate] = useState<JobEventPayload | null>(null);
 
   const updateField = (field: keyof ProductFormData, value: string | string[]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -85,15 +97,18 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
     formData.dimensionLength && formData.dimensionBreadth && formData.dimensionHeight;
 
   const handleImageUpload = useCallback((files: FileList) => {
+    const acceptedFiles = Array.from(files).filter((file) => file.type.startsWith("image/"));
+    if (acceptedFiles.length === 0) return;
     const newImages: string[] = [];
-    Array.from(files).forEach((file) => {
+    acceptedFiles.forEach((file) => {
       if (file.type.startsWith("image/")) {
         const reader = new FileReader();
         reader.onload = (ev) => {
           if (ev.target?.result) {
             newImages.push(ev.target.result as string);
-            if (newImages.length === files.length || newImages.length === Array.from(files).filter(f => f.type.startsWith("image/")).length) {
+            if (newImages.length === acceptedFiles.length) {
               updateField("productImages", [...formData.productImages, ...newImages]);
+              setUploadedFiles((prev) => [...prev, ...acceptedFiles]);
             }
           }
         };
@@ -107,6 +122,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
       "productImages",
       formData.productImages.filter((_, i) => i !== index)
     );
+    setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const canGenerate =
@@ -117,20 +133,83 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
     formData.productImages.length > 0 &&
     (!hasAnyDimension || hasAllDimensions);
 
-  const handleGenerate = () => {
+  const buildAdditionalInfo = () => {
+    const additionalInfo: Record<string, string> = {};
+    if (formData.productDescription.trim()) additionalInfo.product_description = formData.productDescription.trim();
+    if (formData.dimensionLength && formData.dimensionBreadth && formData.dimensionHeight) {
+      additionalInfo.dimensions = `${formData.dimensionLength} x ${formData.dimensionBreadth} x ${formData.dimensionHeight} ${formData.dimensionUnit}`;
+    }
+    return Object.keys(additionalInfo).length > 0 ? additionalInfo : undefined;
+  };
+
+  const handleGenerate = async () => {
     if (!canGenerate) return;
     setIsGenerating(true);
-    setTimeout(() => {
+    setShowResults(true);
+    setGenerationError(null);
+    setGenerationResult(null);
+    setJobId(null);
+    setJobUpdate({
+      stage: "queued",
+      status: "running",
+      message: "Creating your image job.",
+    });
+    try {
+      const primaryImage = uploadedFiles[0];
+      if (!primaryImage) {
+        throw new Error("Please upload at least one product image.");
+      }
+
+      const additionalInfo = buildAdditionalInfo();
+      setFormData((prev) => ({ ...prev, additionalInfo }));
+
+      const job = await createJob({
+        brandName: formData.brandName,
+        brandWebsite: formData.brandWebsite,
+        productName: formData.productName,
+        productCategory: formData.productCategory,
+        socialLink1: formData.socialLinkInstagram || undefined,
+        socialLink2: formData.socialLinkFacebook || undefined,
+        socialLink3: formData.socialLinkLinkedin || undefined,
+        socialLink4: formData.socialLinkX || undefined,
+      });
+      setJobId(job.job_id);
+      setJobUpdate({
+        stage: "queued",
+        status: "running",
+        message: "Uploading the source image.",
+      });
+
+      const completionPromise = waitForJobCompletion(job.job_id, (update) => {
+        setJobUpdate(update);
+      });
+
+      await uploadJobAsset(job.job_id, primaryImage);
+
+      const result = await completionPromise;
+      setGenerationResult(result);
+      setJobUpdate({
+        stage: result.currentStage || "stage_2",
+        status: result.status,
+        message: "Generated images are ready.",
+      });
+    } catch (error) {
+      setGenerationError(error instanceof Error ? error.message : "Image generation failed.");
+      setJobUpdate({
+        stage: "pipeline",
+        status: "failed",
+        message: error instanceof Error ? error.message : "Image generation failed.",
+      });
+    } finally {
       setIsGenerating(false);
-      setShowResults(true);
-    }, 2000);
+    }
   };
 
   if (showVideoCreation) {
     return (
       <VideoCreation
         productData={formData}
-        images={formData.productImages}
+        images={generationResult?.generatedImages ?? formData.productImages}
         onBack={() => setShowVideoCreation(false)}
         onStartOver={onBack}
       />
@@ -142,6 +221,12 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
       <GenerationResults
         productData={formData}
         mode={mode}
+        generatedImages={generationResult?.generatedImages ?? []}
+        jobId={generationResult?.jobId ?? jobId}
+        isLoading={isGenerating}
+        error={generationError}
+        statusStage={jobUpdate?.stage ?? null}
+        statusMessage={jobUpdate?.message ?? null}
         onBack={() => setShowResults(false)}
         onStartOver={onBack}
         onCreateVideo={
@@ -460,8 +545,11 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
         </div>
       </div>
 
-      {/* Generate Button */}
+        {/* Generate Button */}
       <div className="flex justify-end pt-4 border-t border-border">
+        {generationError && (
+          <p className="mr-auto text-sm text-destructive self-center">{generationError}</p>
+        )}
         <button
           onClick={handleGenerate}
           disabled={!canGenerate || isGenerating}

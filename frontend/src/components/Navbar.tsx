@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Sparkles, FolderOpen, User, Settings, LogOut, ChevronDown } from "lucide-react";
-import { getCurrentUser, type UserProfile } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 const navItems = [
   { label: "Create", icon: Sparkles, path: "/dashboard" },
@@ -11,16 +11,9 @@ const navItems = [
 const Navbar = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const { user, logout } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    void (async () => {
-      const data = await getCurrentUser();
-      setUser(data);
-    })();
-  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -80,7 +73,7 @@ const Navbar = () => {
               className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-2.5 py-1.5 hover:bg-secondary transition-colors"
             >
               <img
-                src={user?.avatar ?? "https://api.dicebear.com/7.x/avataaars/svg?seed=Alex"}
+                src={user?.avatar ?? "https://api.dicebear.com/7.x/initials/svg?seed=ContentPro&backgroundType=gradientLinear"}
                 alt={user?.name ?? "User"}
                 className="h-7 w-7 rounded-full bg-secondary"
               />
@@ -108,7 +101,11 @@ const Navbar = () => {
                   </button>
                   <div className="my-1 border-t border-border" />
                   <button
-                    onClick={() => { navigate("/"); setDropdownOpen(false); }}
+                    onClick={() => {
+                      logout();
+                      navigate("/");
+                      setDropdownOpen(false);
+                    }}
                     className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-secondary transition-colors text-left text-destructive"
                   >
                     <LogOut className="h-4 w-4" /> Sign Out
