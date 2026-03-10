@@ -16,7 +16,9 @@ DEFAULT_RESULT_PREFIX = "__RESULT__"
 
 def load_prompt(prompt_file: str) -> str:
     """Load the prompt from the prompts folder."""
-    prompts_dir = Path(__file__).parent / "prompts"
+    # Note: Adjusting path to look in parent pipeline/prompts if needed, 
+    # but based on the file structure it's in a subdirectory.
+    prompts_dir = Path(__file__).parent.parent / "prompts"
     prompt_path = prompts_dir / prompt_file
     with open(prompt_path, "r", encoding="utf-8") as f:
         return f.read()
@@ -50,6 +52,7 @@ def generate_image_kyc(
     product_category: str,
     social_link_1: str | None = None,
     social_link_2: str | None = None,
+    additional_info: dict[str, Any] | None = None,
     output_dir: str | None = None,
     logger_obj: JsonLogger | None = None,
     log_context: dict[str, Any] | None = None,
@@ -65,6 +68,7 @@ def generate_image_kyc(
         product_category: Product category
         social_link_1: Optional social media link 1
         social_link_2: Optional social media link 2
+        additional_info: Optional dictionary of additional product metadata
         output_dir: Output directory (defaults to <brand_name>_kyc)
 
     Returns:
@@ -94,6 +98,13 @@ def generate_image_kyc(
         "\n".join(f"- {link}" for link in social_links) if social_links else "None provided"
     )
 
+    additional_info_text = ""
+    if additional_info:
+        additional_info_text = "\n**Additional Product Information:**\n"
+        for key, value in additional_info.items():
+            if value:
+                additional_info_text += f"- {key}: {value}\n"
+
     user_message = f"""Generate the Product KYC based on the following inputs:
 
 **Product Image:** [Attached image]
@@ -103,6 +114,7 @@ def generate_image_kyc(
 **Product Category:** {product_category}
 **Social Media Links:**
 {social_links_text}
+{additional_info_text}
 
 {prompt_template}"""
 
@@ -128,6 +140,7 @@ def generate_image_kyc(
                 "product_category": product_category,
                 "social_link_1": social_link_1,
                 "social_link_2": social_link_2,
+                "additional_info": additional_info,
                 "output_dir": str(output_path.resolve()),
             },
         ),
@@ -177,6 +190,14 @@ def run_cli(args: argparse.Namespace) -> int:
     try:
         image_path = str(Path(args.image_path).resolve())
         output_dir = str(Path(args.output_dir).resolve())
+
+        additional_info = None
+        if args.additional_info:
+            try:
+                additional_info = json.loads(args.additional_info)
+            except json.JSONDecodeError:
+                stage_logger.warning("Failed to decode additional-info JSON", context)
+
         generate_image_kyc(
             image_path=image_path,
             brand_name=args.brand_name,
@@ -185,6 +206,7 @@ def run_cli(args: argparse.Namespace) -> int:
             product_category=args.product_category,
             social_link_1=args.social_link_1,
             social_link_2=args.social_link_2,
+            additional_info=additional_info,
             output_dir=output_dir,
             logger_obj=stage_logger,
             log_context=context,
@@ -230,6 +252,7 @@ def main() -> None:
     parser.add_argument("--product-category", required=True, help="Product category")
     parser.add_argument("--social-link-1", default=None, help="Optional social media link 1")
     parser.add_argument("--social-link-2", default=None, help="Optional social media link 2")
+    parser.add_argument("--additional-info", default=None, help="JSON string of additional product info")
     parser.add_argument("--output-dir", default="product_kycs", help="Output directory")
     parser.add_argument("--job-id", default=None, help="Pipeline job id")
     parser.add_argument("--stage-name", default="stage_1", help="Pipeline stage name")

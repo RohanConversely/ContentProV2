@@ -36,6 +36,7 @@ export interface ProductFormData {
   dimensionHeight: string;
   productDescription: string;
   productImages: string[];
+  additionalInfo?: Record<string, string>;
 }
 
 interface CreationWizardProps {

@@ -30,6 +30,7 @@ type BatchRowInput = {
   socialLinkLinkedin: string;
   socialLinkX: string;
   imageLink: string;
+  additionalInfo: Record<string, string>;
 };
 
 type BatchJob = BatchRowInput & {
@@ -56,6 +57,19 @@ const TEMPLATE_HEADERS = [
   "linkedin",
   "x",
 ] as const;
+
+const CORE_FIELDS = [
+  "brandName",
+  "brandWebsite",
+  "productName",
+  "productCategory",
+  "productDescription",
+  "socialLinkInstagram",
+  "socialLinkFacebook",
+  "socialLinkLinkedin",
+  "socialLinkX",
+  "imageLink",
+];
 
 function normalizeHeaderKey(input: string) {
   return input
@@ -125,7 +139,7 @@ async function parseXlsx(file: File): Promise<Record<string, unknown>[]> {
 }
 
 function parseRecordsToJobs(records: Record<string, unknown>[]): BatchJob[] {
-  const keyMap: Record<string, keyof BatchRowInput> = {
+  const keyMap: Record<string, keyof Omit<BatchRowInput, "additionalInfo">> = {
     brandname: "brandName",
     brand: "brandName",
     brandwebsite: "brandWebsite",
@@ -165,13 +179,18 @@ function parseRecordsToJobs(records: Record<string, unknown>[]): BatchJob[] {
       socialLinkLinkedin: "",
       socialLinkX: "",
       imageLink: "",
+      additionalInfo: {},
     };
 
     for (const [rawKey, rawValue] of Object.entries(rec)) {
       const normalized = normalizeHeaderKey(rawKey);
       const target = keyMap[normalized];
-      if (!target) continue;
-      initial[target] = safeString(rawValue);
+      if (target) {
+        initial[target] = safeString(rawValue);
+      } else {
+        // Any column that doesn't match a core field is additional info
+        initial.additionalInfo[rawKey] = safeString(rawValue);
+      }
     }
 
     const errors: string[] = [];
@@ -191,7 +210,8 @@ function parseRecordsToJobs(records: Record<string, unknown>[]): BatchJob[] {
       !initial.socialLinkFacebook &&
       !initial.socialLinkLinkedin &&
       !initial.socialLinkX &&
-      !initial.imageLink;
+      !initial.imageLink &&
+      Object.keys(initial.additionalInfo).length === 0;
 
     if (isAllBlank) continue;
 
@@ -318,6 +338,7 @@ export default function BatchCreationWizard({
         dimensionHeight: "",
         productDescription: j.productDescription,
         productImages: [j.imageLink],
+        additionalInfo: j.additionalInfo,
       };
 
       return {

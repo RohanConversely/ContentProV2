@@ -360,6 +360,23 @@ const GenerationResults = ({
                   )}
                 </div>
               )}
+
+              {/* Additional Metadata */}
+              {productData.additionalInfo && Object.keys(productData.additionalInfo).length > 0 && (
+                <div className="pt-3 border-t border-border space-y-2">
+                  <span className="text-xs text-muted-foreground">Additional Information:</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+                    {Object.entries(productData.additionalInfo).map(([key, value]) => (
+                      value && (
+                        <div key={key} className="flex items-center justify-between text-[11px] border-b border-border/50 pb-1">
+                          <span className="text-muted-foreground font-medium">{key}:</span>
+                          <span className="truncate max-w-[150px]">{value}</span>
+                        </div>
+                      )
+                    ))}
+                  </div>
+                </div>
+              )}
             </motion.div>
           )}
 
