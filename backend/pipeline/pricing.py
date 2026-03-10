@@ -96,7 +96,7 @@ def _load_json_lines(path: Path) -> list[dict[str, Any]]:
 
 def _extract_job_meta(entries: list[dict[str, Any]], job_dir: Path) -> dict[str, Any]:
     for entry in entries:
-        if entry.get("message") == "Job initialized.":
+        if entry.get("message") in {"Job initialized.", "Image pipeline initialized."}:
             context = entry.get("context") or {}
             return {
                 "job_id": context.get("job_id"),

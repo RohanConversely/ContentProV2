@@ -5,7 +5,7 @@ import {
   ArrowLeft, Building2, Globe, Play, Maximize2, X,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
-import { getProjects, deleteProject, type Project } from "@/lib/api";
+import { getProjects, deleteProject, downloadFile, type Project } from "@/lib/api";
 
 /* ──────────────────────────────────────────────────── */
 /*  Project Detail View                                 */
@@ -19,6 +19,9 @@ const ProjectDetailView = ({
 }) => {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const { detail } = project;
+  const handleDownloadImage = async (src: string, index: number) => {
+    await downloadFile(src, `${project.name || "project-image"}-${index + 1}.png`);
+  };
 
   return (
     <motion.div
@@ -56,7 +59,7 @@ const ProjectDetailView = ({
             </div>
             <div>
               <p className="text-sm font-semibold">{detail.productName}</p>
-              <p className="text-xs text-muted-foreground">6 images generated (1024 × 1024)</p>
+              <p className="text-xs text-muted-foreground">{detail.images.length} images generated</p>
             </div>
           </div>
           {detail.brandWebsite && (
@@ -129,7 +132,10 @@ const ProjectDetailView = ({
                   >
                     <Maximize2 className="h-3.5 w-3.5" />
                   </button>
-                  <button className="h-8 w-8 rounded-lg bg-card/80 backdrop-blur border border-border flex items-center justify-center hover:bg-secondary transition-colors">
+                  <button
+                    onClick={() => void handleDownloadImage(src, i)}
+                    className="h-8 w-8 rounded-lg bg-card/80 backdrop-blur border border-border flex items-center justify-center hover:bg-secondary transition-colors"
+                  >
                     <Download className="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -338,7 +344,16 @@ const ProjectsPage = () => {
                           <ExternalLink className="h-4 w-4" />
                           View
                         </button>
-                        <button className="p-2 rounded-lg hover:bg-secondary transition-colors">
+                        <button
+                          className="p-2 rounded-lg hover:bg-secondary transition-colors"
+                          onClick={() =>
+                            void Promise.all(
+                              project.detail.images.map((src, index) =>
+                                downloadFile(src, `${project.name || "project-image"}-${index + 1}.png`),
+                              ),
+                            )
+                          }
+                        >
                           <Download className="h-4 w-4" />
                         </button>
                         <button

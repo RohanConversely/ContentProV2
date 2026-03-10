@@ -1,23 +1,22 @@
 #!/usr/bin/env python3
 import argparse
-import os
-import json
-import sys
 import base64
+import json
 import mimetypes
+import os
+import sys
 from pathlib import Path
 from typing import Any
+
 from dotenv import load_dotenv
-from logger import JsonLogger, log_usage
+
+from ..logger import JsonLogger, log_usage
 
 load_dotenv()
 DEFAULT_RESULT_PREFIX = "__RESULT__"
 
 
 def load_prompt(prompt_file: str) -> str:
-    """Load the prompt from the prompts folder."""
-    # Note: Adjusting path to look in parent pipeline/prompts if needed, 
-    # but based on the file structure it's in a subdirectory.
     prompts_dir = Path(__file__).parent.parent / "prompts"
     prompt_path = prompts_dir / prompt_file
     with open(prompt_path, "r", encoding="utf-8") as f:
@@ -56,47 +55,24 @@ def generate_image_kyc(
     output_dir: str | None = None,
     logger_obj: JsonLogger | None = None,
     log_context: dict[str, Any] | None = None,
-) -> dict:
-    """
-    Generate Image KYC using GPT-4.1 mini.
-
-    Args:
-        image_path: Path to the product image
-        brand_name: Name of the brand
-        brand_website: Brand website URL
-        product_name: Product name
-        product_category: Product category
-        social_link_1: Optional social media link 1
-        social_link_2: Optional social media link 2
-        additional_info: Optional dictionary of additional product metadata
-        output_dir: Output directory (defaults to <brand_name>_kyc)
-
-    Returns:
-        The KYC JSON response from the API
-    """
+) -> dict[str, Any]:
     stage_logger = logger_obj or JsonLogger()
 
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        raise ValueError(
-            "OPENAI_API_KEY not found in environment. Please set it in .env file."
-        )
+        raise ValueError("OPENAI_API_KEY not found in environment. Please set it in .env file.")
 
     from openai import OpenAI
 
     client = OpenAI(api_key=api_key)
 
-    if output_dir is None:
-        output_dir = "product_kycs"
-
+    output_dir = output_dir or "product_kycs"
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
     prompt_template = load_prompt("imageKYC.txt")
     social_links = [link for link in (social_link_1, social_link_2) if link]
-    social_links_text = (
-        "\n".join(f"- {link}" for link in social_links) if social_links else "None provided"
-    )
+    social_links_text = "\n".join(f"- {link}" for link in social_links) if social_links else "None provided"
 
     additional_info_text = ""
     if additional_info:
@@ -153,10 +129,7 @@ def generate_image_kyc(
                 "role": "user",
                 "content": [
                     {"type": "input_text", "text": user_message},
-                    {
-                        "type": "input_image",
-                        "image_url": image_data_url,
-                    },
+                    {"type": "input_image", "image_url": image_data_url},
                 ],
             }
         ],
@@ -170,8 +143,6 @@ def generate_image_kyc(
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(kyc_json, f, indent=2, ensure_ascii=False)
 
-    print(f"KYC saved to: {output_file}")
-    print(f"Brand: {brand_name}")
     stage_logger.info(
         "KYC saved.",
         with_context(
@@ -180,7 +151,15 @@ def generate_image_kyc(
         ),
     )
 
-    return kyc_json
+    return {
+        "ok": True,
+        "kyc_json": kyc_json,
+        "kyc_json_path": str(output_file),
+        "brand_name": brand_name,
+        "product_name": product_name,
+        "product_category": product_category,
+        "image_path": str(Path(image_path).resolve()),
+    }
 
 
 def run_cli(args: argparse.Namespace) -> int:
@@ -198,7 +177,7 @@ def run_cli(args: argparse.Namespace) -> int:
             except json.JSONDecodeError:
                 stage_logger.warning("Failed to decode additional-info JSON", context)
 
-        generate_image_kyc(
+        result = generate_image_kyc(
             image_path=image_path,
             brand_name=args.brand_name,
             brand_website=args.brand_website,
@@ -211,16 +190,6 @@ def run_cli(args: argparse.Namespace) -> int:
             logger_obj=stage_logger,
             log_context=context,
         )
-        result = {
-            "ok": True,
-            "kyc_json_path": str(
-                get_kyc_output_path(image_path, args.brand_name, output_dir)
-            ),
-            "brand_name": args.brand_name,
-            "product_name": args.product_name,
-            "product_category": args.product_category,
-            "image_path": image_path,
-        }
         print(f"{args.result_prefix}{json.dumps(result, ensure_ascii=False)}")
         return 0
     except Exception as exc:

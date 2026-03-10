@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
 import argparse
-import os
-import json
-import sys
 import base64
+import json
 import mimetypes
+import os
+import sys
 from pathlib import Path
 from typing import Any
+
 from dotenv import load_dotenv
-from logger import JsonLogger, log_usage
+
+from ..logger import JsonLogger, log_usage
 
 load_dotenv()
 DEFAULT_RESULT_PREFIX = "__RESULT__"
 
 
 def load_prompt(prompt_file: str) -> str:
-    """Load the prompt from the prompts folder."""
-    prompts_dir = Path(__file__).parent / "prompts"
+    prompts_dir = Path(__file__).parent.parent / "prompts"
     prompt_path = prompts_dir / prompt_file
     with open(prompt_path, "r", encoding="utf-8") as f:
         return f.read()
 
 
-def load_kyc(kyc_file: str) -> dict:
-    """Load the KYC JSON file."""
+def load_kyc(kyc_file: str) -> dict[str, Any]:
     with open(kyc_file, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -53,27 +53,12 @@ def generate_images(
     prompt_file: str = "ImageWithKYCTesting.txt",
     logger_obj: JsonLogger | None = None,
     log_context: dict[str, Any] | None = None,
-) -> list[str]:
-    """
-    Generate A+ content images using gpt-image-1.
-
-    Args:
-        image_path: Path to the product image
-        brand_name: Name of the brand
-        kyc_path: Path to the KYC JSON file
-        num_images: Number of images to generate (default: 4)
-        output_dir: Output directory for generated images
-
-    Returns:
-        List of paths to generated images
-    """
+) -> dict[str, Any]:
     stage_logger = logger_obj or JsonLogger()
 
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        raise ValueError(
-            "OPENAI_API_KEY not found in environment. Please set it in .env file."
-        )
+        raise ValueError("OPENAI_API_KEY not found in environment. Please set it in .env file.")
 
     from openai import OpenAI
 
@@ -159,7 +144,7 @@ def generate_images(
     input_image_name = Path(image_path).stem
     output_format = "png"
 
-    generated_files = []
+    generated_files: list[str] = []
     image_results = [
         output.result
         for output in response.output
@@ -173,16 +158,18 @@ def generate_images(
             f.write(image_data)
         abs_output_file = str(output_filepath.resolve())
         generated_files.append(abs_output_file)
-        print(f"Generated: {output_filepath}")
         stage_logger.info(
             "Image generated.",
             with_context(log_context, {"output_file": abs_output_file}),
         )
 
-    print(f"\nTotal images generated: {len(generated_files)}")
-    print(f"Output directory: {output_path}")
-
-    return generated_files
+    return {
+        "ok": True,
+        "generated_images": generated_files,
+        "count": len(generated_files),
+        "image_path": str(Path(image_path).resolve()),
+        "kyc_path": str(Path(kyc_path).resolve()),
+    }
 
 
 def run_cli(args: argparse.Namespace) -> int:
@@ -190,7 +177,7 @@ def run_cli(args: argparse.Namespace) -> int:
     context = {"job_id": args.job_id, "stage": args.stage_name}
 
     try:
-        generated_files = generate_images(
+        result = generate_images(
             image_path=str(Path(args.image_path).resolve()),
             brand_name=args.brand_name,
             kyc_path=str(Path(args.kyc_path).resolve()),
@@ -201,11 +188,6 @@ def run_cli(args: argparse.Namespace) -> int:
             logger_obj=stage_logger,
             log_context=context,
         )
-        result = {
-            "ok": True,
-            "generated_images": generated_files,
-            "count": len(generated_files),
-        }
         print(f"{args.result_prefix}{json.dumps(result, ensure_ascii=False)}")
         return 0
     except Exception as exc:

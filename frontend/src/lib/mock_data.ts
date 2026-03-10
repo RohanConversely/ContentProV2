@@ -21,7 +21,7 @@ export interface UsageSummary {
 }
 
 export interface RecentProjectSummary {
-  id: number;
+  id: string | number;
   name: string;
   genre: string;
   theme: string;
@@ -82,7 +82,7 @@ export const mockUser: UserProfile = {
   id: "user_123",
   name: "Alex Johnson",
   email: "alex@example.com",
-  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Alex",
+  avatar: "https://api.dicebear.com/7.x/initials/svg?seed=ContentPro&backgroundType=gradientLinear",
   plan: "free",
   memberSince: "January 2026",
 };
@@ -288,5 +288,3 @@ export const mockLandingGalleryImages: LandingGalleryImage[] = [
     url: "https://images.unsplash.com/photo-1602173574767-37ac01994b2a?w=400&h=400&fit=crop",
   },
 ];
-
-
