@@ -3,17 +3,7 @@ import { motion } from "framer-motion";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { useNavigate } from "react-router-dom";
-import {
-  ArrowLeft,
-  Download,
-  FileSpreadsheet,
-  Link2,
-  Play,
-  RefreshCw,
-  Sparkles,
-  Upload,
-  X,
-} from "lucide-react";
+import { ArrowLeft, Download, FileSpreadsheet, Play, RefreshCw, Upload, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { ProductFormData } from "./CreationWizard";
 
@@ -37,6 +27,7 @@ type BatchJob = BatchRowInput & {
   id: string;
   rowNumber: number;
   errors: string[];
+  rawValues: Record<string, string>;
 };
 
 type BatchJobRunPayload = {
@@ -181,8 +172,10 @@ function parseRecordsToJobs(records: Record<string, unknown>[]): BatchJob[] {
       imageLink: "",
       additionalInfo: {},
     };
+    const rawValues: Record<string, string> = {};
 
     for (const [rawKey, rawValue] of Object.entries(rec)) {
+      rawValues[rawKey] = safeString(rawValue);
       const normalized = normalizeHeaderKey(rawKey);
       const target = keyMap[normalized];
       if (target) {
@@ -220,6 +213,7 @@ function parseRecordsToJobs(records: Record<string, unknown>[]): BatchJob[] {
       id: `row-${i + 1}-${Date.now()}`,
       rowNumber: i + 1,
       errors,
+      rawValues,
     });
   }
 
@@ -238,6 +232,7 @@ export default function BatchCreationWizard({
   const [fileName, setFileName] = useState<string | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [jobs, setJobs] = useState<BatchJob[]>([]);
+  const [columnHeaders, setColumnHeaders] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const isRunning = false;
 
@@ -256,6 +251,7 @@ export default function BatchCreationWizard({
     setFileName(null);
     setParseError(null);
     setJobs([]);
+    setColumnHeaders([]);
     setSelectedIds(new Set());
     if (inputRef.current) inputRef.current.value = "";
   };
@@ -304,16 +300,26 @@ export default function BatchCreationWizard({
       }
 
       const parsedJobs = parseRecordsToJobs(records);
+      const headers = Array.from(
+        records.reduce((acc, record) => {
+          Object.keys(record).forEach((key) => {
+            if (key.trim()) acc.add(key);
+          });
+          return acc;
+        }, new Set<string>()),
+      );
       if (parsedJobs.length === 0) {
         throw new Error("No valid rows found. Make sure the first sheet has headers and at least one row.");
       }
 
       setFileName(file.name);
       setJobs(parsedJobs);
+      setColumnHeaders(headers);
       setSelectedIds(new Set(parsedJobs.filter((j) => j.errors.length === 0).map((j) => j.id)));
     } catch (e) {
       setFileName(file.name);
       setJobs([]);
+      setColumnHeaders([]);
       setSelectedIds(new Set());
       setParseError(e instanceof Error ? e.message : "Failed to parse file");
     }
@@ -379,12 +385,6 @@ export default function BatchCreationWizard({
             Upload a CSV/XLSX, review rows, select jobs, and run generation on the batch.
           </p>
         </div>
-        <button
-          onClick={downloadTemplate}
-          className="hidden sm:flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border text-sm font-medium hover:bg-secondary transition-colors"
-        >
-          <Download className="h-4 w-4" /> Template
-        </button>
       </div>
 
       {/* Upload box */}
@@ -487,12 +487,6 @@ export default function BatchCreationWizard({
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={downloadTemplate}
-                className="sm:hidden flex items-center gap-2 px-3 py-2 rounded-xl border border-border text-xs font-medium hover:bg-secondary transition-colors"
-              >
-                <Download className="h-3.5 w-3.5" /> Template
-              </button>
-              <button
                 onClick={runBatch}
                 disabled={!anySelected}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-primary text-primary-foreground text-sm font-semibold shadow-glow disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
@@ -504,8 +498,13 @@ export default function BatchCreationWizard({
 
           <div className="rounded-xl border border-border overflow-hidden">
             <div className="overflow-x-auto">
-              <div className="min-w-[1100px]">
-                <div className="grid grid-cols-[42px,72px,minmax(320px,1.8fr),minmax(160px,1fr),minmax(220px,1.2fr),minmax(160px,0.9fr),minmax(220px,1.2fr)] gap-0 bg-secondary/50 text-xs font-medium text-muted-foreground">
+              <div
+                className="grid gap-0 min-w-max"
+                style={{
+                  gridTemplateColumns: `42px 72px repeat(${columnHeaders.length}, minmax(220px, 1fr)) minmax(260px, 1.2fr)`,
+                }}
+              >
+                <div className="contents bg-secondary/50 text-xs font-medium text-muted-foreground">
                   <div className="p-3 flex items-center justify-center">
                     <Checkbox
                       checked={allValidSelected}
@@ -514,11 +513,12 @@ export default function BatchCreationWizard({
                     />
                   </div>
                   <div className="p-3">Row</div>
-                  <div className="p-3">Image link</div>
-                  <div className="p-3">Brand</div>
-                  <div className="p-3">Product</div>
-                  <div className="p-3">Category</div>
-                  <div className="p-3">Website</div>
+                  {columnHeaders.map((header) => (
+                    <div key={header} className="p-3 whitespace-nowrap">
+                      {header}
+                    </div>
+                  ))}
+                  <div className="p-3">Validation</div>
                 </div>
 
                 <div className="divide-y divide-border">
@@ -528,9 +528,12 @@ export default function BatchCreationWizard({
                     return (
                       <div
                         key={j.id}
-                        className={`grid grid-cols-[42px,72px,minmax(320px,1.8fr),minmax(160px,1fr),minmax(220px,1.2fr),minmax(160px,0.9fr),minmax(220px,1.2fr)] gap-0 text-sm ${
+                        className={`grid gap-0 text-sm ${
                           isValid ? "bg-card" : "bg-destructive/5"
                         }`}
+                        style={{
+                          gridTemplateColumns: `42px 72px repeat(${columnHeaders.length}, minmax(220px, 1fr)) minmax(260px, 1.2fr)`,
+                        }}
                       >
                         <div className="p-3 flex items-start justify-center">
                           <Checkbox
@@ -541,51 +544,36 @@ export default function BatchCreationWizard({
                           />
                         </div>
                         <div className="p-3 text-xs text-muted-foreground">{j.rowNumber}</div>
+                        {columnHeaders.map((header) => {
+                          const value = j.rawValues[header] ?? "";
+                          const maybeUrl = /^https?:\/\//i.test(value);
+                          return (
+                            <div key={`${j.id}-${header}`} className="p-3">
+                              {value ? (
+                                maybeUrl ? (
+                                  <a
+                                    href={value}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-primary hover:underline break-all block"
+                                    title={value}
+                                  >
+                                    {value}
+                                  </a>
+                                ) : (
+                                  <p className="text-sm break-words">{value}</p>
+                                )
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
+                            </div>
+                          );
+                        })}
                         <div className="p-3">
-                          {j.imageLink ? (
-                            <a
-                              href={j.imageLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-primary hover:underline break-all block"
-                              title={j.imageLink}
-                            >
-                              {j.imageLink}
-                            </a>
+                          {j.errors.length > 0 ? (
+                            <p className="text-xs text-destructive break-words">{j.errors.join(" · ")}</p>
                           ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </div>
-                        <div className="p-3">
-                          <p className="font-medium break-words">{j.brandName || "—"}</p>
-                          {j.errors.length > 0 && (
-                            <p className="text-xs text-destructive mt-0.5 break-words">{j.errors.join(" · ")}</p>
-                          )}
-                        </div>
-                        <div className="p-3">
-                          <p className="break-words">{j.productName || "—"}</p>
-                          {j.productDescription && (
-                            <p className="text-xs text-muted-foreground mt-0.5 break-words">{j.productDescription}</p>
-                          )}
-                        </div>
-                        <div className="p-3">
-                          <p className="break-words">{j.productCategory || "—"}</p>
-                        </div>
-                        <div className="p-3">
-                          {j.brandWebsite ? (
-                            <a
-                              href={j.brandWebsite.startsWith("http") ? j.brandWebsite : `https://${j.brandWebsite}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-start gap-1 text-xs text-primary hover:underline break-all"
-                            >
-                              <Link2 className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                              <span className="break-all">
-                                {j.brandWebsite.replace(/^https?:\/\//, "").replace(/\/$/, "")}
-                              </span>
-                            </a>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
+                            <span className="text-xs text-primary">Ready</span>
                           )}
                         </div>
                       </div>

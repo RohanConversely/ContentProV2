@@ -112,6 +112,7 @@ const BatchRunPage = () => {
             socialLink2: localJob.productData.socialLinkFacebook || undefined,
             socialLink3: localJob.productData.socialLinkLinkedin || undefined,
             socialLink4: localJob.productData.socialLinkX || undefined,
+            additionalInput: localJob.productData.additionalInfo,
           });
 
           updateJob(localJob.id, (job) => ({

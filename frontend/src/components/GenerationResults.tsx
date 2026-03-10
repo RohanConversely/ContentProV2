@@ -13,7 +13,7 @@ import {
   Check,
 } from "lucide-react";
 import { type ProductFormData } from "./CreationWizard";
-import { downloadFile } from "@/lib/api";
+import { downloadFile, downloadJobImagesArchive } from "@/lib/api";
 
 interface GenerationResultsProps {
   productData: ProductFormData;
@@ -63,6 +63,10 @@ const GenerationResults = ({
   };
 
   const handleDownloadAll = async () => {
+    if (jobId) {
+      await downloadJobImagesArchive(jobId, `${productData.brandName}_${productData.productName}`);
+      return;
+    }
     for (const [index, src] of displayImages.entries()) {
       await handleDownloadImage(src, index);
     }

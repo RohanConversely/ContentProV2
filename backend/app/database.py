@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 
+from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -26,3 +27,14 @@ async def init_db() -> None:
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_run_schema_patches)
+
+
+def _run_schema_patches(sync_conn) -> None:
+    inspector = inspect(sync_conn)
+    if "jobs" not in inspector.get_table_names():
+        return
+
+    job_columns = {column["name"] for column in inspector.get_columns("jobs")}
+    if "additional_input" not in job_columns:
+        sync_conn.execute(text("ALTER TABLE jobs ADD COLUMN additional_input JSON"))

@@ -172,6 +172,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
         socialLink2: formData.socialLinkFacebook || undefined,
         socialLink3: formData.socialLinkLinkedin || undefined,
         socialLink4: formData.socialLinkX || undefined,
+        additionalInput: additionalInfo,
       });
       setJobId(job.job_id);
       setJobUpdate({

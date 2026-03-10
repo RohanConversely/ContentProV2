@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -28,6 +28,7 @@ class Job(Base):
     social_link_2: Mapped[str | None] = mapped_column(String(500), nullable=True)
     social_link_3: Mapped[str | None] = mapped_column(String(500), nullable=True)
     social_link_4: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    additional_input_json: Mapped[dict | None] = mapped_column("additional_input", JSON, nullable=True)
     video_duration_seconds: Mapped[int] = mapped_column(Integer, default=8)
     status: Mapped[str] = mapped_column(String(50), default="pending_upload", index=True)
     current_stage: Mapped[str | None] = mapped_column(String(50), nullable=True)
