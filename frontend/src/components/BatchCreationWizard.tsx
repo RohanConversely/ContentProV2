@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Download, FileSpreadsheet, Play, RefreshCw, Upload, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { ProductFormData } from "./CreationWizard";
+import { writeActiveBatchRun } from "@/lib/active-runs";
 
 type BatchMode = "images" | "video";
 
@@ -352,6 +353,21 @@ export default function BatchCreationWizard({
         mode,
         productData,
       };
+    });
+
+    writeActiveBatchRun({
+      mode,
+      jobs: payload,
+      activeJobId: payload[0]?.id ?? null,
+      jobStates: payload.map((job) => ({
+        ...job,
+        backendJobId: null,
+        status: "queued",
+        stage: "queued",
+        message: "Waiting to start.",
+        generatedImages: [],
+        error: null,
+      })),
     });
 
     navigate("/batch-run", {

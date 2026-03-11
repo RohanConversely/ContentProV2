@@ -8,10 +8,16 @@ import VideoCreation from "@/components/VideoCreation";
 import type { ProductFormData } from "@/components/CreationWizard";
 import {
   createJob,
+  getJob,
   uploadRemoteJobAsset,
   waitForJobCompletion,
   type JobEventPayload,
 } from "@/lib/api";
+import {
+  clearActiveBatchRun,
+  readActiveBatchRun,
+  writeActiveBatchRun,
+} from "@/lib/active-runs";
 
 type BatchMode = "images" | "video";
 type BatchJobStatus = "queued" | "creating" | "uploading" | "running" | "completed" | "failed";
@@ -40,11 +46,14 @@ const BatchRunPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const state = location.state as BatchRunLocationState | undefined;
-
-  const jobs = state?.jobs ?? [];
-  const defaultMode = state?.mode ?? "images";
-  const [jobStates, setJobStates] = useState<BatchJobExecutionState[]>(() =>
-    jobs.map((job) => ({
+  const persistedRun = readActiveBatchRun();
+  const initialJobs = state?.jobs?.length ? state.jobs : (persistedRun?.jobs ?? []);
+  const defaultMode = state?.mode ?? persistedRun?.mode ?? "images";
+  const [jobStates, setJobStates] = useState<BatchJobExecutionState[]>(() => {
+    if (persistedRun?.jobStates?.length) {
+      return persistedRun.jobStates;
+    }
+    return initialJobs.map((job) => ({
       ...job,
       backendJobId: null,
       status: "queued",
@@ -52,11 +61,12 @@ const BatchRunPage = () => {
       message: "Waiting to start.",
       generatedImages: [],
       error: null,
-    })),
-  );
-  const [activeJobId, setActiveJobId] = useState<string | null>(jobs[0]?.id ?? null);
+    }));
+  });
+  const [activeJobId, setActiveJobId] = useState<string | null>(persistedRun?.activeJobId ?? initialJobs[0]?.id ?? null);
   const [showVideoCreation, setShowVideoCreation] = useState(false);
   const hasStartedRef = useRef(false);
+  const jobStatesRef = useRef<BatchJobExecutionState[]>(jobStates);
 
   const activeJob = useMemo(
     () => jobStates.find((job) => job.id === activeJobId) ?? jobStates[0],
@@ -64,8 +74,24 @@ const BatchRunPage = () => {
   );
 
   useEffect(() => {
+    jobStatesRef.current = jobStates;
+    if (jobStates.length === 0) return;
+    writeActiveBatchRun({
+      mode: defaultMode,
+      jobs: jobStates.map(({ id, mode, productData }) => ({ id, mode, productData })),
+      jobStates,
+      activeJobId,
+    });
+    const stillActive = jobStates.some((job) => ["queued", "creating", "uploading", "running"].includes(job.status));
+    if (!stillActive) {
+      clearActiveBatchRun();
+    }
+  }, [jobStates, defaultMode, activeJobId]);
+
+  useEffect(() => {
+    if (!state?.jobs?.length) return;
     setJobStates(
-      jobs.map((job) => ({
+      state.jobs.map((job) => ({
         ...job,
         backendJobId: null,
         status: "queued",
@@ -75,12 +101,12 @@ const BatchRunPage = () => {
         error: null,
       })),
     );
-    setActiveJobId(jobs[0]?.id ?? null);
+    setActiveJobId(state.jobs[0]?.id ?? null);
     hasStartedRef.current = false;
-  }, [jobs]);
+  }, [state]);
 
   useEffect(() => {
-    if (!state || jobs.length === 0 || hasStartedRef.current) return;
+    if (jobStates.length === 0 || hasStartedRef.current) return;
     hasStartedRef.current = true;
 
     let cancelled = false;
@@ -90,40 +116,70 @@ const BatchRunPage = () => {
     };
 
     void (async () => {
-      for (const localJob of jobs) {
+      for (const localJob of jobStatesRef.current) {
         if (cancelled) return;
 
         setActiveJobId(localJob.id);
-        updateJob(localJob.id, (job) => ({
-          ...job,
-          status: "creating",
-          stage: "queued",
-          message: "Creating backend job.",
-          error: null,
-        }));
 
         try {
-          const createdJob = await createJob({
-            brandName: localJob.productData.brandName,
-            brandWebsite: localJob.productData.brandWebsite,
-            productName: localJob.productData.productName,
-            productCategory: localJob.productData.productCategory,
-            socialLink1: localJob.productData.socialLinkInstagram || undefined,
-            socialLink2: localJob.productData.socialLinkFacebook || undefined,
-            socialLink3: localJob.productData.socialLinkLinkedin || undefined,
-            socialLink4: localJob.productData.socialLinkX || undefined,
-            additionalInput: localJob.productData.additionalInfo,
-          });
+          let currentJob = jobStatesRef.current.find((job) => job.id === localJob.id) ?? localJob;
+          if (currentJob.status === "completed" || currentJob.status === "failed") {
+            continue;
+          }
 
-          updateJob(localJob.id, (job) => ({
-            ...job,
-            backendJobId: createdJob.job_id,
-            status: "uploading",
-            stage: "queued",
-            message: "Downloading source image and queuing the job.",
-          }));
+          if (!currentJob.backendJobId) {
+            updateJob(localJob.id, (job) => ({
+              ...job,
+              status: "creating",
+              stage: "queued",
+              message: "Creating backend job.",
+              error: null,
+            }));
+            const createdJob = await createJob({
+              brandName: localJob.productData.brandName,
+              brandWebsite: localJob.productData.brandWebsite,
+              productName: localJob.productData.productName,
+              productCategory: localJob.productData.productCategory,
+              socialLink1: localJob.productData.socialLinkInstagram || undefined,
+              socialLink2: localJob.productData.socialLinkFacebook || undefined,
+              socialLink3: localJob.productData.socialLinkLinkedin || undefined,
+              socialLink4: localJob.productData.socialLinkX || undefined,
+              additionalInput: localJob.productData.additionalInfo,
+            });
 
-          const completionPromise = waitForJobCompletion(createdJob.job_id, (update: JobEventPayload) => {
+            updateJob(localJob.id, (job) => ({
+              ...job,
+              backendJobId: createdJob.job_id,
+              status: "uploading",
+              stage: "queued",
+              message: "Downloading source image and queuing the job.",
+            }));
+            currentJob = {
+              ...currentJob,
+              backendJobId: createdJob.job_id,
+              status: "uploading",
+              stage: "queued",
+              message: "Downloading source image and queuing the job.",
+            };
+          }
+
+          const backendJobId = currentJob.backendJobId;
+          if (!backendJobId) {
+            throw new Error("Missing backend job id.");
+          }
+
+          const sourceImageUrl = localJob.productData.productImages[0];
+          if (!sourceImageUrl) {
+            throw new Error("Batch row is missing an image URL.");
+          }
+
+          const liveJob = await getJob(backendJobId);
+          const hasRawImage = liveJob.assets.some((asset) => asset.asset_type === "raw_image" && !asset.is_deleted);
+          if (!hasRawImage) {
+            await uploadRemoteJobAsset(backendJobId, sourceImageUrl);
+          }
+
+          const completionPromise = waitForJobCompletion(backendJobId, (update: JobEventPayload) => {
             updateJob(localJob.id, (job) => ({
               ...job,
               status: update.status === "failed" ? "failed" : update.status === "completed" ? "completed" : "running",
@@ -132,13 +188,6 @@ const BatchRunPage = () => {
               error: update.status === "failed" ? update.message : null,
             }));
           });
-
-          const sourceImageUrl = localJob.productData.productImages[0];
-          if (!sourceImageUrl) {
-            throw new Error("Batch row is missing an image URL.");
-          }
-
-          await uploadRemoteJobAsset(createdJob.job_id, sourceImageUrl);
 
           const result = await completionPromise;
           updateJob(localJob.id, (job) => ({
@@ -165,9 +214,9 @@ const BatchRunPage = () => {
     return () => {
       cancelled = true;
     };
-  }, [jobs, state]);
+  }, [jobStates.length]);
 
-  if (!state || jobs.length === 0 || !activeJob) {
+  if (jobStates.length === 0 || !activeJob) {
     return (
       <div className="min-h-screen bg-background">
         <Navbar />
@@ -303,7 +352,10 @@ const BatchRunPage = () => {
               statusStage={activeJob.stage}
               statusMessage={activeJob.message}
               onBack={() => navigate("/dashboard")}
-              onStartOver={() => navigate("/dashboard")}
+              onStartOver={() => {
+                clearActiveBatchRun();
+                navigate("/dashboard");
+              }}
               onCreateVideo={
                 effectiveMode === "video"
                   ? () => {

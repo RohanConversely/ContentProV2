@@ -1,13 +1,21 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Navbar from "@/components/Navbar";
 import CreationOptions from "@/components/CreationOptions";
 import CreationWizard from "@/components/CreationWizard";
 import BatchCreationWizard from "@/components/BatchCreationWizard";
 import heroBg from "@/assets/hero-bg.jpg";
+import { readActiveSingleRun } from "@/lib/active-runs";
 
 const Index = () => {
   const [selectedMode, setSelectedMode] = useState<string | null>(null);
+
+  useEffect(() => {
+    const activeSingleRun = readActiveSingleRun();
+    if (activeSingleRun?.jobId && activeSingleRun.isGenerating) {
+      setSelectedMode(activeSingleRun.mode);
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
