@@ -1,13 +1,17 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight, Loader2, Sparkles } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getGoogleLoginUrl } from "@/lib/api";
 
 const AuthPage = () => {
   const location = useLocation();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading, loginWithPassword, registerWithPassword } = useAuth();
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const destination = useMemo(() => {
     const state = location.state as { from?: string } | null;
@@ -18,8 +22,25 @@ const AuthPage = () => {
     return <Navigate to={destination} replace />;
   }
 
-  const continueWithGoogle = () => {
-    window.location.assign(getGoogleLoginUrl(destination));
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    try {
+      if (mode === "register") {
+        await registerWithPassword({
+          displayName: displayName.trim(),
+          email: email.trim(),
+          password,
+        });
+        return;
+      }
+      await loginWithPassword({
+        email: email.trim(),
+        password,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Authentication failed.");
+    }
   };
 
   return (
@@ -39,32 +60,88 @@ const AuthPage = () => {
 
           <div className="mb-8 space-y-2">
             <p className="text-xs uppercase tracking-[0.3em] text-primary font-semibold">
-              Google Sign-In
+              Account Access
             </p>
-            <h1 className="font-display text-3xl font-bold">Continue with Google</h1>
+            <h1 className="font-display text-3xl font-bold">
+              {mode === "login" ? "Sign in to ContentPro" : "Create your account"}
+            </h1>
             <p className="text-sm text-muted-foreground">
-              Sign in with your Google account to create persisted image generation jobs.
+              Use email and password to access your saved jobs and projects on the deployed server.
             </p>
           </div>
 
-          <button
-            onClick={continueWithGoogle}
-            className="flex w-full items-center justify-center gap-3 rounded-2xl border border-border bg-background px-5 py-3 text-sm font-semibold transition-colors hover:bg-secondary"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 48 48"
-              className="h-5 w-5"
-              aria-hidden="true"
+          <div className="mb-5 inline-flex rounded-2xl border border-border bg-background p-1">
+            <button
+              type="button"
+              onClick={() => setMode("login")}
+              className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                mode === "login" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+              }`}
             >
-              <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.6 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12S17.4 12 24 12c3 0 5.7 1.1 7.8 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z" />
-              <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 18.9 12 24 12c3 0 5.7 1.1 7.8 3l5.7-5.7C34 6.1 29.3 4 24 4c-7.7 0-14.3 4.3-17.7 10.7z" />
-              <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.6 5.1C9.5 39.5 16.2 44 24 44z" />
-              <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-1.1 3.1-3.3 5.6-6.1 7.2l6.2 5.2C38 37.8 44 32 44 24c0-1.3-.1-2.3-.4-3.5z" />
-            </svg>
-            Continue with Google
-            <ArrowRight className="h-4 w-4" />
-          </button>
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("register")}
+              className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                mode === "register" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+              }`}
+            >
+              Register
+            </button>
+          </div>
+
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            {mode === "register" ? (
+              <label className="block space-y-2 text-sm">
+                <span className="text-muted-foreground">Display name</span>
+                <input
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  className="w-full rounded-2xl border border-border bg-background px-4 py-3 outline-none ring-0 transition-colors focus:border-primary"
+                  placeholder="Your name"
+                  required
+                />
+              </label>
+            ) : null}
+
+            <label className="block space-y-2 text-sm">
+              <span className="text-muted-foreground">Email</span>
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                className="w-full rounded-2xl border border-border bg-background px-4 py-3 outline-none ring-0 transition-colors focus:border-primary"
+                placeholder="you@example.com"
+                required
+              />
+            </label>
+
+            <label className="block space-y-2 text-sm">
+              <span className="text-muted-foreground">Password</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="w-full rounded-2xl border border-border bg-background px-4 py-3 outline-none ring-0 transition-colors focus:border-primary"
+                placeholder="At least 8 characters"
+                minLength={8}
+                required
+              />
+            </label>
+
+            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="flex w-full items-center justify-center gap-3 rounded-2xl border border-border bg-background px-5 py-3 text-sm font-semibold transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {mode === "login" ? "Sign In" : "Create Account"}
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </form>
         </motion.div>
       </div>
     </div>

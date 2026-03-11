@@ -9,7 +9,11 @@ import {
   clearStoredSession,
   getCurrentUser,
   getStoredAccessToken,
+  loginAccount,
+  registerAccount,
   setStoredAccessToken,
+  type AuthPayload,
+  type RegisterPayload,
   type UserProfile,
 } from "@/lib/api";
 
@@ -20,6 +24,8 @@ interface AuthContextValue {
   logout: () => void;
   refreshUser: () => Promise<UserProfile | null>;
   completeGoogleLogin: (token: string) => Promise<UserProfile | null>;
+  loginWithPassword: (payload: AuthPayload) => Promise<UserProfile>;
+  registerWithPassword: (payload: RegisterPayload) => Promise<UserProfile>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -59,6 +65,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return profile;
   };
 
+  const loginWithPassword = async (payload: AuthPayload) => {
+    setIsLoading(true);
+    try {
+      const profile = await loginAccount(payload);
+      setUser(profile);
+      return profile;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const registerWithPassword = async (payload: RegisterPayload) => {
+    setIsLoading(true);
+    try {
+      const profile = await registerAccount(payload);
+      setUser(profile);
+      return profile;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const logout = () => {
     clearStoredSession();
     setUser(null);
@@ -73,6 +101,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         logout,
         refreshUser,
         completeGoogleLogin,
+        loginWithPassword,
+        registerWithPassword,
       }}
     >
       {children}
