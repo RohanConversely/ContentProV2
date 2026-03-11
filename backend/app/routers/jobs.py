@@ -40,6 +40,8 @@ def _job_summary(job: Job) -> JobSummaryResponse:
         brand_name=job.brand_name,
         product_name=job.product_name,
         job_type=job.job_type,
+        batch_id=job.batch_id,
+        batch_name=job.batch_name,
         status=job.status,
         current_stage=job.current_stage,
         created_at=job.created_at,
@@ -74,6 +76,8 @@ async def create_job(
         social_link_4=payload.social_link_4,
         additional_input_json=payload.additional_input,
         video_duration_seconds=payload.video_duration_seconds,
+        batch_id=payload.batch_id,
+        batch_name=payload.batch_name,
         status="pending_upload",
         current_stage="queued",
         storage_prefix=f"jobs/{generated_job_id}",
@@ -92,17 +96,46 @@ async def list_jobs(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> JobListResponse:
-    query = select(Job).where(Job.user_id == current_user.id, Job.status != SOFT_DELETED_STATUS)
-    count_query = select(func.count()).select_from(Job).where(Job.user_id == current_user.id, Job.status != SOFT_DELETED_STATUS)
-    if status:
-        query = query.where(Job.status == status)
-        count_query = count_query.where(Job.status == status)
-
-    query = query.order_by(Job.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+    # Get all jobs to perform grouping
+    query = select(Job).where(Job.user_id == current_user.id, Job.status != SOFT_DELETED_STATUS).order_by(Job.created_at.desc())
     result = await db.execute(query)
-    items = result.scalars().all()
-    total = await db.scalar(count_query)
-    return JobListResponse(items=[_job_summary(job) for job in items], page=page, page_size=page_size, total=total or 0)
+    all_jobs = result.scalars().all()
+
+    seen_batches = set()
+    grouped_items = []
+
+    for job in all_jobs:
+        if job.batch_id:
+            if job.batch_id in seen_batches:
+                continue
+            seen_batches.add(job.batch_id)
+
+            batch_jobs = [j for j in all_jobs if j.batch_id == job.batch_id]
+            total_jobs_in_batch = len(batch_jobs)
+            any_failed = any(j.status == "failed" for j in batch_jobs)
+            any_running = any(j.status not in ["completed", "failed"] for j in batch_jobs)
+            batch_status = "processing" if any_running else "failed" if any_failed else "completed"
+
+            # Filter by status if requested
+            if status and batch_status != status:
+                continue
+
+            summary = _job_summary(job)
+            summary.status = batch_status
+            summary.total_jobs = total_jobs_in_batch
+            summary.product_name = job.batch_name or job.product_name
+            grouped_items.append(summary)
+        else:
+            if status and job.status != status:
+                continue
+            grouped_items.append(_job_summary(job))
+
+    total = len(grouped_items)
+    start = (page - 1) * page_size
+    end = start + page_size
+    paginated_items = grouped_items[start:end]
+
+    return JobListResponse(items=paginated_items, page=page, page_size=page_size, total=total)
 
 
 @router.get("/jobs/recent", response_model=list[RecentJobResponse])
@@ -111,27 +144,86 @@ async def recent_jobs(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[RecentJobResponse]:
-    result = await db.execute(
+    # We want to return unique projects (either single jobs or batches)
+    # This query finds the latest job for each batch_id (or where batch_id is null)
+    query = (
         select(Job)
         .where(Job.user_id == current_user.id, Job.status != SOFT_DELETED_STATUS)
         .order_by(Job.created_at.desc())
-        .limit(limit)
     )
-    jobs = result.scalars().all()
-    response: list[RecentJobResponse] = []
-    for job in jobs:
-        image_count = await db.scalar(select(func.count()).select_from(Asset).where(Asset.job_id == job.id, Asset.asset_type == "generated_image", Asset.is_deleted.is_(False)))
-        response.append(
-            RecentJobResponse(
-                id=job.job_id,
-                name=job.product_name,
-                type=job.job_type,
-                status=job.status,
-                images=image_count or 0,
-                date=job.created_at,
+    result = await db.execute(query)
+    all_jobs = result.scalars().all()
+
+    seen_batches = set()
+    unique_items = []
+
+    for job in all_jobs:
+        if len(unique_items) >= limit:
+            break
+
+        if job.batch_id:
+            if job.batch_id in seen_batches:
+                continue
+            seen_batches.add(job.batch_id)
+
+            # Aggregate stats for the batch
+            batch_jobs = [j for j in all_jobs if j.batch_id == job.batch_id]
+            total_jobs = len(batch_jobs)
+            all_completed = all(j.status == "completed" for j in batch_jobs)
+            any_failed = any(j.status == "failed" for j in batch_jobs)
+            any_running = any(j.status not in ["completed", "failed"] for j in batch_jobs)
+
+            status = "processing" if any_running else "failed" if any_failed else "completed"
+
+            # Image count across all jobs in batch
+            batch_job_ids = [j.id for j in batch_jobs]
+            image_count = await db.scalar(
+                select(func.count())
+                .select_from(Asset)
+                .where(
+                    Asset.job_id.in_(batch_job_ids),
+                    Asset.asset_type == "generated_image",
+                    Asset.is_deleted.is_(False)
+                )
             )
-        )
-    return response
+
+            unique_items.append(
+                RecentJobResponse(
+                    id=job.job_id, # Link to the first job or we might need a batch-specific link later
+                    name=job.batch_name or job.product_name,
+                    type=job.job_type,
+                    status=status,
+                    images=image_count or 0,
+                    date=job.created_at,
+                    batch_id=job.batch_id,
+                    total_jobs=total_jobs
+                )
+            )
+        else:
+            # Single job
+            image_count = await db.scalar(
+                select(func.count())
+                .select_from(Asset)
+                .where(
+                    Asset.job_id == job.id,
+                    Asset.asset_type == "generated_image",
+                    Asset.is_deleted.is_(False)
+                )
+            )
+            unique_items.append(
+                RecentJobResponse(
+                    id=job.job_id,
+                    name=job.product_name,
+                    type=job.job_type,
+                    status=job.status,
+                    images=image_count or 0,
+                    date=job.created_at,
+                    batch_id=None,
+                    total_jobs=None
+                )
+            )
+
+    return unique_items
 
 
 @router.get("/jobs/{job_id}", response_model=JobResponse)
@@ -311,6 +403,100 @@ async def download_job_images_archive(
     archive_name = f"{job.brand_name}_{job.product_name}".replace("/", "_").replace("\\", "_")
     headers = {"Content-Disposition": f'attachment; filename="{archive_name}.zip"'}
     return StreamingResponse(archive_bytes, media_type="application/zip", headers=headers)
+
+
+@router.get("/batches/{batch_id}", response_model=list[JobSummaryResponse])
+async def get_batch_jobs(
+    batch_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[JobSummaryResponse]:
+    result = await db.execute(
+        select(Job)
+        .where(Job.batch_id == batch_id, Job.user_id == current_user.id, Job.status != SOFT_DELETED_STATUS)
+        .order_by(Job.created_at.asc())
+    )
+    jobs = result.scalars().all()
+    if not jobs:
+        raise HTTPException(status_code=404, detail="Batch not found.")
+    return [_job_summary(job) for job in jobs]
+
+
+@router.get("/batches/{batch_id}/download")
+async def download_batch_images_archive(
+    batch_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Job)
+        .where(Job.batch_id == batch_id, Job.user_id == current_user.id, Job.status != SOFT_DELETED_STATUS)
+    )
+    jobs = result.scalars().all()
+    if not jobs:
+        raise HTTPException(status_code=404, detail="Batch not found.")
+
+    archive_bytes = io.BytesIO()
+    has_images = False
+    with zipfile.ZipFile(archive_bytes, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for job in jobs:
+            asset_result = await db.execute(
+                select(Asset)
+                .where(
+                    Asset.job_id == job.id,
+                    Asset.asset_type == "generated_image",
+                    Asset.is_deleted.is_(False),
+                )
+                .order_by(Asset.created_at.asc())
+            )
+            assets = asset_result.scalars().all()
+            if not assets:
+                continue
+            
+            has_images = True
+            # Create a folder for each job in the ZIP
+            job_folder = f"{job.brand_name}_{job.product_name}".replace("/", "_").replace("\\", "_")
+            # If product names are same, append job_id to ensure unique folders
+            job_folder = f"{job_folder}_{job.job_id}"
+            
+            for i, asset in enumerate(assets):
+                file_bytes = await storage_service.download_bytes(asset.storage_key)
+                # Ensure filename has extension
+                ext = Path(asset.storage_key).suffix or ".png"
+                archive_name = f"{job_folder}/image_{i+1}{ext}"
+                archive.writestr(archive_name, file_bytes)
+
+    if not has_images:
+        raise HTTPException(status_code=404, detail="No generated images available for this batch.")
+
+    archive_bytes.seek(0)
+    batch_name = jobs[0].batch_name or f"batch_{batch_id}"
+    safe_batch_name = batch_name.replace("/", "_").replace("\\", "_")
+    headers = {"Content-Disposition": f'attachment; filename="{safe_batch_name}.zip"'}
+    return StreamingResponse(archive_bytes, media_type="application/zip", headers=headers)
+
+
+@router.delete("/batches/{batch_id}")
+async def delete_batch(
+    batch_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, bool]:
+    result = await db.execute(
+        select(Job).where(Job.batch_id == batch_id, Job.user_id == current_user.id, Job.status != SOFT_DELETED_STATUS)
+    )
+    jobs = result.scalars().all()
+    if not jobs:
+        raise HTTPException(status_code=404, detail="Batch not found.")
+
+    for job in jobs:
+        asset_result = await db.execute(select(Asset).where(Asset.job_id == job.id, Asset.is_deleted.is_(False)))
+        for asset in asset_result.scalars().all():
+            asset.is_deleted = True
+        job.status = SOFT_DELETED_STATUS
+    
+    await db.commit()
+    return {"ok": True}
 
 
 @router.get("/usage", response_model=UsageResponse)

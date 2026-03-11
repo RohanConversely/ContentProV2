@@ -30,6 +30,8 @@ class Job(Base):
     social_link_4: Mapped[str | None] = mapped_column(String(500), nullable=True)
     additional_input_json: Mapped[dict | None] = mapped_column("additional_input", JSON, nullable=True)
     video_duration_seconds: Mapped[int] = mapped_column(Integer, default=8)
+    batch_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    batch_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="pending_upload", index=True)
     current_stage: Mapped[str | None] = mapped_column(String(50), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

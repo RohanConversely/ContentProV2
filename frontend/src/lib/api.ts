@@ -67,6 +67,8 @@ interface BackendRecentJobResponse {
   status: string;
   images: number;
   date: string;
+  batch_id?: string;
+  total_jobs?: number;
 }
 
 interface BackendAssetResponse {
@@ -84,12 +86,15 @@ interface BackendAssetResponse {
   presigned_url?: string | null;
 }
 
-interface BackendJobSummaryResponse {
+export interface BackendJobSummaryResponse {
   id: string;
   job_id: string;
   brand_name: string;
   product_name: string;
   job_type: string;
+  batch_id?: string;
+  batch_name?: string;
+  total_jobs?: number;
   status: string;
   current_stage: string | null;
   created_at: string;
@@ -272,7 +277,9 @@ function mapRecentProject(payload: BackendRecentJobResponse): RecentProjectSumma
     theme: inProgress ? "Running" : payload.status,
     images: payload.images,
     date: formatDate(payload.date),
-    status: inProgress ? "in-progress" : "completed",
+    status: inProgress ? "in-progress" : payload.status === "failed" ? "failed" : "completed",
+    batch_id: payload.batch_id,
+    total_jobs: payload.total_jobs,
   };
 }
 
@@ -280,7 +287,7 @@ function assetUrl(asset: BackendAssetResponse): string | null {
   return asset.presigned_url ?? null;
 }
 
-function mapProject(job: BackendJobResponse): Project {
+function mapProject(job: BackendJobResponse, summary?: BackendJobSummaryResponse): Project {
   const additionalInput = job.additional_input ?? {};
   const dimensions =
     typeof additionalInput.dimensions === "string" ? additionalInput.dimensions : undefined;
@@ -318,16 +325,18 @@ function mapProject(job: BackendJobResponse): Project {
     "";
   return {
     id: job.job_id,
-    name: job.product_name,
+    name: summary?.batch_name || summary?.product_name || job.batch_name || job.product_name,
     type: job.job_type === "video" ? "video" : "images",
     status:
-      job.status === "completed"
+      (summary?.status || job.status) === "completed"
         ? "completed"
-        : job.status === "failed"
+        : (summary?.status || job.status) === "failed"
           ? "failed"
           : "processing",
     createdAt: job.created_at,
     thumbnail,
+    batch_id: summary?.batch_id || job.batch_id,
+    total_jobs: summary?.total_jobs || job.total_jobs,
     detail: {
       brandName: job.brand_name,
       productName: job.product_name,
@@ -462,7 +471,7 @@ export async function getRecentProjects(): Promise<RecentProjectSummary[]> {
   return response.map(mapRecentProject);
 }
 
-export async function createJob(input: Omit<GenerateImagesInput, "imageFiles">): Promise<BackendJobSummaryResponse> {
+export async function createJob(input: Omit<GenerateImagesInput, "imageFiles"> & { batch_id?: string, batch_name?: string }): Promise<BackendJobSummaryResponse> {
   return apiJson<BackendJobSummaryResponse>(
     "/jobs",
     {
@@ -481,10 +490,31 @@ export async function createJob(input: Omit<GenerateImagesInput, "imageFiles">):
         social_link_3: input.socialLink3,
         social_link_4: input.socialLink4,
         additional_input: input.additionalInput,
+        batch_id: input.batch_id,
+        batch_name: input.batch_name,
       }),
     },
     true,
   );
+}
+
+
+export async function getBatchJobs(batchId: string): Promise<BackendJobSummaryResponse[]> {
+  return apiJson<BackendJobSummaryResponse[]>(`/batches/${encodeURIComponent(batchId)}`, {}, true);
+}
+
+
+export async function downloadBatchArchive(batchId: string, filename: string): Promise<void> {
+  const response = await apiFetch(`/batches/${encodeURIComponent(batchId)}/download`, {}, true);
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${filename}.zip`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
 }
 
 export async function uploadJobAsset(jobId: string, files: File[]): Promise<BackendAssetResponse[]> {
@@ -630,10 +660,18 @@ export async function waitForJobCompletion(
 
 export async function getProjects(): Promise<Project[]> {
   const response = await apiJson<BackendJobListResponse>("/jobs?page=1&page_size=50", {}, true);
-  const jobs = await Promise.allSettled(response.items.map((item) => getJob(item.job_id)));
+  const jobs = await Promise.allSettled(
+    response.items.map(async (item) => ({
+      summary: item,
+      job: await getJob(item.job_id),
+    })),
+  );
   return jobs
-    .filter((result): result is PromiseFulfilledResult<BackendJobResponse> => result.status === "fulfilled")
-    .map((result) => mapProject(result.value));
+    .filter(
+      (result): result is PromiseFulfilledResult<{ summary: BackendJobSummaryResponse; job: BackendJobResponse }> =>
+        result.status === "fulfilled",
+    )
+    .map((result) => mapProject(result.value.job, result.value.summary));
 }
 
 export async function getProjectById(id: string): Promise<Project | null> {
@@ -647,6 +685,11 @@ export async function getProjectById(id: string): Promise<Project | null> {
 
 export async function deleteProject(id: string): Promise<void> {
   await apiFetch(`/jobs/${encodeURIComponent(id)}`, { method: "DELETE" }, true);
+}
+
+
+export async function deleteBatch(batchId: string): Promise<void> {
+  await apiFetch(`/batches/${encodeURIComponent(batchId)}`, { method: "DELETE" }, true);
 }
 
 export async function downloadFile(url: string, fallbackFilename = "download.bin"): Promise<void> {

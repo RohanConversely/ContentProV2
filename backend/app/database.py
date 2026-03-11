@@ -43,3 +43,7 @@ def _run_schema_patches(sync_conn) -> None:
     job_columns = {column["name"] for column in inspector.get_columns("jobs")}
     if "additional_input" not in job_columns:
         sync_conn.execute(text("ALTER TABLE jobs ADD COLUMN additional_input JSON"))
+    if "batch_id" not in job_columns:
+        sync_conn.execute(text("ALTER TABLE jobs ADD COLUMN batch_id VARCHAR(64)"))
+    if "batch_name" not in job_columns:
+        sync_conn.execute(text("ALTER TABLE jobs ADD COLUMN batch_name VARCHAR(255)"))

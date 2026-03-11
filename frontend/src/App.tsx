@@ -13,6 +13,7 @@ import ProfilePage from "./pages/ProfilePage";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
 import BatchRunPage from "./pages/BatchRunPage";
+import BatchDetailPage from "./pages/BatchDetailPage";
 import AuthPage from "./pages/AuthPage";
 import AuthCallbackPage from "./pages/AuthCallbackPage";
 
@@ -47,7 +48,23 @@ const App = () => (
                 }
               />
               <Route
+                path="/batch/:batchId"
+                element={
+                  <ProtectedRoute>
+                    <BatchDetailPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/projects"
+                element={
+                  <ProtectedRoute>
+                    <ProjectsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/project/:jobId"
                 element={
                   <ProtectedRoute>
                     <ProjectsPage />
