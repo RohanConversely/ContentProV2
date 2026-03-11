@@ -304,16 +304,17 @@ function mapProject(job: BackendJobResponse): Project {
     job.social_link_3,
     job.social_link_4,
   ].filter((value): value is string => Boolean(value));
+  const rawImages = job.assets
+    .filter((asset) => asset.asset_type === "raw_image" && !asset.is_deleted)
+    .map((asset) => assetUrl(asset))
+    .filter((value): value is string => Boolean(value));
   const generatedImages = job.assets
     .filter((asset) => asset.asset_type === "generated_image" && !asset.is_deleted)
     .map((asset) => assetUrl(asset))
     .filter((value): value is string => Boolean(value));
   const thumbnail =
+    rawImages[0] ||
     generatedImages[0] ||
-    job.assets
-      .filter((asset) => asset.asset_type === "raw_image" && !asset.is_deleted)
-      .map((asset) => assetUrl(asset))
-      .find((value): value is string => Boolean(value)) ||
     "";
   return {
     id: job.job_id,
@@ -336,6 +337,7 @@ function mapProject(job: BackendJobResponse): Project {
       dimensions,
       socialLinks,
       additionalInfo,
+      inputImages: rawImages,
       images: generatedImages,
     },
   };

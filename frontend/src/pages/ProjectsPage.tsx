@@ -119,6 +119,28 @@ const ProjectDetailView = ({
           </button>
         </div>
 
+        {detail.inputImages && detail.inputImages.length > 0 && (
+          <div className="pt-3 border-t border-border space-y-2">
+            <span className="text-xs text-muted-foreground">Input Images</span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {detail.inputImages.map((src, index) => (
+                <button
+                  key={`${src}-${index}`}
+                  type="button"
+                  onClick={() => setPreviewImage(src)}
+                  className="overflow-hidden rounded-lg border border-border bg-background/60 aspect-square"
+                >
+                  <img
+                    src={src}
+                    alt={`Input image ${index + 1}`}
+                    className="h-full w-full object-cover"
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-3 border-t border-border">
           <div className="space-y-1">
             <span className="text-muted-foreground">Brand</span>
