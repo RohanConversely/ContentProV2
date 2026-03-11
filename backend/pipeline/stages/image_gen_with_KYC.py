@@ -44,9 +44,10 @@ def with_context(base: dict[str, Any] | None, extra: dict[str, Any]) -> dict[str
 
 
 def generate_images(
-    image_path: str,
     brand_name: str,
     kyc_path: str,
+    image_paths: list[str] | None = None,
+    image_path: str | None = None,
     num_images: int = 4,
     temperature: float = 0.1,
     output_dir: str = "generated_images",
@@ -79,14 +80,21 @@ def generate_images(
         f"{prompt_template}"
     )
 
-    mime_type, _ = mimetypes.guess_type(image_path)
-    if not mime_type:
-        mime_type = "image/jpeg"
+    resolved_image_paths = [str(Path(path).resolve()) for path in (image_paths or ([image_path] if image_path else []))]
+    if not resolved_image_paths:
+        raise ValueError("At least one product image is required for image generation.")
 
-    with open(image_path, "rb") as image_file:
-        image_bytes = image_file.read()
-    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
-    image_data_url = f"data:{mime_type};base64,{image_b64}"
+    content = [{"type": "input_text", "text": user_message}]
+    for resolved_image_path in resolved_image_paths:
+        mime_type, _ = mimetypes.guess_type(resolved_image_path)
+        if not mime_type:
+            mime_type = "image/jpeg"
+
+        with open(resolved_image_path, "rb") as image_file:
+            image_bytes = image_file.read()
+        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+        image_data_url = f"data:{mime_type};base64,{image_b64}"
+        content.append({"type": "input_image", "image_url": image_data_url})
 
     with open(kyc_path, "rb") as kyc_file:
         kyc_b64 = base64.b64encode(kyc_file.read()).decode("utf-8")
@@ -98,7 +106,7 @@ def generate_images(
             log_context,
             {
                 "model": "gpt-4.1",
-                "image_path": str(Path(image_path).resolve()),
+                "image_paths": resolved_image_paths,
                 "brand_name": brand_name,
                 "kyc_path": str(Path(kyc_path).resolve()),
                 "num_images": num_images,
@@ -115,8 +123,7 @@ def generate_images(
             {
                 "role": "user",
                 "content": [
-                    {"type": "input_text", "text": user_message},
-                    {"type": "input_image", "image_url": image_data_url},
+                    *content,
                     {
                         "type": "input_file",
                         "filename": Path(kyc_path).name,
@@ -141,7 +148,7 @@ def generate_images(
         response,
         with_context(log_context, {"operation": "image_gen_with_kyc"}),
     )
-    input_image_name = Path(image_path).stem
+    input_image_name = Path(resolved_image_paths[0]).stem
     output_format = "png"
 
     generated_files: list[str] = []
@@ -167,7 +174,7 @@ def generate_images(
         "ok": True,
         "generated_images": generated_files,
         "count": len(generated_files),
-        "image_path": str(Path(image_path).resolve()),
+        "image_paths": resolved_image_paths,
         "kyc_path": str(Path(kyc_path).resolve()),
     }
 
@@ -178,7 +185,7 @@ def run_cli(args: argparse.Namespace) -> int:
 
     try:
         result = generate_images(
-            image_path=str(Path(args.image_path).resolve()),
+            image_paths=[str(Path(args.image_path).resolve())],
             brand_name=args.brand_name,
             kyc_path=str(Path(args.kyc_path).resolve()),
             num_images=args.num_images,

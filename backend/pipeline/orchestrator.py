@@ -31,7 +31,7 @@ class JobContext:
     brand_website: str
     product_name: str
     product_category: str
-    image_path: Path
+    image_paths: list[Path]
     social_link_1: str | None = None
     social_link_2: str | None = None
     additional_info: dict[str, Any] | None = None
@@ -57,6 +57,10 @@ class JobContext:
         self.job_log_file = self.work_dir / "job.log"
         self.product_kyc_dir.mkdir(parents=True, exist_ok=True)
         self.generated_images_dir.mkdir(parents=True, exist_ok=True)
+
+    @property
+    def image_path(self) -> Path:
+        return self.image_paths[0]
 
     def cleanup(self) -> None:
         shutil.rmtree(self.work_dir, ignore_errors=True)
@@ -113,7 +117,7 @@ def filter_kyc_for_stage2(source_path: Path, target_path: Path) -> Path:
 async def _run_stage_1(ctx: JobContext, logger: JsonLogger) -> dict[str, Any]:
     return await asyncio.to_thread(
         generate_image_kyc,
-        image_path=str(ctx.image_path.resolve()),
+        image_paths=[str(image_path.resolve()) for image_path in ctx.image_paths],
         brand_name=ctx.brand_name,
         brand_website=ctx.brand_website,
         product_name=ctx.product_name,
@@ -130,7 +134,7 @@ async def _run_stage_1(ctx: JobContext, logger: JsonLogger) -> dict[str, Any]:
 async def _run_stage_2(ctx: JobContext, filtered_kyc_path: Path, logger: JsonLogger) -> dict[str, Any]:
     return await asyncio.to_thread(
         generate_images,
-        image_path=str(ctx.image_path.resolve()),
+        image_paths=[str(image_path.resolve()) for image_path in ctx.image_paths],
         brand_name=ctx.brand_name,
         kyc_path=str(filtered_kyc_path.resolve()),
         num_images=ctx.num_images,
@@ -152,7 +156,7 @@ async def run_image_pipeline(ctx: JobContext) -> ImagePipelineResult:
             "brand_website": ctx.brand_website,
             "product_name": ctx.product_name,
             "product_category": ctx.product_category,
-            "image_path": str(ctx.image_path.resolve()),
+            "image_paths": [str(image_path.resolve()) for image_path in ctx.image_paths],
             "workspace": str(ctx.work_dir),
         },
     )

@@ -45,6 +45,14 @@ class PricingSnapshotResponse(BaseModel):
     created_at: datetime | None = None
 
 
+class JobLogEntryResponse(BaseModel):
+    level: str
+    stage: str | None = None
+    message: str
+    context: dict | None = None
+    logged_at: datetime
+
+
 class JobResponse(JobSummaryResponse):
     user_id: str
     brand_website: str

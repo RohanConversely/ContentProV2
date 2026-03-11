@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.database import get_db
 from app.models.user import User
-from app.schemas.auth import LoginRequest, MeResponse, RegisterRequest, TokenResponse
+from app.schemas.auth import ChangePasswordRequest, LoginRequest, MeResponse, RegisterRequest, TokenResponse
 from app.services.auth import (
     create_access_token,
     decode_access_token,
@@ -110,6 +110,25 @@ async def me(current_user: User = Depends(get_current_user)) -> MeResponse:
         plan=current_user.plan,
         member_since=current_user.created_at,
     )
+
+
+@router.post("/change-password")
+async def change_password(
+    payload: ChangePasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, bool]:
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=401, detail="Current password is incorrect.")
+    if payload.new_password != payload.confirm_new_password:
+        raise HTTPException(status_code=400, detail="New password and confirmation do not match.")
+    if payload.current_password == payload.new_password:
+        raise HTTPException(status_code=400, detail="New password must be different from the current password.")
+
+    current_user.hashed_password = hash_password(payload.new_password)
+    await db.commit()
+    await db.refresh(current_user)
+    return {"ok": True}
 
 
 @router.get("/google/login")

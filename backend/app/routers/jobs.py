@@ -12,12 +12,13 @@ from sse_starlette.sse import EventSourceResponse
 from app.database import get_db
 from app.models.asset import Asset
 from app.models.job import Job
-from app.models.pricing import PricingSnapshot
+from app.models.pricing import PipelineLog, PricingSnapshot
 from app.models.user import User
 from app.routers.auth import get_current_user, get_current_user_from_stream
 from app.schemas.asset import AssetResponse
 from app.schemas.job import (
     JobCreateRequest,
+    JobLogEntryResponse,
     JobListResponse,
     JobResponse,
     JobSummaryResponse,
@@ -188,6 +189,35 @@ async def stream_job_events(
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
     return EventSourceResponse(subscribe(job_id))
+
+
+@router.get("/jobs/{job_id}/logs", response_model=list[JobLogEntryResponse])
+async def get_job_logs(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[JobLogEntryResponse]:
+    result = await db.execute(select(Job).where(Job.job_id == job_id, Job.user_id == current_user.id))
+    job = result.scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
+    logs_result = await db.execute(
+        select(PipelineLog)
+        .where(PipelineLog.job_id == job.id)
+        .order_by(PipelineLog.logged_at.asc())
+    )
+    logs = logs_result.scalars().all()
+    return [
+        JobLogEntryResponse(
+            level=log.level,
+            stage=log.stage,
+            message=log.message,
+            context=log.context,
+            logged_at=log.logged_at,
+        )
+        for log in logs
+    ]
 
 
 @router.delete("/jobs/{job_id}")

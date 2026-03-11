@@ -24,6 +24,7 @@ interface GenerationResultsProps {
   error?: string | null;
   statusStage?: string | null;
   statusMessage?: string | null;
+  statusUpdates?: { stage: string; status: string; message: string }[];
   onBack: () => void;
   onStartOver: () => void;
   onCreateVideo?: () => void;
@@ -38,6 +39,7 @@ const GenerationResults = ({
   error = null,
   statusStage = null,
   statusMessage = null,
+  statusUpdates = [],
   onBack,
   onStartOver,
   onCreateVideo,
@@ -135,23 +137,23 @@ const GenerationResults = ({
         </div>
       </div>
 
-      {/* Progress bar */}
+      {/* Live status */}
       {!allDone && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse" />
-              {statusMessage || "Generating A+ content images..."}
-            </span>
-            <span>{statusStage || "..."}</span>
+        <div className="rounded-xl border border-border bg-card/60 p-4">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Sparkles className="h-4 w-4 text-primary animate-pulse" />
+            <span>{statusMessage || "Generating A+ content images..."}</span>
           </div>
-          <div className="h-1.5 w-full rounded-full bg-secondary overflow-hidden">
-            <motion.div
-              className="h-full bg-gradient-primary rounded-full"
-              initial={{ width: "20%" }}
-              animate={{ width: isLoading ? "75%" : "100%" }}
-              transition={{ duration: 0.5, ease: "easeOut" }}
-            />
+          <div className="mt-3 space-y-2">
+            {statusUpdates.length > 0 ? (
+              statusUpdates.map((update, index) => (
+                <div key={`${update.stage}-${update.status}-${index}`} className="text-sm text-muted-foreground">
+                  {update.message}
+                </div>
+              ))
+            ) : (
+              <div className="text-sm text-muted-foreground">{statusStage || "queued"}</div>
+            )}
           </div>
         </div>
       )}
@@ -180,8 +182,19 @@ const GenerationResults = ({
 
       {/* Image Grid - 6 images, 1:1 aspect ratio */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {displayImages.map((src, i) => {
+        {Array.from({ length: Math.max(displayImages.length, isLoading ? 6 : displayImages.length) }).map((_, i) => {
+          const src = displayImages[i];
           const isSelected = selectedImages.includes(i);
+          if (!src) {
+            return (
+              <div
+                key={`placeholder-${i}`}
+                className="aspect-square overflow-hidden rounded-xl border border-border bg-card"
+              >
+                <div className="h-full w-full animate-pulse bg-gradient-to-br from-secondary via-card to-secondary" />
+              </div>
+            );
+          }
 
           return (
             <motion.div

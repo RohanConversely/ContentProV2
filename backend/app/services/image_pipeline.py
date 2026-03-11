@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import http.cookiejar
 import mimetypes
 import re
 import tempfile
@@ -55,6 +56,18 @@ def _build_remote_request(image_url: str) -> urllib.request.Request:
     )
 
 
+def _extract_drive_file_id(image_url: str) -> str | None:
+    parsed = urllib.parse.urlparse(image_url)
+    file_match = re.search(r"/file/d/([^/]+)", parsed.path)
+    if file_match:
+        return file_match.group(1)
+
+    query = urllib.parse.parse_qs(parsed.query)
+    if "id" in query and query["id"]:
+        return query["id"][0]
+    return None
+
+
 def _extract_filename(image_url: str, response: Any) -> str:
     content_disposition = response.headers.get("Content-Disposition")
     if content_disposition:
@@ -70,15 +83,72 @@ def _extract_filename(image_url: str, response: Any) -> str:
     return filename
 
 
-def _download_remote_image_payload(image_url: str) -> tuple[bytes, str, str]:
+def _open_remote_url(opener: urllib.request.OpenerDirector, image_url: str) -> tuple[bytes, str, str, str]:
     request = _build_remote_request(image_url)
-    with urllib.request.urlopen(request, timeout=30) as response:
+    with opener.open(request, timeout=30) as response:
         content = response.read()
         mime_type = response.headers.get_content_type() or "application/octet-stream"
-        filename = _extract_filename(image_url, response)
+        final_url = response.geturl()
+        filename = _extract_filename(final_url, response)
+    return content, mime_type, filename, final_url
+
+
+def _extract_drive_confirm_url(
+    *,
+    image_url: str,
+    html: str,
+    opener: urllib.request.OpenerDirector,
+    final_url: str,
+) -> str | None:
+    file_id = _extract_drive_file_id(image_url) or _extract_drive_file_id(final_url)
+
+    cookie_jar = next(
+        (handler.cookiejar for handler in opener.handlers if isinstance(handler, urllib.request.HTTPCookieProcessor)),
+        None,
+    )
+    if cookie_jar and file_id:
+        for cookie in cookie_jar:
+            if cookie.name.startswith("download_warning") and cookie.value:
+                token = urllib.parse.quote(cookie.value, safe="")
+                return f"https://drive.google.com/uc?export=download&confirm={token}&id={file_id}"
+
+    form_match = re.search(r'<form[^>]+id="download-form"[^>]+action="([^"]+)"', html)
+    if form_match:
+        return urllib.parse.urljoin(final_url, form_match.group(1).replace("&amp;", "&"))
+
+    href_match = re.search(r'href="([^"]*confirm=[^"]+)"', html)
+    if href_match:
+        return urllib.parse.urljoin(final_url, href_match.group(1).replace("&amp;", "&"))
+
+    if file_id:
+        confirm_match = re.search(r'confirm=([0-9A-Za-z_]+)', html)
+        if confirm_match:
+            token = urllib.parse.quote(confirm_match.group(1), safe="")
+            return f"https://drive.google.com/uc?export=download&confirm={token}&id={file_id}"
+
+    return None
+
+
+def _download_remote_image_payload(image_url: str) -> tuple[bytes, str, str]:
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    content, mime_type, filename, final_url = _open_remote_url(opener, image_url)
 
     if mime_type.startswith("text/html"):
-        raise ValueError("Remote image URL returned HTML instead of an image file.")
+        parsed = urllib.parse.urlparse(final_url)
+        if "drive.google.com" in parsed.netloc:
+            html = content.decode("utf-8", errors="ignore")
+            confirm_url = _extract_drive_confirm_url(
+                image_url=image_url,
+                html=html,
+                opener=opener,
+                final_url=final_url,
+            )
+            if confirm_url:
+                content, mime_type, filename, _final_url = _open_remote_url(opener, confirm_url)
+            if mime_type.startswith("text/html"):
+                raise ValueError("Google Drive link did not return a directly downloadable image. Ensure the file is public.")
+        else:
+            raise ValueError("Remote image URL returned HTML instead of an image file.")
 
     extension = mimetypes.guess_extension(mime_type) or ".jpg"
     if "." not in filename:
@@ -132,7 +202,7 @@ async def run_single_image_job(
     temperature: float = 0.1,
 ) -> dict[str, Any]:
     return await run_single_product_upload(
-        image_path=image_path,
+        image_paths=[image_path],
         brand_name=brand_name,
         brand_website=brand_website,
         product_name=product_name,
