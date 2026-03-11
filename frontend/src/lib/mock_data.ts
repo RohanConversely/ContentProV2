@@ -27,7 +27,9 @@ export interface RecentProjectSummary {
   theme: string;
   images: number;
   date: string;
-  status: "completed" | "in-progress";
+  status: "completed" | "in-progress" | "failed";
+  batch_id?: string;
+  total_jobs?: number;
 }
 
 export interface ProjectDetail {
@@ -52,6 +54,8 @@ export interface Project {
   createdAt: string;
   thumbnail: string;
   detail: ProjectDetail;
+  batch_id?: string;
+  total_jobs?: number;
 }
 
 export interface AudioTrack {

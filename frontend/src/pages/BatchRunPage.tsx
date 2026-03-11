@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, CheckCircle2, Clock3, ImageIcon, Video as VideoIcon, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock3, ImageIcon, Video as VideoIcon, XCircle, Download } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import GenerationResults from "@/components/GenerationResults";
 import VideoCreation from "@/components/VideoCreation";
@@ -12,6 +12,7 @@ import {
   uploadRemoteFolderAssets,
   uploadRemoteJobAsset,
   waitForJobCompletion,
+  downloadBatchArchive,
   type JobEventPayload,
 } from "@/lib/api";
 import {
@@ -28,6 +29,8 @@ interface BatchJobRunPayload {
   mode: BatchMode;
   sourceType: "image_link" | "drive_folder";
   productData: ProductFormData;
+  batch_id?: string;
+  batch_name?: string;
 }
 
 interface BatchRunLocationState {
@@ -75,12 +78,30 @@ const BatchRunPage = () => {
     [jobStates, activeJobId],
   );
 
+  const isBatchFinished = useMemo(() => 
+    jobStates.every(j => ["completed", "failed"].includes(j.status)), 
+  [jobStates]);
+
+  const handleDownloadBatch = async () => {
+    const firstJob = jobStates[0];
+    if (firstJob?.batch_id) {
+      await downloadBatchArchive(firstJob.batch_id, firstJob.batch_name || "batch_results");
+    }
+  };
+
   useEffect(() => {
     jobStatesRef.current = jobStates;
     if (jobStates.length === 0) return;
     writeActiveBatchRun({
       mode: defaultMode,
-      jobs: jobStates.map(({ id, mode, sourceType, productData }) => ({ id, mode, sourceType, productData })),
+      jobs: jobStates.map(({ id, mode, sourceType, batch_id, batch_name, productData }) => ({
+        id,
+        mode,
+        sourceType,
+        batch_id,
+        batch_name,
+        productData,
+      })),
       jobStates,
       activeJobId,
     });
@@ -147,6 +168,8 @@ const BatchRunPage = () => {
               socialLink3: localJob.productData.socialLinkLinkedin || undefined,
               socialLink4: localJob.productData.socialLinkX || undefined,
               additionalInput: localJob.productData.additionalInfo,
+              batch_id: localJob.batch_id,
+              batch_name: localJob.batch_name,
             });
 
             updateJob(localJob.id, (job) => ({
@@ -282,6 +305,15 @@ const BatchRunPage = () => {
               </p>
             </div>
           </div>
+
+          {isBatchFinished && (
+            <button
+              onClick={handleDownloadBatch}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold shadow-glow hover:opacity-90 transition-opacity"
+            >
+              <Download className="h-4 w-4" /> Download All (ZIP)
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">

@@ -19,6 +19,8 @@ class JobCreateRequest(BaseModel):
     social_link_4: str | None = None
     additional_input: dict | None = None
     video_duration_seconds: int = Field(default=8, ge=1, le=60)
+    batch_id: str | None = None
+    batch_name: str | None = None
 
 
 class JobSummaryResponse(BaseModel):
@@ -27,6 +29,9 @@ class JobSummaryResponse(BaseModel):
     brand_name: str
     product_name: str
     job_type: str
+    batch_id: str | None = None
+    batch_name: str | None = None
+    total_jobs: int | None = None
     status: str
     current_stage: str | None = None
     created_at: datetime
@@ -76,6 +81,18 @@ class JobListResponse(BaseModel):
     total: int
 
 
+class BatchSummaryResponse(BaseModel):
+    batch_id: str
+    batch_name: str
+    job_type: str
+    status: str
+    total_jobs: int
+    completed_jobs: int
+    failed_jobs: int
+    total_images: int
+    created_at: datetime
+
+
 class RecentJobResponse(BaseModel):
     id: str
     name: str
@@ -83,6 +100,8 @@ class RecentJobResponse(BaseModel):
     status: str
     images: int
     date: datetime
+    batch_id: str | None = None
+    total_jobs: int | None = None
 
 
 class UsageResponse(BaseModel):

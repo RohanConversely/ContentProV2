@@ -37,6 +37,8 @@ type BatchJobRunPayload = {
   mode: BatchMode;
   sourceType: BatchSourceType;
   productData: ProductFormData;
+  batch_id?: string;
+  batch_name?: string;
 };
 
 const TEMPLATE_HEADERS = [
@@ -365,6 +367,9 @@ export default function BatchCreationWizard({
   const runBatch = async () => {
     if (selectedJobs.length === 0) return;
 
+    const batch_id = `batch_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const batch_name = fileName || "Batch Generation";
+
     const payload: BatchJobRunPayload[] = selectedJobs.map((j) => {
       const productData: ProductFormData = {
         brandName: j.brandName,
@@ -389,6 +394,8 @@ export default function BatchCreationWizard({
         mode,
         sourceType,
         productData,
+        batch_id,
+        batch_name,
       };
     });
 

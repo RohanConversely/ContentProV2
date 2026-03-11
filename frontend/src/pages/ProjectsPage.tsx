@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FolderOpen, Image, Video, Clock, Trash2, Download, ExternalLink,
-  ArrowLeft, Building2, Globe, Play, Maximize2, X,
+  ArrowLeft, Building2, Globe, Play, Maximize2, X, Layers
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import {
@@ -17,13 +17,17 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   getProjects,
+  getProjectById,
   deleteProject,
+  deleteBatch,
   downloadFile,
   downloadJobImagesArchive,
   getJobLogs,
+  downloadBatchArchive,
   type JobLogEntry,
   type Project,
 } from "@/lib/api";
+import { useNavigate, useParams } from "react-router-dom";
 
 /* ──────────────────────────────────────────────────── */
 /*  Project Detail View                                 */
@@ -345,6 +349,8 @@ const ProjectDetailView = ({
 /*  Projects Page                                       */
 /* ──────────────────────────────────────────────────── */
 const ProjectsPage = () => {
+  const navigate = useNavigate();
+  const { jobId } = useParams<{ jobId: string }>();
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
@@ -353,8 +359,19 @@ const ProjectsPage = () => {
     void (async () => {
       const data = await getProjects();
       setProjects(data);
+      if (jobId) {
+        const existing = data.find((project) => project.id === jobId);
+        if (existing) {
+          setSelectedProject(existing);
+          return;
+        }
+        const fetched = await getProjectById(jobId);
+        if (fetched) {
+          setSelectedProject(fetched);
+        }
+      }
     })();
-  }, []);
+  }, [jobId]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -435,7 +452,7 @@ const ProjectsPage = () => {
                         alt={project.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
-                      <div className="absolute top-3 right-3">
+                      <div className="absolute top-3 right-3 flex flex-col items-end gap-2">
                         <span
                           className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(
                             project.status
@@ -446,6 +463,12 @@ const ProjectsPage = () => {
                           )}
                           {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
                         </span>
+                        {project.batch_id && (
+                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-primary text-primary-foreground">
+                            <Layers className="h-3 w-3" />
+                            BATCH ({project.total_jobs})
+                          </span>
+                        )}
                       </div>
                       <div className="absolute top-3 left-3">
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-black/50 text-white">
@@ -470,7 +493,13 @@ const ProjectsPage = () => {
 
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => setSelectedProject(project)}
+                          onClick={() => {
+                            if (project.batch_id) {
+                              navigate(`/batch/${project.batch_id}`);
+                            } else {
+                              setSelectedProject(project);
+                            }
+                          }}
                           className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors text-sm font-medium"
                         >
                           <ExternalLink className="h-4 w-4" />
@@ -478,7 +507,13 @@ const ProjectsPage = () => {
                         </button>
                         <button
                           className="p-2 rounded-lg hover:bg-secondary transition-colors"
-                          onClick={() => void downloadJobImagesArchive(project.id, `${project.detail.brandName}_${project.detail.productName}`)}
+                          onClick={() => {
+                            if (project.batch_id) {
+                              void downloadBatchArchive(project.batch_id, project.name);
+                            } else {
+                              void downloadJobImagesArchive(project.id, `${project.detail.brandName}_${project.detail.productName}`);
+                            }
+                          }}
                         >
                           <Download className="h-4 w-4" />
                         </button>
@@ -501,9 +536,11 @@ const ProjectsPage = () => {
       <AlertDialog open={Boolean(projectToDelete)} onOpenChange={(open) => !open && setProjectToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Project?</AlertDialogTitle>
+            <AlertDialogTitle>Delete {projectToDelete?.batch_id ? "Batch" : "Project"}?</AlertDialogTitle>
             <AlertDialogDescription>
-              It will no longer be visible in your Projects list.
+              {projectToDelete?.batch_id 
+                ? "This will delete all jobs in this batch. It will no longer be visible in your list."
+                : "It will no longer be visible in your Projects list."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -513,12 +550,26 @@ const ProjectsPage = () => {
               onClick={() => {
                 if (!projectToDelete) return;
                 void (async () => {
-                  await deleteProject(projectToDelete.id);
-                  setProjects((prev) => prev.filter((project) => project.id !== projectToDelete.id));
-                  if (selectedProject?.id === projectToDelete.id) {
-                    setSelectedProject(null);
+                  try {
+                    if (projectToDelete.batch_id) {
+                      await deleteBatch(projectToDelete.batch_id);
+                    } else {
+                      await deleteProject(projectToDelete.id);
+                    }
+                    setProjects((prev) => prev.filter((project) => {
+                      if (projectToDelete.batch_id) {
+                        return project.batch_id !== projectToDelete.batch_id;
+                      }
+                      return project.id !== projectToDelete.id;
+                    }));
+                    if (selectedProject?.id === projectToDelete.id || (projectToDelete.batch_id && selectedProject?.batch_id === projectToDelete.batch_id)) {
+                      setSelectedProject(null);
+                    }
+                  } catch (error) {
+                    console.error("Failed to delete", error);
+                  } finally {
+                    setProjectToDelete(null);
                   }
-                  setProjectToDelete(null);
                 })();
               }}
             >
