@@ -39,6 +39,7 @@ export interface ProjectDetail {
   dimensions?: string;
   socialLinks?: string[];
   additionalInfo?: Record<string, string>;
+  inputImages?: string[];
   images: string[];
   videoUrl?: string;
 }
