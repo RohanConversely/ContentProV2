@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -28,6 +28,11 @@ import {
   type GeneratedImageResult,
   type JobEventPayload,
 } from "@/lib/api";
+import {
+  clearActiveSingleRun,
+  readActiveSingleRun,
+  writeActiveSingleRun,
+} from "@/lib/active-runs";
 
 export interface ProductFormData {
   brandName: string;
@@ -87,6 +92,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobUpdate, setJobUpdate] = useState<JobEventPayload | null>(null);
   const [jobTimeline, setJobTimeline] = useState<JobEventPayload[]>([]);
+  const resumedJobRef = useRef<string | null>(null);
 
   const updateField = (field: keyof ProductFormData, value: string | string[]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -146,6 +152,118 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
     }
     return Object.keys(additionalInfo).length > 0 ? additionalInfo : undefined;
   };
+
+  useEffect(() => {
+    const persisted = readActiveSingleRun();
+    if (!persisted || persisted.mode !== mode || !persisted.jobId) return;
+
+    setFormData(persisted.formData);
+    setShowResults(true);
+    setIsGenerating(persisted.isGenerating);
+    setGenerationError(persisted.generationError);
+    setGenerationResult(persisted.generationResult);
+    setJobId(persisted.jobId);
+    setJobUpdate(persisted.jobUpdate);
+    setJobTimeline(persisted.jobTimeline);
+
+    if (!persisted.isGenerating || resumedJobRef.current === persisted.jobId) {
+      return;
+    }
+
+    resumedJobRef.current = persisted.jobId;
+    void (async () => {
+      try {
+        const liveJob = await getJob(persisted.jobId!);
+        const generatedImages = liveJob.assets
+          .filter((asset) => asset.asset_type === "generated_image" && !asset.is_deleted)
+          .map((asset) => asset.presigned_url)
+          .filter((value): value is string => Boolean(value));
+
+        setGenerationResult({
+          jobId: liveJob.job_id,
+          status: liveJob.status,
+          currentStage: liveJob.current_stage,
+          generatedImages,
+          assets: liveJob.assets,
+          errorMessage: liveJob.error_message ?? null,
+        });
+
+        if (liveJob.status === "completed") {
+          setIsGenerating(false);
+          clearActiveSingleRun();
+          return;
+        }
+        if (liveJob.status === "failed") {
+          setIsGenerating(false);
+          setGenerationError(liveJob.error_message ?? "Image generation failed.");
+          clearActiveSingleRun();
+          return;
+        }
+
+        const result = await waitForJobCompletion(persisted.jobId!, (update) => {
+          setJobUpdate(update);
+          setJobTimeline((prev) => {
+            const previous = prev[prev.length - 1];
+            if (
+              previous &&
+              previous.stage === update.stage &&
+              previous.status === update.status &&
+              previous.message === update.message
+            ) {
+              return prev;
+            }
+            return [...prev, update];
+          });
+          if (update.stage === "stage_2" && update.status === "running") {
+            void (async () => {
+              try {
+                const refreshedJob = await getJob(persisted.jobId!);
+                const refreshedImages = refreshedJob.assets
+                  .filter((asset) => asset.asset_type === "generated_image" && !asset.is_deleted)
+                  .map((asset) => asset.presigned_url)
+                  .filter((value): value is string => Boolean(value));
+                setGenerationResult((prev) => ({
+                  jobId: refreshedJob.job_id,
+                  status: refreshedJob.status,
+                  currentStage: refreshedJob.current_stage,
+                  generatedImages: refreshedImages,
+                  assets: refreshedJob.assets,
+                  errorMessage: refreshedJob.error_message ?? null,
+                }));
+              } catch {
+                // keep current partial state
+              }
+            })();
+          }
+        });
+
+        setGenerationResult(result);
+        setIsGenerating(false);
+        clearActiveSingleRun();
+      } catch (error) {
+        setGenerationError(error instanceof Error ? error.message : "Image generation failed.");
+        setIsGenerating(false);
+        clearActiveSingleRun();
+      }
+    })();
+  }, [mode]);
+
+  useEffect(() => {
+    if (!showResults) return;
+    writeActiveSingleRun({
+      mode,
+      formData,
+      jobId,
+      isGenerating,
+      generationError,
+      generationResult,
+      jobUpdate,
+      jobTimeline,
+    });
+    if (!isGenerating && (generationResult || generationError)) {
+      clearActiveSingleRun();
+    }
+  }, [mode, formData, jobId, isGenerating, generationError, generationResult, jobUpdate, jobTimeline, showResults]);
 
   const handleGenerate = async () => {
     if (!canGenerate) return;
@@ -233,6 +351,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
         status: result.status,
         message: "Generated images are ready.",
       });
+      clearActiveSingleRun();
     } catch (error) {
       setGenerationError(error instanceof Error ? error.message : "Image generation failed.");
       setJobUpdate({
@@ -240,6 +359,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
         status: "failed",
         message: error instanceof Error ? error.message : "Image generation failed.",
       });
+      clearActiveSingleRun();
     } finally {
       setIsGenerating(false);
     }
@@ -269,12 +389,15 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
         statusMessage={jobUpdate?.message ?? null}
         statusUpdates={jobTimeline}
         onBack={() => setShowResults(false)}
-        onStartOver={onBack}
+        onStartOver={() => {
+          clearActiveSingleRun();
+          onBack();
+        }}
         onCreateVideo={
           mode === "video"
             ? () => {
-                setShowResults(false);
-                setShowVideoCreation(true);
+              setShowResults(false);
+              setShowVideoCreation(true);
               }
             : undefined
         }
@@ -292,7 +415,10 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
       {/* Header */}
       <div className="flex items-center gap-4">
         <button
-          onClick={onBack}
+          onClick={() => {
+            clearActiveSingleRun();
+            onBack();
+          }}
           className="h-10 w-10 rounded-xl border border-border flex items-center justify-center hover:bg-secondary transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
