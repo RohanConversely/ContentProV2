@@ -18,43 +18,7 @@ from app.utils.presigned_urls import generate_url
 router = APIRouter(tags=["assets"])
 
 
-@router.post("/jobs/{job_id}/assets", response_model=AssetResponse)
-@router.post("/jobs/{job_id}/assets/upload", response_model=AssetResponse)
-async def upload_job_asset(
-    job_id: str,
-    file: UploadFile = File(...),
-    asset_type: str = Form(default="raw_image"),
-    stage: str = Form(default="raw"),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> AssetResponse:
-    result = await db.execute(select(Job).where(Job.job_id == job_id, Job.user_id == current_user.id))
-    job = result.scalar_one_or_none()
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found.")
-
-    contents = await file.read()
-    storage_key = f"{job.storage_prefix}/raw/{file.filename}"
-    await storage_service.upload_bytes(contents, storage_key, file.content_type or "application/octet-stream")
-
-    asset = Asset(
-        job_id=job.id,
-        asset_type=asset_type,
-        stage=stage,
-        storage_key=storage_key,
-        original_filename=file.filename,
-        mime_type=file.content_type or "application/octet-stream",
-        size_bytes=len(contents),
-        metadata_json=None,
-    )
-    db.add(asset)
-    job.status = "pending"
-    job.current_stage = "queued"
-    await db.commit()
-    await db.refresh(asset)
-
-    if job.job_type == "image":
-        await queue_pipeline_task(job.job_id)
+def _asset_response(asset: Asset) -> AssetResponse:
     url = generate_url(asset)
     return AssetResponse(
         id=asset.id,
@@ -70,6 +34,62 @@ async def upload_job_asset(
         created_at=asset.created_at,
         presigned_url=url,
     )
+
+
+@router.post("/jobs/{job_id}/assets", response_model=list[AssetResponse])
+@router.post("/jobs/{job_id}/assets/upload", response_model=list[AssetResponse])
+async def upload_job_asset(
+    job_id: str,
+    files: list[UploadFile] = File(...),
+    asset_type: str = Form(default="raw_image"),
+    stage: str = Form(default="raw"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[AssetResponse]:
+    result = await db.execute(select(Job).where(Job.job_id == job_id, Job.user_id == current_user.id))
+    job = result.scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
+    if not files:
+        raise HTTPException(status_code=400, detail="At least one image file is required.")
+
+    raw_asset_result = await db.execute(
+        select(Asset).where(Asset.job_id == job.id, Asset.asset_type == "raw_image", Asset.is_deleted.is_(False))
+    )
+    existing_raw_count = len(raw_asset_result.scalars().all())
+    if existing_raw_count + len(files) > 4:
+        raise HTTPException(status_code=400, detail="A job can include at most 4 source images.")
+
+    created_assets: list[Asset] = []
+    for file in files:
+        contents = await file.read()
+        storage_key = f"{job.storage_prefix}/raw/{file.filename}"
+        await storage_service.upload_bytes(contents, storage_key, file.content_type or "application/octet-stream")
+
+        asset = Asset(
+            job_id=job.id,
+            asset_type=asset_type,
+            stage=stage,
+            storage_key=storage_key,
+            original_filename=file.filename,
+            mime_type=file.content_type or "application/octet-stream",
+            size_bytes=len(contents),
+            metadata_json=None,
+        )
+        db.add(asset)
+        created_assets.append(asset)
+
+    job.status = "pending"
+    job.current_stage = "queued"
+    job.error_message = None
+    await db.commit()
+    for asset in created_assets:
+        await db.refresh(asset)
+
+    if job.job_type == "image":
+        await queue_pipeline_task(job.job_id)
+    return [_asset_response(asset) for asset in created_assets]
 
 
 @router.post("/jobs/{job_id}/assets/remote", response_model=AssetResponse)
@@ -112,20 +132,7 @@ async def upload_remote_job_asset(
     if job.job_type == "image":
         await queue_pipeline_task(job.job_id)
 
-    return AssetResponse(
-        id=asset.id,
-        job_id=asset.job_id,
-        asset_type=asset.asset_type,
-        stage=asset.stage,
-        storage_key=asset.storage_key,
-        original_filename=asset.original_filename,
-        mime_type=asset.mime_type,
-        size_bytes=asset.size_bytes,
-        metadata=asset.metadata_json,
-        is_deleted=asset.is_deleted,
-        created_at=asset.created_at,
-        presigned_url=generate_url(asset),
-    )
+    return _asset_response(asset)
 
 
 @router.get("/jobs/{job_id}/assets", response_model=list[AssetResponse])

@@ -118,6 +118,14 @@ interface BackendJobListResponse {
   total: number;
 }
 
+interface BackendJobLogEntryResponse {
+  level: string;
+  stage: string | null;
+  message: string;
+  context: Record<string, unknown> | null;
+  logged_at: string;
+}
+
 export interface AuthPayload {
   email: string;
   password: string;
@@ -127,8 +135,14 @@ export interface RegisterPayload extends AuthPayload {
   displayName: string;
 }
 
+export interface ChangePasswordPayload {
+  currentPassword: string;
+  newPassword: string;
+  confirmNewPassword: string;
+}
+
 export interface GenerateImagesInput {
-  imageFile: File;
+  imageFiles: File[];
   brandName: string;
   brandWebsite: string;
   productName: string;
@@ -144,6 +158,14 @@ export interface JobEventPayload {
   stage: string;
   status: string;
   message: string;
+}
+
+export interface JobLogEntry {
+  level: string;
+  stage: string | null;
+  message: string;
+  context: Record<string, unknown> | null;
+  loggedAt: string;
 }
 
 export interface JobSubscription {
@@ -400,6 +422,24 @@ export async function getCurrentUser(): Promise<UserProfile> {
   return mapUserProfile(response);
 }
 
+export async function changePassword(payload: ChangePasswordPayload): Promise<void> {
+  await apiJson<{ ok: boolean }>(
+    "/auth/change-password",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        current_password: payload.currentPassword,
+        new_password: payload.newPassword,
+        confirm_new_password: payload.confirmNewPassword,
+      }),
+    },
+    true,
+  );
+}
+
 export function getGoogleLoginUrl(nextPath = "/dashboard"): string {
   const url = new URL(`${API_BASE_URL}/auth/google/login`);
   url.searchParams.set("next_path", nextPath);
@@ -420,7 +460,7 @@ export async function getRecentProjects(): Promise<RecentProjectSummary[]> {
   return response.map(mapRecentProject);
 }
 
-export async function createJob(input: Omit<GenerateImagesInput, "imageFile">): Promise<BackendJobSummaryResponse> {
+export async function createJob(input: Omit<GenerateImagesInput, "imageFiles">): Promise<BackendJobSummaryResponse> {
   return apiJson<BackendJobSummaryResponse>(
     "/jobs",
     {
@@ -445,12 +485,12 @@ export async function createJob(input: Omit<GenerateImagesInput, "imageFile">): 
   );
 }
 
-export async function uploadJobAsset(jobId: string, file: File): Promise<BackendAssetResponse> {
+export async function uploadJobAsset(jobId: string, files: File[]): Promise<BackendAssetResponse[]> {
   const formData = new FormData();
-  formData.append("file", file);
+  files.forEach((file) => formData.append("files", file));
   formData.append("asset_type", "raw_image");
   formData.append("stage", "raw");
-  return apiJson<BackendAssetResponse>(
+  return apiJson<BackendAssetResponse[]>(
     `/jobs/${encodeURIComponent(jobId)}/assets`,
     {
       method: "POST",
@@ -476,6 +516,21 @@ export async function uploadRemoteJobAsset(jobId: string, imageUrl: string): Pro
 
 export async function getJob(jobId: string): Promise<BackendJobResponse> {
   return apiJson<BackendJobResponse>(`/jobs/${encodeURIComponent(jobId)}`, {}, true);
+}
+
+export async function getJobLogs(jobId: string): Promise<JobLogEntry[]> {
+  const response = await apiJson<BackendJobLogEntryResponse[]>(
+    `/jobs/${encodeURIComponent(jobId)}/logs`,
+    {},
+    true,
+  );
+  return response.map((entry) => ({
+    level: entry.level,
+    stage: entry.stage,
+    message: entry.message,
+    context: entry.context,
+    loggedAt: entry.logged_at,
+  }));
 }
 
 export function subscribeToJobEvents(

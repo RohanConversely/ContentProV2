@@ -22,6 +22,7 @@ import GenerationResults from "./GenerationResults";
 import VideoCreation from "./VideoCreation";
 import {
   createJob,
+  getJob,
   uploadJobAsset,
   waitForJobCompletion,
   type GeneratedImageResult,
@@ -85,6 +86,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobUpdate, setJobUpdate] = useState<JobEventPayload | null>(null);
+  const [jobTimeline, setJobTimeline] = useState<JobEventPayload[]>([]);
 
   const updateField = (field: keyof ProductFormData, value: string | string[]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -97,7 +99,10 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
     formData.dimensionLength && formData.dimensionBreadth && formData.dimensionHeight;
 
   const handleImageUpload = useCallback((files: FileList) => {
-    const acceptedFiles = Array.from(files).filter((file) => file.type.startsWith("image/"));
+    const remainingSlots = Math.max(0, 4 - uploadedFiles.length);
+    const acceptedFiles = Array.from(files)
+      .filter((file) => file.type.startsWith("image/"))
+      .slice(0, remainingSlots);
     if (acceptedFiles.length === 0) return;
     const newImages: string[] = [];
     acceptedFiles.forEach((file) => {
@@ -115,7 +120,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
         reader.readAsDataURL(file);
       }
     });
-  }, [formData.productImages]);
+  }, [formData.productImages, uploadedFiles.length]);
 
   const removeImage = (index: number) => {
     updateField(
@@ -149,14 +154,15 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
     setGenerationError(null);
     setGenerationResult(null);
     setJobId(null);
+    setJobTimeline([]);
     setJobUpdate({
       stage: "queued",
       status: "running",
       message: "Creating your image job.",
     });
     try {
-      const primaryImage = uploadedFiles[0];
-      if (!primaryImage) {
+      const imagesToUpload = uploadedFiles.slice(0, 4);
+      if (imagesToUpload.length === 0) {
         throw new Error("Please upload at least one product image.");
       }
 
@@ -183,9 +189,42 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
 
       const completionPromise = waitForJobCompletion(job.job_id, (update) => {
         setJobUpdate(update);
+        setJobTimeline((prev) => {
+          const previous = prev[prev.length - 1];
+          if (
+            previous &&
+            previous.stage === update.stage &&
+            previous.status === update.status &&
+            previous.message === update.message
+          ) {
+            return prev;
+          }
+          return [...prev, update];
+        });
+        if (update.stage === "stage_2" && update.status === "running") {
+          void (async () => {
+            try {
+              const liveJob = await getJob(job.job_id);
+              const generatedImages = liveJob.assets
+                .filter((asset) => asset.asset_type === "generated_image" && !asset.is_deleted)
+                .map((asset) => asset.presigned_url)
+                .filter((value): value is string => Boolean(value));
+              setGenerationResult((prev) => ({
+                jobId: liveJob.job_id,
+                status: liveJob.status,
+                currentStage: liveJob.current_stage,
+                generatedImages,
+                assets: liveJob.assets,
+                errorMessage: liveJob.error_message ?? null,
+              }));
+            } catch {
+              // Keep the current partial state if the live refresh fails.
+            }
+          })();
+        }
       });
 
-      await uploadJobAsset(job.job_id, primaryImage);
+      await uploadJobAsset(job.job_id, imagesToUpload);
 
       const result = await completionPromise;
       setGenerationResult(result);
@@ -228,6 +267,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
         error={generationError}
         statusStage={jobUpdate?.stage ?? null}
         statusMessage={jobUpdate?.message ?? null}
+        statusUpdates={jobTimeline}
         onBack={() => setShowResults(false)}
         onStartOver={onBack}
         onCreateVideo={
@@ -415,6 +455,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
               <input
                 type="file"
                 accept="image/*"
+                multiple
                 onChange={(e) => e.target.files && handleImageUpload(e.target.files)}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               />
@@ -423,8 +464,8 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
                   <Upload className="h-6 w-6 text-primary" />
                 </div>
                 <div className="text-center">
-                  <p className="font-medium">Drop your product image here or click to browse</p>
-                  <p className="text-sm text-muted-foreground mt-1">Supports JPG, PNG, WEBP up to 20MB</p>
+                  <p className="font-medium">Drop up to 4 product images here or click to browse</p>
+                  <p className="text-sm text-muted-foreground mt-1">Supports JPG, PNG, WEBP up to 20MB each</p>
                 </div>
               </div>
             </div>
@@ -452,6 +493,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
                 <input
                   type="file"
                   accept="image/*"
+                  multiple
                   onChange={(e) => e.target.files && handleImageUpload(e.target.files)}
                   className="hidden"
                 />
@@ -459,6 +501,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
               </label>
             </div>
           )}
+          <p className="text-xs text-muted-foreground">{formData.productImages.length}/4 images selected</p>
         </div>
 
         {/* Short Product Description */}
@@ -470,7 +513,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
           <textarea
             value={formData.productDescription}
             onChange={(e) => {
-              if (e.target.value.length <= 150) {
+              if (e.target.value.length <= 250) {
                 updateField("productDescription", e.target.value);
               }
             }}
@@ -479,7 +522,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
             className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all resize-none"
           />
           <p className="text-xs text-muted-foreground text-right">
-            {formData.productDescription.length}/150 characters
+            {formData.productDescription.length}/250 characters
           </p>
         </div>
 

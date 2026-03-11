@@ -18,6 +18,7 @@ env/
 # Output folders
 *_kyc/
 output*/
+storage/
 *.log
 # OS
 .DS_Store

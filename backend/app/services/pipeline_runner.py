@@ -37,8 +37,38 @@ async def emit(job_id: str, stage: str, status: str, message: str, db: AsyncSess
     for queue in EVENT_QUEUES[job_id]:
         await queue.put(event)
     if db is not None:
-        db.add(PipelineLog(job_id=job_id, level=status.upper(), stage=stage, message=message, context=payload))
-        await db.commit()
+        db_job_id = payload.get("db_job_id")
+        if db_job_id:
+            payload = {key: value for key, value in payload.items() if key != "db_job_id"}
+            try:
+                db.add(PipelineLog(job_id=db_job_id, level=status.upper(), stage=stage, message=message, context=payload))
+                await db.commit()
+            except Exception:
+                await db.rollback()
+
+
+async def emit_for_job(job: Job, stage: str, status: str, message: str, db: AsyncSession | None = None) -> None:
+    await emit(
+        job.job_id,
+        stage,
+        status,
+        message,
+        db=None if db is None else db,
+    )
+    if db is not None:
+        try:
+            db.add(
+                PipelineLog(
+                    job_id=job.id,
+                    level=status.upper(),
+                    stage=stage,
+                    message=message,
+                    context={"stage": stage, "status": status, "message": message},
+                )
+            )
+            await db.commit()
+        except Exception:
+            await db.rollback()
 
 
 async def subscribe(job_id: str):
@@ -66,6 +96,17 @@ async def _create_asset(
     original_filename: str | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> Asset:
+    existing_result = await db.execute(
+        select(Asset).where(
+            Asset.job_id == job.id,
+            Asset.storage_key == storage_key,
+            Asset.is_deleted.is_(False),
+        )
+    )
+    existing = existing_result.scalar_one_or_none()
+    if existing is not None:
+        return existing
+
     mime_type = mimetypes.guess_type(str(local_path))[0] or "application/octet-stream"
     size_bytes = local_path.stat().st_size if local_path.exists() else None
     asset = Asset(
@@ -99,6 +140,19 @@ async def _upload_stage_outputs(db: AsyncSession, job: Job, result: dict[str, An
         storage_key = f"{job.storage_prefix}/stage_2/{local_path.name}"
         await storage_service.upload_file(local_path, storage_key)
         await _create_asset(db, job=job, asset_type="generated_image", stage="stage_2", local_path=local_path, storage_key=storage_key)
+
+
+async def _upload_generated_image(db: AsyncSession, job: Job, local_path: Path) -> None:
+    storage_key = f"{job.storage_prefix}/stage_2/{local_path.name}"
+    await storage_service.upload_file(local_path, storage_key)
+    await _create_asset(
+        db,
+        job=job,
+        asset_type="generated_image",
+        stage="stage_2",
+        local_path=local_path,
+        storage_key=storage_key,
+    )
 
 
 async def _upload_job_support_files(
@@ -139,6 +193,68 @@ def _build_job_workspace(job: Job) -> Path:
     return workspace
 
 
+def _parse_log_line(line: str) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(line)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+
+async def _monitor_job_log(job: Job, log_file: Path, stop_event: asyncio.Event) -> None:
+    image_counter = 0
+    uploaded_paths: set[str] = set()
+    position = 0
+
+    while not stop_event.is_set() or log_file.exists():
+        if not log_file.exists():
+            await asyncio.sleep(0.25)
+            continue
+
+        with log_file.open("r", encoding="utf-8") as handle:
+            handle.seek(position)
+            lines = handle.readlines()
+            position = handle.tell()
+
+        for line in lines:
+            payload = _parse_log_line(line)
+            if payload is None:
+                continue
+            message = payload.get("message")
+            context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+
+            if message == "Requesting Product KYC.":
+                async with AsyncSessionLocal() as db:
+                    await emit_for_job(job, "stage_1", "running", "Performing Product KYC", db)
+            elif message == "KYC saved.":
+                async with AsyncSessionLocal() as db:
+                    await emit_for_job(job, "stage_1", "running", "Product KYC complete", db)
+            elif message == "Requesting image generation with KYC.":
+                async with AsyncSessionLocal() as db:
+                    await emit_for_job(job, "stage_2", "running", "Starting image generation", db)
+            elif message == "Image generated.":
+                output_file = context.get("output_file")
+                if not isinstance(output_file, str) or output_file in uploaded_paths:
+                    continue
+                image_counter += 1
+                local_path = Path(output_file).resolve()
+                if local_path.exists():
+                    async with AsyncSessionLocal() as db:
+                        result = await db.execute(select(Job).where(Job.id == job.id))
+                        current_job = result.scalar_one_or_none()
+                        if current_job is None:
+                            continue
+                        await _upload_generated_image(db, current_job, local_path)
+                        await emit_for_job(current_job, "stage_2", "running", f"Generating image {image_counter}", db)
+                    uploaded_paths.add(output_file)
+
+        if stop_event.is_set():
+            break
+        await asyncio.sleep(0.25)
+
+
 def _write_pricing_file(job: Job, workspace: Path) -> tuple[Path, dict[str, Any]]:
     job_log_file = workspace / "job.log"
     pricing_file = workspace / "pricing.json"
@@ -176,20 +292,7 @@ async def run_pipeline_task(job_id: str) -> None:
         if job is None:
             return
 
-        raw_asset_result = await db.execute(
-            select(Asset).where(Asset.job_id == job.id, Asset.asset_type == "raw_image", Asset.is_deleted.is_(False)).order_by(Asset.created_at.desc())
-        )
-        raw_asset = raw_asset_result.scalars().first()
-        if raw_asset is None:
-            job.status = "failed"
-            job.error_message = "No raw image uploaded for job."
-            await db.commit()
-            await emit(job.job_id, "pipeline", "failed", job.error_message, db)
-            return
-
         workspace = _build_job_workspace(job)
-        local_raw_image = workspace / "raw" / (raw_asset.original_filename or "product.jpg")
-        await storage_service.download_file(raw_asset.storage_key, local_raw_image)
 
         ctx = JobContext(
             job_id=job.job_id,
@@ -197,7 +300,7 @@ async def run_pipeline_task(job_id: str) -> None:
             brand_website=job.brand_website,
             product_name=job.product_name,
             product_category=job.product_category,
-            image_path=local_raw_image,
+            image_paths=[],
             social_link_1=job.social_link_1,
             social_link_2=job.social_link_2,
             additional_info=job.additional_input_json,
@@ -205,19 +308,44 @@ async def run_pipeline_task(job_id: str) -> None:
             temperature=0.1,
             workspace_root=workspace,
         )
+        raw_asset_result = await db.execute(
+            select(Asset)
+            .where(Asset.job_id == job.id, Asset.asset_type == "raw_image", Asset.is_deleted.is_(False))
+            .order_by(Asset.created_at.asc())
+        )
+        raw_assets = raw_asset_result.scalars().all()
+        if not raw_assets:
+            job.status = "failed"
+            job.error_message = "No raw image uploaded for job."
+            await db.commit()
+            await emit_for_job(job, "pipeline", "failed", job.error_message, db)
+            return
 
+        image_paths: list[Path] = []
+        for raw_asset in raw_assets[:4]:
+            local_image = workspace / "raw" / (raw_asset.original_filename or "product.jpg")
+            await storage_service.download_file(raw_asset.storage_key, local_image)
+            image_paths.append(local_image)
+        ctx.image_paths = image_paths
+
+        log_stop_event = asyncio.Event()
+        log_monitor_task: asyncio.Task[None] | None = None
         try:
+            log_monitor_task = asyncio.create_task(_monitor_job_log(job, ctx.job_log_file, log_stop_event))
             job.status = "running"
             job.current_stage = "stage_1"
             await db.commit()
-            await emit(job.job_id, "stage_1", "running", "Generating product KYC.", db)
+            await emit_for_job(job, "stage_1", "running", "Generating product KYC.", db)
 
             result_payload = (await run_image_pipeline(ctx)).to_dict()
+
+            log_stop_event.set()
+            await log_monitor_task
 
             job.current_stage = "stage_2"
             job.status = "running"
             await db.commit()
-            await emit(job.job_id, "stage_2", "running", "Uploading generated outputs.", db)
+            await emit_for_job(job, "stage_2", "running", "Uploading generated outputs.", db)
 
             await _upload_stage_outputs(db, job, result_payload)
 
@@ -234,8 +362,14 @@ async def run_pipeline_task(job_id: str) -> None:
             job.current_stage = "stage_2"
             job.error_message = None
             await db.commit()
-            await emit(job.job_id, "stage_2", "completed", "Image pipeline completed.", db)
+            await emit_for_job(job, "stage_2", "completed", "Image pipeline completed.", db)
         except Exception as exc:
+            try:
+                log_stop_event.set()
+                if log_monitor_task is not None:
+                    await log_monitor_task
+            except Exception:
+                pass
             job.status = "failed"
             job.error_message = str(exc)
             await db.commit()
@@ -248,7 +382,7 @@ async def run_pipeline_task(job_id: str) -> None:
                 )
             except Exception:
                 pass
-            await emit(job.job_id, job.current_stage or "pipeline", "failed", str(exc), db)
+            await emit_for_job(job, job.current_stage or "pipeline", "failed", str(exc), db)
             if isinstance(exc, PipelineStageError):
                 return
             raise

@@ -44,11 +44,12 @@ def get_kyc_output_path(image_path: str, brand_name: str, output_dir: str) -> Pa
 
 
 def generate_image_kyc(
-    image_path: str,
     brand_name: str,
     brand_website: str,
     product_name: str,
     product_category: str,
+    image_paths: list[str] | None = None,
+    image_path: str | None = None,
     social_link_1: str | None = None,
     social_link_2: str | None = None,
     additional_info: dict[str, Any] | None = None,
@@ -81,9 +82,13 @@ def generate_image_kyc(
             if value:
                 additional_info_text += f"- {key}: {value}\n"
 
+    resolved_image_paths = [str(Path(path).resolve()) for path in (image_paths or ([image_path] if image_path else []))]
+    if not resolved_image_paths:
+        raise ValueError("At least one product image is required for Product KYC generation.")
+
     user_message = f"""Generate the Product KYC based on the following inputs:
 
-**Product Image:** [Attached image]
+**Product Images:** [{len(resolved_image_paths)} attached image(s)]
 **Brand Name:** {brand_name}
 **Brand Website:** {brand_website}
 **Product Name:** {product_name}
@@ -94,26 +99,30 @@ def generate_image_kyc(
 
 {prompt_template}"""
 
-    with open(image_path, "rb") as image_file:
-        image_bytes = image_file.read()
+    content = [{"type": "input_text", "text": user_message}]
+    for resolved_image_path in resolved_image_paths:
+        with open(resolved_image_path, "rb") as image_file:
+            image_bytes = image_file.read()
 
-    mime_type, _ = mimetypes.guess_type(image_path)
-    if not mime_type:
-        raise ValueError(f"Could not determine MIME type for image: {image_path}")
+        mime_type, _ = mimetypes.guess_type(resolved_image_path)
+        if not mime_type:
+            raise ValueError(f"Could not determine MIME type for image: {resolved_image_path}")
 
-    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
-    image_data_url = f"data:{mime_type};base64,{image_b64}"
+        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+        image_data_url = f"data:{mime_type};base64,{image_b64}"
+        content.append({"type": "input_image", "image_url": image_data_url})
 
     stage_logger.info(
         "Requesting Product KYC.",
         with_context(
             log_context,
             {
-                "image_path": str(Path(image_path).resolve()),
+                "image_path": resolved_image_paths[0],
                 "brand_name": brand_name,
                 "brand_website": brand_website,
                 "product_name": product_name,
                 "product_category": product_category,
+                "image_paths": resolved_image_paths,
                 "social_link_1": social_link_1,
                 "social_link_2": social_link_2,
                 "additional_info": additional_info,
@@ -128,8 +137,7 @@ def generate_image_kyc(
             {
                 "role": "user",
                 "content": [
-                    {"type": "input_text", "text": user_message},
-                    {"type": "input_image", "image_url": image_data_url},
+                    *content,
                 ],
             }
         ],
@@ -139,7 +147,7 @@ def generate_image_kyc(
     log_usage(stage_logger, response, with_context(log_context, {"operation": "product_kyc"}))
     kyc_json = json.loads(response.output_text)
 
-    output_file = get_kyc_output_path(image_path, brand_name, str(output_path))
+    output_file = get_kyc_output_path(resolved_image_paths[0], brand_name, str(output_path))
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(kyc_json, f, indent=2, ensure_ascii=False)
 
@@ -158,7 +166,7 @@ def generate_image_kyc(
         "brand_name": brand_name,
         "product_name": product_name,
         "product_category": product_category,
-        "image_path": str(Path(image_path).resolve()),
+        "image_paths": resolved_image_paths,
     }
 
 
@@ -178,7 +186,7 @@ def run_cli(args: argparse.Namespace) -> int:
                 stage_logger.warning("Failed to decode additional-info JSON", context)
 
         result = generate_image_kyc(
-            image_path=image_path,
+            image_paths=[image_path],
             brand_name=args.brand_name,
             brand_website=args.brand_website,
             product_name=args.product_name,

@@ -8,7 +8,7 @@ from .orchestrator import JobContext, build_job_id, run_image_pipeline
 
 async def run_single_product_upload(
     *,
-    image_path: str | Path,
+    image_paths: list[str | Path],
     brand_name: str,
     brand_website: str,
     product_name: str,
@@ -25,7 +25,7 @@ async def run_single_product_upload(
         brand_website=brand_website,
         product_name=product_name,
         product_category=product_category,
-        image_path=Path(image_path).resolve(),
+        image_paths=[Path(image_path).resolve() for image_path in image_paths],
         social_link_1=social_link_1,
         social_link_2=social_link_2,
         additional_info=additional_info,

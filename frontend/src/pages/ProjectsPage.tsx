@@ -5,7 +5,15 @@ import {
   ArrowLeft, Building2, Globe, Play, Maximize2, X,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
-import { getProjects, deleteProject, downloadFile, downloadJobImagesArchive, type Project } from "@/lib/api";
+import {
+  getProjects,
+  deleteProject,
+  downloadFile,
+  downloadJobImagesArchive,
+  getJobLogs,
+  type JobLogEntry,
+  type Project,
+} from "@/lib/api";
 
 /* ──────────────────────────────────────────────────── */
 /*  Project Detail View                                 */
@@ -18,7 +26,31 @@ const ProjectDetailView = ({
   onBack: () => void;
 }) => {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [jobLogs, setJobLogs] = useState<JobLogEntry[]>([]);
+  const [logsError, setLogsError] = useState<string | null>(null);
   const { detail } = project;
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const logs = await getJobLogs(project.id);
+        if (!cancelled) {
+          setJobLogs(logs);
+          setLogsError(null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setJobLogs([]);
+          setLogsError(error instanceof Error ? error.message : "Unable to load job logs.");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id]);
+
   const handleDownloadImage = async (src: string, index: number) => {
     await downloadFile(src, `${project.name || "project-image"}-${index + 1}.png`);
   };
@@ -143,6 +175,30 @@ const ProjectDetailView = ({
             </div>
           </div>
         )}
+      </div>
+
+      <div className="space-y-3">
+        <h3 className="font-display text-lg font-semibold">Job Logs</h3>
+        <div className="rounded-xl border border-border bg-card/60 p-4">
+          {logsError ? (
+            <p className="text-sm text-destructive">{logsError}</p>
+          ) : jobLogs.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No logs recorded for this job yet.</p>
+          ) : (
+            <div className="max-h-80 space-y-2 overflow-y-auto font-mono text-xs">
+              {jobLogs.map((log, index) => (
+                <div key={`${log.loggedAt}-${index}`} className="rounded-lg border border-border/80 bg-background/60 p-3">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                    <span>{new Date(log.loggedAt).toLocaleString()}</span>
+                    <span>{log.level}</span>
+                    <span>{log.stage || "pipeline"}</span>
+                  </div>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-foreground">{log.message}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Generated Images */}
