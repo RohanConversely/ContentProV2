@@ -7,6 +7,7 @@ import re
 import tempfile
 import urllib.parse
 import urllib.request
+from html import unescape
 from pathlib import Path
 from typing import Any
 
@@ -66,6 +67,22 @@ def _extract_drive_file_id(image_url: str) -> str | None:
     if "id" in query and query["id"]:
         return query["id"][0]
     return None
+
+
+def _extract_drive_folder_parts(folder_url: str) -> tuple[str | None, str | None]:
+    parsed = urllib.parse.urlparse(folder_url)
+    if "drive.google.com" not in parsed.netloc:
+        return None, None
+
+    match = re.search(r"/drive/folders/([^/?#]+)", parsed.path)
+    if not match:
+        query = urllib.parse.parse_qs(parsed.query)
+        folder_id = query.get("id", [None])[0]
+    else:
+        folder_id = match.group(1)
+
+    resource_key = urllib.parse.parse_qs(parsed.query).get("resourcekey", [None])[0]
+    return folder_id, resource_key
 
 
 def _extract_filename(image_url: str, response: Any) -> str:
@@ -157,6 +174,85 @@ def _download_remote_image_payload(image_url: str) -> tuple[bytes, str, str]:
     return content, mime_type, filename
 
 
+def _build_drive_embedded_folder_url(folder_url: str) -> str:
+    folder_id, resource_key = _extract_drive_folder_parts(folder_url)
+    if not folder_id:
+        raise ValueError("Invalid Google Drive folder URL.")
+
+    query = {"id": folder_id}
+    if resource_key:
+        query["resourcekey"] = resource_key
+    return f"https://drive.google.com/embeddedfolderview?{urllib.parse.urlencode(query)}#list"
+
+
+def _extract_drive_folder_candidate_urls(folder_html: str) -> list[str]:
+    candidates: list[str] = []
+    seen: set[str] = set()
+
+    for match in re.finditer(r'href="([^"]*?/file/d/[^"]+)"', folder_html):
+        href = unescape(match.group(1))
+        if href.startswith("//"):
+            href = f"https:{href}"
+        elif href.startswith("/"):
+            href = urllib.parse.urljoin("https://drive.google.com", href)
+        if href not in seen:
+            seen.add(href)
+            candidates.append(href)
+
+    if candidates:
+        return candidates
+
+    for match in re.finditer(r"/file/d/([A-Za-z0-9_-]{10,})", folder_html):
+        href = f"https://drive.google.com/file/d/{match.group(1)}/view"
+        if href not in seen:
+            seen.add(href)
+            candidates.append(href)
+
+    return candidates
+
+
+def _download_drive_folder_image_payloads(folder_url: str, max_images: int = 3) -> list[tuple[bytes, str, str, str]]:
+    folder_id, _resource_key = _extract_drive_folder_parts(folder_url)
+    if not folder_id:
+        raise ValueError("Invalid Google Drive folder URL.")
+
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    folder_request = urllib.request.Request(
+        _build_drive_embedded_folder_url(folder_url),
+        headers={
+            "User-Agent": "Mozilla/5.0 ContentPro/1.0",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        },
+    )
+
+    with opener.open(folder_request, timeout=30) as response:
+        html = response.read().decode("utf-8", errors="ignore")
+
+    candidate_urls = _extract_drive_folder_candidate_urls(html)
+    if not candidate_urls:
+        raise ValueError("No downloadable files were found in the public Google Drive folder.")
+
+    downloaded: list[tuple[bytes, str, str, str]] = []
+    failures: list[str] = []
+    for candidate_url in candidate_urls:
+        try:
+            content, mime_type, filename = _download_remote_image_payload(candidate_url)
+        except Exception as exc:
+            failures.append(str(exc))
+            continue
+        if not mime_type.startswith("image/"):
+            continue
+        downloaded.append((content, mime_type, filename, candidate_url))
+        if len(downloaded) >= max(1, min(max_images, 3)):
+            break
+
+    if downloaded:
+        return downloaded
+
+    detail = failures[0] if failures else "Folder did not contain downloadable public images."
+    raise ValueError(detail)
+
+
 async def persist_upload_file(file: UploadFile) -> Path:
     suffix = Path(file.filename or "").suffix or ".bin"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=_prepare_root(UPLOAD_ROOT)) as handle:
@@ -186,6 +282,10 @@ async def download_remote_image(image_url: str) -> Path:
 
 async def download_remote_image_bytes(image_url: str) -> tuple[bytes, str, str]:
     return await asyncio.to_thread(_download_remote_image_payload, image_url)
+
+
+async def download_drive_folder_image_bytes(folder_url: str, max_images: int = 3) -> list[tuple[bytes, str, str, str]]:
+    return await asyncio.to_thread(_download_drive_folder_image_payloads, folder_url, max_images)
 
 
 async def run_single_image_job(

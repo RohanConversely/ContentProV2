@@ -516,6 +516,20 @@ export async function uploadRemoteJobAsset(jobId: string, imageUrl: string): Pro
   );
 }
 
+export async function uploadRemoteFolderAssets(jobId: string, folderUrl: string, maxImages = 3): Promise<BackendAssetResponse[]> {
+  return apiJson<BackendAssetResponse[]>(
+    `/jobs/${encodeURIComponent(jobId)}/assets/remote-folder`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ folder_url: folderUrl, max_images: maxImages }),
+    },
+    true,
+  );
+}
+
 export async function getJob(jobId: string): Promise<BackendJobResponse> {
   return apiJson<BackendJobResponse>(`/jobs/${encodeURIComponent(jobId)}`, {}, true);
 }

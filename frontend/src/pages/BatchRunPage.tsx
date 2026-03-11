@@ -9,6 +9,7 @@ import type { ProductFormData } from "@/components/CreationWizard";
 import {
   createJob,
   getJob,
+  uploadRemoteFolderAssets,
   uploadRemoteJobAsset,
   waitForJobCompletion,
   type JobEventPayload,
@@ -25,6 +26,7 @@ type BatchJobStatus = "queued" | "creating" | "uploading" | "running" | "complet
 interface BatchJobRunPayload {
   id: string;
   mode: BatchMode;
+  sourceType: "image_link" | "drive_folder";
   productData: ProductFormData;
 }
 
@@ -78,7 +80,7 @@ const BatchRunPage = () => {
     if (jobStates.length === 0) return;
     writeActiveBatchRun({
       mode: defaultMode,
-      jobs: jobStates.map(({ id, mode, productData }) => ({ id, mode, productData })),
+      jobs: jobStates.map(({ id, mode, sourceType, productData }) => ({ id, mode, sourceType, productData })),
       jobStates,
       activeJobId,
     });
@@ -170,13 +172,17 @@ const BatchRunPage = () => {
 
           const sourceImageUrl = localJob.productData.productImages[0];
           if (!sourceImageUrl) {
-            throw new Error("Batch row is missing an image URL.");
+            throw new Error(localJob.sourceType === "drive_folder" ? "Batch row is missing a folder URL." : "Batch row is missing an image URL.");
           }
 
           const liveJob = await getJob(backendJobId);
           const hasRawImage = liveJob.assets.some((asset) => asset.asset_type === "raw_image" && !asset.is_deleted);
           if (!hasRawImage) {
-            await uploadRemoteJobAsset(backendJobId, sourceImageUrl);
+            if (localJob.sourceType === "drive_folder") {
+              await uploadRemoteFolderAssets(backendJobId, sourceImageUrl, 3);
+            } else {
+              await uploadRemoteJobAsset(backendJobId, sourceImageUrl);
+            }
           }
 
           const completionPromise = waitForJobCompletion(backendJobId, (update: JobEventPayload) => {
