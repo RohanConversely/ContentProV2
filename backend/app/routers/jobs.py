@@ -30,6 +30,7 @@ from app.services.pipeline_runner import hydrate_job_assets, subscribe
 from app.services.storage import storage_service
 
 router = APIRouter(tags=["jobs"])
+SOFT_DELETED_STATUS = "deleted"
 
 
 def _job_summary(job: Job) -> JobSummaryResponse:
@@ -44,6 +45,10 @@ def _job_summary(job: Job) -> JobSummaryResponse:
         created_at=job.created_at,
         updated_at=job.updated_at,
     )
+
+
+def _active_job_query(*conditions):
+    return select(Job).where(Job.status != SOFT_DELETED_STATUS, *conditions)
 
 
 @router.post("/jobs", response_model=JobSummaryResponse)
@@ -87,8 +92,8 @@ async def list_jobs(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> JobListResponse:
-    query = select(Job).where(Job.user_id == current_user.id)
-    count_query = select(func.count()).select_from(Job).where(Job.user_id == current_user.id)
+    query = select(Job).where(Job.user_id == current_user.id, Job.status != SOFT_DELETED_STATUS)
+    count_query = select(func.count()).select_from(Job).where(Job.user_id == current_user.id, Job.status != SOFT_DELETED_STATUS)
     if status:
         query = query.where(Job.status == status)
         count_query = count_query.where(Job.status == status)
@@ -106,7 +111,12 @@ async def recent_jobs(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[RecentJobResponse]:
-    result = await db.execute(select(Job).where(Job.user_id == current_user.id).order_by(Job.created_at.desc()).limit(limit))
+    result = await db.execute(
+        select(Job)
+        .where(Job.user_id == current_user.id, Job.status != SOFT_DELETED_STATUS)
+        .order_by(Job.created_at.desc())
+        .limit(limit)
+    )
     jobs = result.scalars().all()
     response: list[RecentJobResponse] = []
     for job in jobs:
@@ -130,7 +140,7 @@ async def get_job(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> JobResponse:
-    result = await db.execute(select(Job).where(Job.job_id == job_id, Job.user_id == current_user.id))
+    result = await db.execute(_active_job_query(Job.job_id == job_id, Job.user_id == current_user.id))
     job = result.scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
@@ -184,7 +194,7 @@ async def stream_job_events(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_from_stream),
 ):
-    result = await db.execute(select(Job).where(Job.job_id == job_id, Job.user_id == current_user.id))
+    result = await db.execute(_active_job_query(Job.job_id == job_id, Job.user_id == current_user.id))
     job = result.scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
@@ -197,7 +207,7 @@ async def get_job_logs(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[JobLogEntryResponse]:
-    result = await db.execute(select(Job).where(Job.job_id == job_id, Job.user_id == current_user.id))
+    result = await db.execute(_active_job_query(Job.job_id == job_id, Job.user_id == current_user.id))
     job = result.scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
@@ -226,7 +236,7 @@ async def delete_job(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, bool]:
-    result = await db.execute(select(Job).where(Job.job_id == job_id, Job.user_id == current_user.id))
+    result = await db.execute(_active_job_query(Job.job_id == job_id, Job.user_id == current_user.id))
     job = result.scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
@@ -234,7 +244,7 @@ async def delete_job(
     asset_result = await db.execute(select(Asset).where(Asset.job_id == job.id, Asset.is_deleted.is_(False)))
     for asset in asset_result.scalars().all():
         asset.is_deleted = True
-    job.status = "deleted"
+    job.status = SOFT_DELETED_STATUS
     await db.commit()
     return {"ok": True}
 
@@ -245,7 +255,7 @@ async def get_pricing(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> PricingSnapshotResponse:
-    result = await db.execute(select(Job).where(Job.job_id == job_id, Job.user_id == current_user.id))
+    result = await db.execute(_active_job_query(Job.job_id == job_id, Job.user_id == current_user.id))
     job = result.scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
@@ -272,7 +282,7 @@ async def download_job_images_archive(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(select(Job).where(Job.job_id == job_id, Job.user_id == current_user.id))
+    result = await db.execute(_active_job_query(Job.job_id == job_id, Job.user_id == current_user.id))
     job = result.scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")

@@ -6,6 +6,16 @@ import {
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   getProjects,
   deleteProject,
   downloadFile,
@@ -337,6 +347,7 @@ const ProjectDetailView = ({
 const ProjectsPage = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -473,10 +484,7 @@ const ProjectsPage = () => {
                         </button>
                         <button
                           className="p-2 rounded-lg hover:bg-secondary transition-colors text-destructive"
-                          onClick={async () => {
-                            await deleteProject(project.id);
-                            setProjects((prev) => prev.filter((p) => p.id !== project.id));
-                          }}
+                          onClick={() => setProjectToDelete(project)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -489,6 +497,36 @@ const ProjectsPage = () => {
           </>
         )}
       </div>
+
+      <AlertDialog open={Boolean(projectToDelete)} onOpenChange={(open) => !open && setProjectToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Project?</AlertDialogTitle>
+            <AlertDialogDescription>
+              It will no longer be visible in your Projects list.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (!projectToDelete) return;
+                void (async () => {
+                  await deleteProject(projectToDelete.id);
+                  setProjects((prev) => prev.filter((project) => project.id !== projectToDelete.id));
+                  if (selectedProject?.id === projectToDelete.id) {
+                    setSelectedProject(null);
+                  }
+                  setProjectToDelete(null);
+                })();
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
