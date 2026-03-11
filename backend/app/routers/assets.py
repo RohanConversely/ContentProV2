@@ -9,8 +9,8 @@ from app.models.asset import Asset
 from app.models.job import Job
 from app.models.user import User
 from app.routers.auth import get_current_user
-from app.schemas.asset import AssetResponse, AssetUrlResponse, RemoteAssetCreateRequest
-from app.services.image_pipeline import download_remote_image_bytes
+from app.schemas.asset import AssetResponse, AssetUrlResponse, RemoteAssetCreateRequest, RemoteFolderAssetCreateRequest
+from app.services.image_pipeline import download_drive_folder_image_bytes, download_remote_image_bytes
 from app.services.pipeline_runner import queue_pipeline_task
 from app.services.storage import storage_service
 from app.utils.presigned_urls import generate_url
@@ -133,6 +133,71 @@ async def upload_remote_job_asset(
         await queue_pipeline_task(job.job_id)
 
     return _asset_response(asset)
+
+
+@router.post("/jobs/{job_id}/assets/remote-folder", response_model=list[AssetResponse])
+async def upload_remote_job_folder_assets(
+    job_id: str,
+    payload: RemoteFolderAssetCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[AssetResponse]:
+    result = await db.execute(select(Job).where(Job.job_id == job_id, Job.user_id == current_user.id))
+    job = result.scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
+    raw_asset_result = await db.execute(
+        select(Asset).where(Asset.job_id == job.id, Asset.asset_type == "raw_image", Asset.is_deleted.is_(False))
+    )
+    existing_raw_count = len(raw_asset_result.scalars().all())
+
+    max_images = max(1, min(payload.max_images, 3))
+    if existing_raw_count >= 4:
+        raise HTTPException(status_code=400, detail="A job can include at most 4 source images.")
+
+    try:
+        folder_images = await download_drive_folder_image_bytes(
+            payload.folder_url,
+            max_images=min(max_images, 4 - existing_raw_count),
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Unable to download folder images: {exc}") from exc
+
+    created_assets: list[Asset] = []
+    for index, (contents, mime_type, filename, source_url) in enumerate(folder_images, start=1):
+        stored_filename = f"{index:02d}_{filename}"
+        storage_key = f"{job.storage_prefix}/raw/{stored_filename}"
+        await storage_service.upload_bytes(contents, storage_key, mime_type)
+
+        asset = Asset(
+            job_id=job.id,
+            asset_type="raw_image",
+            stage="raw",
+            storage_key=storage_key,
+            original_filename=stored_filename,
+            mime_type=mime_type,
+            size_bytes=len(contents),
+            metadata_json={
+                "source_folder_url": payload.folder_url,
+                "source_image_url": source_url,
+                "folder_image_index": index,
+            },
+        )
+        db.add(asset)
+        created_assets.append(asset)
+
+    job.status = "pending"
+    job.current_stage = "queued"
+    job.error_message = None
+    await db.commit()
+    for asset in created_assets:
+        await db.refresh(asset)
+
+    if job.job_type == "image":
+        await queue_pipeline_task(job.job_id)
+
+    return [_asset_response(asset) for asset in created_assets]
 
 
 @router.get("/jobs/{job_id}/assets", response_model=list[AssetResponse])

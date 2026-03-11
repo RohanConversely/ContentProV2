@@ -27,3 +27,8 @@ class AssetUrlResponse(BaseModel):
 
 class RemoteAssetCreateRequest(BaseModel):
     image_url: str
+
+
+class RemoteFolderAssetCreateRequest(BaseModel):
+    folder_url: str
+    max_images: int = 3

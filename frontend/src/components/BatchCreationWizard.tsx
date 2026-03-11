@@ -9,6 +9,7 @@ import type { ProductFormData } from "./CreationWizard";
 import { writeActiveBatchRun } from "@/lib/active-runs";
 
 type BatchMode = "images" | "video";
+type BatchSourceType = "image_link" | "drive_folder";
 
 type BatchRowInput = {
   brandName: string;
@@ -34,6 +35,7 @@ type BatchJob = BatchRowInput & {
 type BatchJobRunPayload = {
   id: string;
   mode: BatchMode;
+  sourceType: BatchSourceType;
   productData: ProductFormData;
 };
 
@@ -127,7 +129,40 @@ async function parseXlsx(file: File): Promise<Record<string, unknown>[]> {
   if (!firstSheetName) return [];
   const sheet = workbook.Sheets[firstSheetName];
   if (!sheet) return [];
-  return XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+  const range = XLSX.utils.decode_range(sheet["!ref"] ?? "A1:A1");
+  const headers: string[] = [];
+
+  for (let col = range.s.c; col <= range.e.c; col += 1) {
+    const cellAddress = XLSX.utils.encode_cell({ r: range.s.r, c: col });
+    const cell = sheet[cellAddress] as XLSX.CellObject | undefined;
+    headers.push(safeString(cell?.v));
+  }
+
+  const records: Record<string, unknown>[] = [];
+  for (let row = range.s.r + 1; row <= range.e.r; row += 1) {
+    const record: Record<string, unknown> = {};
+    let hasValue = false;
+
+    for (let col = range.s.c; col <= range.e.c; col += 1) {
+      const header = headers[col - range.s.c];
+      if (!header) continue;
+
+      const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+      const cell = sheet[cellAddress] as (XLSX.CellObject & { l?: { Target?: string } }) | undefined;
+      const hyperlinkTarget = cell?.l?.Target;
+      const value = hyperlinkTarget ?? safeString(cell?.v);
+      record[header] = value;
+      if (safeString(value).length > 0) {
+        hasValue = true;
+      }
+    }
+
+    if (hasValue) {
+      records.push(record);
+    }
+  }
+
+  return records;
 }
 
 function parseRecordsToJobs(records: Record<string, unknown>[]): BatchJob[] {
@@ -235,6 +270,7 @@ export default function BatchCreationWizard({
   const [jobs, setJobs] = useState<BatchJob[]>([]);
   const [columnHeaders, setColumnHeaders] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [sourceType, setSourceType] = useState<BatchSourceType>("image_link");
   const isRunning = false;
 
   const validJobs = useMemo(() => jobs.filter((j) => j.errors.length === 0), [jobs]);
@@ -351,6 +387,7 @@ export default function BatchCreationWizard({
       return {
         id: j.id,
         mode,
+        sourceType,
         productData,
       };
     });
@@ -397,10 +434,43 @@ export default function BatchCreationWizard({
           <h2 className="font-display text-2xl md:text-3xl font-bold">
             {mode === "images" ? "Batch: Generate A+ Images" : "Batch: Generate Video"}
           </h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Upload a CSV/XLSX, review rows, select jobs, and run generation on the batch.
-          </p>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Upload a CSV/XLSX, review rows, select jobs, and run generation on the batch.
+            </p>
+          </div>
         </div>
+
+      <div className="rounded-xl border border-border bg-card/60 p-4">
+        <p className="text-sm font-medium mb-3">Batch Source Type</p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setSourceType("image_link")}
+            className={`px-4 py-2 rounded-lg border text-sm transition-colors ${
+              sourceType === "image_link"
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border hover:bg-secondary"
+            }`}
+          >
+            Image Links
+          </button>
+          <button
+            type="button"
+            onClick={() => setSourceType("drive_folder")}
+            className={`px-4 py-2 rounded-lg border text-sm transition-colors ${
+              sourceType === "drive_folder"
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border hover:bg-secondary"
+            }`}
+          >
+            Google Drive Folder Links
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {sourceType === "drive_folder"
+            ? 'Each row should contain a public Google Drive folder link in the "image link" column. The first up to 3 images in that folder will be used.'
+            : 'Each row should contain one direct image link in the "image link" column.'}
+        </p>
       </div>
 
       {/* Upload box */}
