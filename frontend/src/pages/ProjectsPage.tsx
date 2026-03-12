@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FolderOpen, Image, Video, Clock, Trash2, Download, ExternalLink,
-  ArrowLeft, Building2, Globe, Play, Maximize2, X, Layers
+  ArrowLeft, Building2, Globe, Play, Maximize2, X, Layers, Loader2, RefreshCw
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import {
@@ -24,6 +24,8 @@ import {
   downloadJobImagesArchive,
   getJobLogs,
   downloadBatchArchive,
+  regenerateJobImages,
+  waitForJobCompletion,
   type JobLogEntry,
   type Project,
 } from "@/lib/api";
@@ -39,16 +41,28 @@ const ProjectDetailView = ({
   project: Project;
   onBack: () => void;
 }) => {
+  const [localProject, setLocalProject] = useState(project);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [jobLogs, setJobLogs] = useState<JobLogEntry[]>([]);
   const [logsError, setLogsError] = useState<string | null>(null);
-  const { detail } = project;
+  const [activeGenerationId, setActiveGenerationId] = useState<string | null>(project.detail.activeGenerationId ?? null);
+  const [additionalDescription, setAdditionalDescription] = useState("");
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [regenerationError, setRegenerationError] = useState<string | null>(null);
+  const [regenerationTimeline, setRegenerationTimeline] = useState<{ stage: string; status: string; message: string }[]>([]);
+  const [regenerationStatus, setRegenerationStatus] = useState<string | null>(null);
+  const { detail } = localProject;
+
+  useEffect(() => {
+    setLocalProject(project);
+    setActiveGenerationId(project.detail.activeGenerationId ?? null);
+  }, [project]);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const logs = await getJobLogs(project.id);
+        const logs = await getJobLogs(localProject.id);
         if (!cancelled) {
           setJobLogs(logs);
           setLogsError(null);
@@ -63,13 +77,89 @@ const ProjectDetailView = ({
     return () => {
       cancelled = true;
     };
-  }, [project.id]);
+  }, [localProject.id]);
+
+  const generations = detail.generations ?? [];
+  const selectedGeneration =
+    generations.find((generation) => generation.id === activeGenerationId) ??
+    generations[generations.length - 1];
+  const displayImages = selectedGeneration?.images ?? detail.images;
 
   const handleDownloadImage = async (src: string, index: number) => {
-    await downloadFile(src, `${project.name || "project-image"}-${index + 1}.png`);
+    await downloadFile(src, `${localProject.name || "project-image"}-${index + 1}.png`);
   };
   const handleDownloadAll = async () => {
-    await downloadJobImagesArchive(project.id, `${detail.brandName}_${detail.productName}`);
+    await downloadJobImagesArchive(localProject.id, `${detail.brandName}_${detail.productName}`, selectedGeneration?.id ?? null);
+  };
+
+  const handleRegenerate = async () => {
+    if (!additionalDescription.trim()) return;
+
+    setIsRegenerating(true);
+    setRegenerationError(null);
+    setRegenerationTimeline([]);
+    setRegenerationStatus("Queueing image regeneration.");
+    try {
+      const queuedGeneration = await regenerateJobImages(localProject.id, additionalDescription.trim());
+      setLocalProject((prev) => ({
+        ...prev,
+        status: "processing",
+        detail: {
+          ...prev.detail,
+          activeGenerationId: queuedGeneration.id,
+          generations: [
+            ...(prev.detail.generations ?? []),
+            {
+              id: queuedGeneration.id,
+              roundNumber: queuedGeneration.roundNumber,
+              additionalDescription: queuedGeneration.additionalDescription ?? undefined,
+              status: queuedGeneration.status,
+              createdAt: queuedGeneration.createdAt,
+              images: [],
+            },
+          ],
+        },
+      }));
+      setActiveGenerationId(queuedGeneration.id);
+
+      await waitForJobCompletion(localProject.id, (update) => {
+        setRegenerationStatus(update.message);
+        setRegenerationTimeline((prev) => {
+          const previous = prev[prev.length - 1];
+          if (
+            previous &&
+            previous.stage === update.stage &&
+            previous.status === update.status &&
+            previous.message === update.message
+          ) {
+            return prev;
+          }
+          return [...prev, update];
+        });
+        if (update.stage === "stage_2" && update.status === "running") {
+          void (async () => {
+            const refreshedProject = await getProjectById(localProject.id);
+            if (refreshedProject) {
+              setLocalProject(refreshedProject);
+              setActiveGenerationId(refreshedProject.detail.activeGenerationId ?? queuedGeneration.id);
+            }
+          })();
+        }
+      });
+
+      const refreshedProject = await getProjectById(localProject.id);
+      if (refreshedProject) {
+        setLocalProject(refreshedProject);
+        setActiveGenerationId(refreshedProject.detail.activeGenerationId ?? null);
+      }
+      const refreshedLogs = await getJobLogs(localProject.id);
+      setJobLogs(refreshedLogs);
+      setAdditionalDescription("");
+    } catch (submitError) {
+      setRegenerationError(submitError instanceof Error ? submitError.message : "Unable to regenerate images.");
+    } finally {
+      setIsRegenerating(false);
+    }
   };
 
   return (
@@ -87,10 +177,10 @@ const ProjectDetailView = ({
           <ArrowLeft className="h-4 w-4" />
         </button>
         <div>
-          <h2 className="font-display text-2xl md:text-3xl font-bold">{project.name}</h2>
+          <h2 className="font-display text-2xl md:text-3xl font-bold">{localProject.name}</h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {project.type === "video" ? "Video + Images" : "Images"} &middot; Created{" "}
-            {new Date(project.createdAt).toLocaleDateString("en-US", {
+            {localProject.type === "video" ? "Video + Images" : "Images"} &middot; Created{" "}
+            {new Date(localProject.createdAt).toLocaleDateString("en-US", {
               month: "short",
               day: "numeric",
               year: "numeric",
@@ -108,7 +198,7 @@ const ProjectDetailView = ({
             </div>
             <div>
               <p className="text-sm font-semibold">{detail.productName}</p>
-              <p className="text-xs text-muted-foreground">{detail.images.length} images generated</p>
+              <p className="text-xs text-muted-foreground">{displayImages.length} images generated</p>
             </div>
           </div>
           {detail.brandWebsite && (
@@ -152,6 +242,25 @@ const ProjectDetailView = ({
                 </button>
               ))}
             </div>
+          </div>
+        )}
+
+        {generations.length > 1 && (
+          <div className="pt-3 border-t border-border flex flex-wrap gap-2">
+            {generations.map((generation) => (
+              <button
+                key={generation.id}
+                type="button"
+                onClick={() => setActiveGenerationId(generation.id)}
+                className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                  generation.id === selectedGeneration?.id
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:bg-secondary"
+                }`}
+              >
+                Round {generation.roundNumber}
+              </button>
+            ))}
           </div>
         )}
 
@@ -211,6 +320,7 @@ const ProjectDetailView = ({
             </div>
           </div>
         )}
+
       </div>
 
       <div className="space-y-3">
@@ -241,7 +351,7 @@ const ProjectDetailView = ({
       <div className="space-y-3">
         <h3 className="font-display text-lg font-semibold">Generated Images</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {detail.images.map((src, i) => (
+          {displayImages.map((src, i) => (
             <motion.div
               key={i}
               initial={{ opacity: 0, y: 12 }}
@@ -280,8 +390,55 @@ const ProjectDetailView = ({
         </div>
       </div>
 
+      <div className="rounded-xl border border-border bg-card/60 p-4 space-y-4">
+        <div>
+          <h3 className="font-display text-lg font-semibold">Generate Again</h3>
+          <p className="text-sm text-muted-foreground">
+            Add an extra direction for the next image set. Existing KYC and input images will be reused.
+          </p>
+        </div>
+
+        {regenerationError && (
+          <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+            {regenerationError}
+          </div>
+        )}
+
+        {(isRegenerating || regenerationTimeline.length > 0) && (
+          <div className="rounded-xl border border-border bg-background/50 p-4 space-y-2">
+            <p className="text-sm font-medium">{regenerationStatus || "Regenerating images..."}</p>
+            {regenerationTimeline.map((entry, index) => (
+              <p key={`${entry.stage}-${entry.status}-${index}`} className="text-sm text-muted-foreground">
+                {entry.message}
+              </p>
+            ))}
+          </div>
+        )}
+
+        <textarea
+          value={additionalDescription}
+          onChange={(event) => setAdditionalDescription(event.target.value.slice(0, 250))}
+          maxLength={250}
+          rows={4}
+          placeholder="Example: make the background warmer, cleaner, and more premium."
+          className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+        />
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-muted-foreground">{additionalDescription.length}/250</span>
+          <button
+            type="button"
+            disabled={!additionalDescription.trim() || isRegenerating}
+            onClick={() => void handleRegenerate()}
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {isRegenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Generate Again
+          </button>
+        </div>
+      </div>
+
       {/* Video section (video projects only) */}
-      {project.type === "video" && (
+      {localProject.type === "video" && (
         <div className="space-y-3">
           <h3 className="font-display text-lg font-semibold">Generated Video</h3>
           {detail.videoUrl ? (
@@ -290,7 +447,7 @@ const ProjectDetailView = ({
                 src={detail.videoUrl}
                 controls
                 className="h-full w-full object-cover"
-                poster={detail.images[0]}
+                poster={displayImages[0]}
               />
             </div>
           ) : (

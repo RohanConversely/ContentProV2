@@ -8,6 +8,7 @@ from pydantic import BaseModel
 class AssetResponse(BaseModel):
     id: str
     job_id: str
+    generation_id: str | None = None
     asset_type: str
     stage: str
     storage_key: str

@@ -43,6 +43,15 @@ export interface ProjectDetail {
   additionalInfo?: Record<string, string>;
   inputImages?: string[];
   images: string[];
+  activeGenerationId?: string | null;
+  generations?: {
+    id: string;
+    roundNumber: number;
+    additionalDescription?: string;
+    status: string;
+    createdAt: string;
+    images: string[];
+  }[];
   videoUrl?: string;
 }
 

@@ -74,6 +74,7 @@ interface BackendRecentJobResponse {
 interface BackendAssetResponse {
   id: string;
   job_id: string;
+  generation_id?: string | null;
   asset_type: string;
   stage: string;
   storage_key: string;
@@ -101,7 +102,7 @@ export interface BackendJobSummaryResponse {
   updated_at: string;
 }
 
-interface BackendJobResponse extends BackendJobSummaryResponse {
+export interface BackendJobResponse extends BackendJobSummaryResponse {
   user_id: string;
   brand_website: string;
   product_category: string;
@@ -114,6 +115,16 @@ interface BackendJobResponse extends BackendJobSummaryResponse {
   error_message?: string | null;
   storage_prefix: string;
   assets: BackendAssetResponse[];
+  generations?: BackendJobGenerationResponse[];
+}
+
+interface BackendJobGenerationResponse {
+  id: string;
+  round_number: number;
+  additional_description?: string | null;
+  status: string;
+  created_at: string;
+  images: BackendAssetResponse[];
 }
 
 interface BackendJobListResponse {
@@ -183,7 +194,17 @@ export interface GeneratedImageResult {
   currentStage: string | null;
   generatedImages: string[];
   assets: BackendAssetResponse[];
+  generations?: BackendJobGenerationResponse[];
   errorMessage: string | null;
+}
+
+export interface JobGenerationSummary {
+  id: string;
+  roundNumber: number;
+  additionalDescription?: string | null;
+  status: string;
+  createdAt: string;
+  images: string[];
 }
 
 function inferFilename(url: string, fallback: string): string {
@@ -315,10 +336,25 @@ function mapProject(job: BackendJobResponse, summary?: BackendJobSummaryResponse
     .filter((asset) => asset.asset_type === "raw_image" && !asset.is_deleted)
     .map((asset) => assetUrl(asset))
     .filter((value): value is string => Boolean(value));
-  const generatedImages = job.assets
-    .filter((asset) => asset.asset_type === "generated_image" && !asset.is_deleted)
-    .map((asset) => assetUrl(asset))
-    .filter((value): value is string => Boolean(value));
+  const generations = (job.generations ?? [])
+    .map((generation) => ({
+      id: generation.id,
+      roundNumber: generation.round_number,
+      additionalDescription: generation.additional_description ?? undefined,
+      status: generation.status,
+      createdAt: generation.created_at,
+      images: generation.images
+        .map((asset) => assetUrl(asset))
+        .filter((value): value is string => Boolean(value)),
+    }))
+    .sort((a, b) => a.roundNumber - b.roundNumber);
+  const activeGeneration = generations[generations.length - 1];
+  const generatedImages =
+    activeGeneration?.images ??
+    job.assets
+      .filter((asset) => asset.asset_type === "generated_image" && !asset.is_deleted)
+      .map((asset) => assetUrl(asset))
+      .filter((value): value is string => Boolean(value));
   const thumbnail =
     rawImages[0] ||
     generatedImages[0] ||
@@ -348,6 +384,8 @@ function mapProject(job: BackendJobResponse, summary?: BackendJobSummaryResponse
       additionalInfo,
       inputImages: rawImages,
       images: generatedImages,
+      activeGenerationId: activeGeneration?.id ?? null,
+      generations,
     },
   };
 }
@@ -564,6 +602,28 @@ export async function getJob(jobId: string): Promise<BackendJobResponse> {
   return apiJson<BackendJobResponse>(`/jobs/${encodeURIComponent(jobId)}`, {}, true);
 }
 
+export async function regenerateJobImages(jobId: string, additionalDescription: string): Promise<JobGenerationSummary> {
+  const response = await apiJson<BackendJobGenerationResponse>(
+    `/jobs/${encodeURIComponent(jobId)}/regenerate-images`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ additional_description: additionalDescription }),
+    },
+    true,
+  );
+  return {
+    id: response.id,
+    roundNumber: response.round_number,
+    additionalDescription: response.additional_description ?? undefined,
+    status: response.status,
+    createdAt: response.created_at,
+    images: [],
+  };
+}
+
 export async function getJobLogs(jobId: string): Promise<JobLogEntry[]> {
   const response = await apiJson<BackendJobLogEntryResponse[]>(
     `/jobs/${encodeURIComponent(jobId)}/logs`,
@@ -644,16 +704,27 @@ export async function waitForJobCompletion(
   });
 
   const job = await getJob(jobId);
-  const generatedImages = job.assets
-    .filter((asset) => asset.asset_type === "generated_image" && !asset.is_deleted)
-    .map((asset) => assetUrl(asset))
-    .filter((value): value is string => Boolean(value));
+  const mappedGenerations = (job.generations ?? [])
+    .map((generation) => ({
+      roundNumber: generation.round_number,
+      images: generation.images
+        .map((asset) => assetUrl(asset))
+        .filter((value): value is string => Boolean(value)),
+    }))
+    .sort((a, b) => a.roundNumber - b.roundNumber);
+  const generatedImages =
+    [...mappedGenerations].reverse().find((generation) => generation.images.length > 0)?.images ??
+    job.assets
+      .filter((asset) => asset.asset_type === "generated_image" && !asset.is_deleted)
+      .map((asset) => assetUrl(asset))
+      .filter((value): value is string => Boolean(value));
   return {
     jobId: job.job_id,
     status: job.status,
     currentStage: job.current_stage,
     generatedImages,
     assets: job.assets,
+    generations: job.generations,
     errorMessage: job.error_message ?? null,
   };
 }
@@ -712,8 +783,14 @@ export async function downloadFile(url: string, fallbackFilename = "download.bin
 export async function downloadJobImagesArchive(
   jobId: string,
   fallbackFilename: string,
+  generationId?: string | null,
 ): Promise<void> {
-  const response = await apiFetch(`/jobs/${encodeURIComponent(jobId)}/download/images`, {}, true);
+  const params = new URLSearchParams();
+  if (generationId) {
+    params.set("generation_id", generationId);
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  const response = await apiFetch(`/jobs/${encodeURIComponent(jobId)}/download/images${suffix}`, {}, true);
   const blob = await response.blob();
   const blobUrl = window.URL.createObjectURL(blob);
   const anchor = document.createElement("a");

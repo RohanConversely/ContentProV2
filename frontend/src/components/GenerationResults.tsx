@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -11,43 +11,103 @@ import {
   Building2,
   Film,
   Check,
+  Loader2,
 } from "lucide-react";
 import { type ProductFormData } from "./CreationWizard";
-import { downloadFile, downloadJobImagesArchive } from "@/lib/api";
+import {
+  downloadFile,
+  downloadJobImagesArchive,
+  getJob,
+  regenerateJobImages,
+  waitForJobCompletion,
+  type BackendJobResponse,
+  type GeneratedImageResult,
+  type JobGenerationSummary,
+} from "@/lib/api";
 
 interface GenerationResultsProps {
   productData: ProductFormData;
   mode: string;
   generatedImages?: string[];
+  generations?: JobGenerationSummary[];
   jobId?: string | null;
   isLoading?: boolean;
   error?: string | null;
   statusStage?: string | null;
   statusMessage?: string | null;
   statusUpdates?: { stage: string; status: string; message: string }[];
+  onResultChange?: (result: GeneratedImageResult) => void;
   onBack: () => void;
   onStartOver: () => void;
-  onCreateVideo?: () => void;
+  onCreateVideo?: (images: string[]) => void;
 }
 
 const GenerationResults = ({
   productData,
   mode,
   generatedImages,
+  generations = [],
   jobId,
   isLoading = false,
   error = null,
   statusStage = null,
   statusMessage = null,
   statusUpdates = [],
+  onResultChange,
   onBack,
   onStartOver,
   onCreateVideo,
 }: GenerationResultsProps) => {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [selectedImages, setSelectedImages] = useState<number[]>([]);
-  const allDone = !isLoading && !error;
-  const displayImages = Array.isArray(generatedImages) ? generatedImages.filter(Boolean) : [];
+  const [additionalDescription, setAdditionalDescription] = useState("");
+  const [regenerationError, setRegenerationError] = useState<string | null>(null);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [activeGenerationId, setActiveGenerationId] = useState<string | null>(null);
+  const [localGenerations, setLocalGenerations] = useState<JobGenerationSummary[]>(generations);
+  const [localTimeline, setLocalTimeline] = useState<{ stage: string; status: string; message: string }[]>([]);
+  const [localStatus, setLocalStatus] = useState<{ stage: string | null; message: string | null }>({
+    stage: null,
+    message: null,
+  });
+  const latestGenerationId = useMemo(() => {
+    if (localGenerations.length === 0) return null;
+    return [...localGenerations].sort((a, b) => b.roundNumber - a.roundNumber)[0]?.id ?? null;
+  }, [localGenerations]);
+
+  useEffect(() => {
+    setLocalGenerations(generations);
+  }, [generations]);
+
+  useEffect(() => {
+    setActiveGenerationId((current) => {
+      if (current && localGenerations.some((generation) => generation.id === current)) {
+        return current;
+      }
+      return latestGenerationId;
+    });
+  }, [localGenerations, latestGenerationId]);
+
+  const selectedGeneration = useMemo(() => {
+    if (localGenerations.length === 0) return null;
+    return (
+      localGenerations.find((generation) => generation.id === activeGenerationId) ??
+      localGenerations[localGenerations.length - 1]
+    );
+  }, [activeGenerationId, localGenerations]);
+
+  const displayImages = selectedGeneration
+    ? selectedGeneration.images
+    : Array.isArray(generatedImages)
+      ? generatedImages.filter(Boolean)
+      : [];
+  const effectiveLoading = isLoading || isRegenerating;
+  const effectiveError = regenerationError || error;
+  const effectiveAllDone = !effectiveLoading && !effectiveError;
+  const effectiveStatusMessage = isRegenerating ? localStatus.message : statusMessage;
+  const effectiveStatusStage = isRegenerating ? localStatus.stage : statusStage;
+  const effectiveStatusUpdates = isRegenerating ? localTimeline : statusUpdates;
+  const canRegenerate = Boolean(jobId && additionalDescription.trim());
 
   const toggleImageSelection = (index: number) => {
     setSelectedImages(prev => 
@@ -66,11 +126,104 @@ const GenerationResults = ({
 
   const handleDownloadAll = async () => {
     if (jobId) {
-      await downloadJobImagesArchive(jobId, `${productData.brandName}_${productData.productName}`);
+      await downloadJobImagesArchive(
+        jobId,
+        `${productData.brandName}_${productData.productName}`,
+        selectedGeneration?.id ?? null,
+      );
       return;
     }
     for (const [index, src] of displayImages.entries()) {
       await handleDownloadImage(src, index);
+    }
+  };
+
+  const toGenerationSummary = (job: BackendJobResponse): JobGenerationSummary[] =>
+    (job.generations ?? [])
+      .map((generation) => ({
+        id: generation.id,
+        roundNumber: generation.round_number,
+        additionalDescription: generation.additional_description ?? undefined,
+        status: generation.status,
+        createdAt: generation.created_at,
+        images: generation.images
+          .map((asset) => asset.presigned_url)
+          .filter((value): value is string => Boolean(value)),
+      }))
+      .sort((a, b) => a.roundNumber - b.roundNumber);
+
+  const toGeneratedImageResult = (job: BackendJobResponse): GeneratedImageResult => {
+    const mappedGenerations = toGenerationSummary(job);
+    const latestGeneration = [...mappedGenerations]
+      .reverse()
+      .find((generation) => generation.images.length > 0) ?? mappedGenerations[mappedGenerations.length - 1];
+    return {
+      jobId: job.job_id,
+      status: job.status,
+      currentStage: job.current_stage,
+      generatedImages: latestGeneration?.images ?? [],
+      assets: job.assets,
+      generations: job.generations,
+      errorMessage: job.error_message ?? null,
+    };
+  };
+
+  const handleRegenerate = async () => {
+    if (!jobId || !additionalDescription.trim()) return;
+
+    setIsRegenerating(true);
+    setRegenerationError(null);
+    setLocalTimeline([]);
+    setLocalStatus({
+      stage: "stage_2",
+      message: "Queueing image regeneration.",
+    });
+
+    try {
+      const queuedGeneration = await regenerateJobImages(jobId, additionalDescription.trim());
+      setLocalGenerations((prev) => [
+        ...prev.filter((generation) => generation.id !== queuedGeneration.id),
+        queuedGeneration,
+      ]);
+      setActiveGenerationId(queuedGeneration.id);
+
+      await waitForJobCompletion(jobId, (update) => {
+        setLocalStatus({ stage: update.stage, message: update.message });
+        setLocalTimeline((prev) => {
+          const previous = prev[prev.length - 1];
+          if (
+            previous &&
+            previous.stage === update.stage &&
+            previous.status === update.status &&
+            previous.message === update.message
+          ) {
+            return prev;
+          }
+          return [...prev, update];
+        });
+        if (update.stage === "stage_2" && update.status === "running") {
+          void (async () => {
+            try {
+              const liveJob = await getJob(jobId);
+              setLocalGenerations(toGenerationSummary(liveJob));
+            } catch {
+              // keep local partial state
+            }
+          })();
+        }
+      });
+
+      const refreshedJob = await getJob(jobId);
+      const refreshedResult = toGeneratedImageResult(refreshedJob);
+      const refreshedGenerations = toGenerationSummary(refreshedJob);
+      setLocalGenerations(refreshedGenerations);
+      setActiveGenerationId(refreshedGenerations[refreshedGenerations.length - 1]?.id ?? null);
+      setAdditionalDescription("");
+      onResultChange?.(refreshedResult);
+    } catch (submitError) {
+      setRegenerationError(submitError instanceof Error ? submitError.message : "Unable to regenerate images.");
+    } finally {
+      setIsRegenerating(false);
     }
   };
 
@@ -103,7 +256,7 @@ const GenerationResults = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {allDone && (
+          {effectiveAllDone && (
             <motion.button
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -113,18 +266,18 @@ const GenerationResults = ({
               <RefreshCw className="h-4 w-4" /> New Project
             </motion.button>
           )}
-          {allDone && onCreateVideo && (
+          {effectiveAllDone && onCreateVideo && (
             <motion.button
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              onClick={onCreateVideo}
+              onClick={() => onCreateVideo(displayImages)}
               disabled={isVideoMode && !canCreateVideo}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-primary text-primary-foreground text-sm font-semibold shadow-glow hover:opacity-90 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed"
             >
               <Film className="h-4 w-4" /> Create Video
             </motion.button>
           )}
-          {allDone && (
+          {effectiveAllDone && (
             <motion.button
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -138,34 +291,34 @@ const GenerationResults = ({
       </div>
 
       {/* Live status */}
-      {!allDone && (
+      {!(!effectiveLoading && !effectiveError) && (
         <div className="rounded-xl border border-border bg-card/60 p-4">
           <div className="flex items-center gap-2 text-sm font-medium">
             <Sparkles className="h-4 w-4 text-primary animate-pulse" />
-            <span>{statusMessage || "Generating A+ content images..."}</span>
+            <span>{effectiveStatusMessage || "Generating A+ content images..."}</span>
           </div>
           <div className="mt-3 space-y-2">
-            {statusUpdates.length > 0 ? (
-              statusUpdates.map((update, index) => (
+            {effectiveStatusUpdates.length > 0 ? (
+              effectiveStatusUpdates.map((update, index) => (
                 <div key={`${update.stage}-${update.status}-${index}`} className="text-sm text-muted-foreground">
                   {update.message}
                 </div>
               ))
             ) : (
-              <div className="text-sm text-muted-foreground">{statusStage || "queued"}</div>
+              <div className="text-sm text-muted-foreground">{effectiveStatusStage || "queued"}</div>
             )}
           </div>
         </div>
       )}
 
-      {error && (
+      {effectiveError && (
         <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
-          {error}
+          {effectiveError}
         </div>
       )}
 
       {/* Selection message for video mode */}
-      {allDone && isVideoMode && (
+      {!effectiveLoading && !effectiveError && isVideoMode && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -181,8 +334,27 @@ const GenerationResults = ({
       )}
 
       {/* Image Grid - 6 images, 1:1 aspect ratio */}
+      {localGenerations.length > 1 && (
+        <div className="flex flex-wrap gap-2">
+          {localGenerations.map((generation) => (
+            <button
+              key={generation.id}
+              type="button"
+              onClick={() => setActiveGenerationId(generation.id)}
+              className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                generation.id === selectedGeneration?.id
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:bg-secondary"
+              }`}
+            >
+              Round {generation.roundNumber}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {Array.from({ length: Math.max(displayImages.length, isLoading ? 6 : displayImages.length) }).map((_, i) => {
+        {Array.from({ length: Math.max(displayImages.length, effectiveLoading ? 6 : displayImages.length) }).map((_, i) => {
           const src = displayImages[i];
           const isSelected = selectedImages.includes(i);
           if (!src) {
@@ -275,14 +447,45 @@ const GenerationResults = ({
         })}
       </div>
 
-      {allDone && displayImages.length === 0 && !error && (
+      {!effectiveLoading && !effectiveError && jobId && (
+        <div className="rounded-xl border border-border bg-card/60 p-4 space-y-4">
+          <div>
+            <h3 className="font-display text-lg font-semibold">Generate Again</h3>
+            <p className="text-sm text-muted-foreground">
+              Add an extra direction for the next image set. Existing KYC and input images will be reused.
+            </p>
+          </div>
+          <textarea
+            value={additionalDescription}
+            onChange={(event) => setAdditionalDescription(event.target.value.slice(0, 250))}
+            maxLength={250}
+            rows={4}
+            placeholder="Example: make the background warmer, more premium, and suitable for luxury ecommerce."
+            className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+          />
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-muted-foreground">{additionalDescription.length}/250</span>
+            <button
+              type="button"
+              disabled={!canRegenerate || isRegenerating}
+              onClick={() => void handleRegenerate()}
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {isRegenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              Generate Again
+            </button>
+          </div>
+        </div>
+      )}
+
+      {effectiveAllDone && displayImages.length === 0 && !effectiveError && (
         <div className="rounded-xl border border-border bg-card/60 p-6 text-sm text-muted-foreground">
           No generated images were returned by the backend.
         </div>
       )}
 
       {/* Summary footer */}
-      {allDone && (
+      {effectiveAllDone && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
