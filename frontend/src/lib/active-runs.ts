@@ -74,7 +74,18 @@ export function clearActiveSingleRun(): void {
 }
 
 export function readActiveBatchRun(): PersistedBatchRun | null {
-  return readJson<PersistedBatchRun>(BATCH_RUN_KEY);
+  const value = readJson<PersistedBatchRun>(BATCH_RUN_KEY);
+  if (!value) return null;
+
+  const hasActiveJobs = value.jobStates.some((job) =>
+    ["queued", "creating", "uploading", "running"].includes(job.status),
+  );
+  if (hasActiveJobs) {
+    return value;
+  }
+
+  clearActiveBatchRun();
+  return null;
 }
 
 export function writeActiveBatchRun(value: PersistedBatchRun | null): void {

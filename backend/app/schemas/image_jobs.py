@@ -25,7 +25,7 @@ class BatchImageJobRowRequest(BaseModel):
     social_link_1: HttpUrl | None = None
     social_link_2: HttpUrl | None = None
     additional_info: dict[str, Any] | None = None
-    num_images: int = Field(default=4, ge=1, le=10)
+    num_images: int = Field(default=6, ge=1, le=10)
     temperature: float = Field(default=0.1, ge=0.0, le=2.0)
     row_id: str | None = None
 

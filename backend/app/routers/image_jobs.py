@@ -39,7 +39,7 @@ async def create_single_image_job(
     social_link_1: str | None = Form(default=None),
     social_link_2: str | None = Form(default=None),
     additional_info: str | None = Form(default=None),
-    num_images: int = Form(default=4),
+    num_images: int = Form(default=6),
     temperature: float = Form(default=0.1),
 ) -> dict[str, Any]:
     if not image_file.content_type or not image_file.content_type.startswith("image/"):

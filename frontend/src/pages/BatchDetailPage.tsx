@@ -26,8 +26,23 @@ const BatchDetailPage = () => {
   }, [batchId]);
 
   const batchName = jobs[0]?.batch_name || "Batch Results";
-  const allCompleted = jobs.length > 0 && jobs.every(j => j.status === "completed");
   const anyRunning = jobs.some(j => !["completed", "failed"].includes(j.status));
+
+  const getBatchJobStatus = (status: string) => {
+    if (["pending_upload", "pending", "queued", "creating", "uploading"].includes(status)) {
+      return "queued";
+    }
+    if (status === "running") {
+      return "running";
+    }
+    if (status === "completed") {
+      return "completed";
+    }
+    if (status === "failed") {
+      return "failed";
+    }
+    return status;
+  };
 
   const handleDownloadAll = async () => {
     if (!batchId) return;
@@ -41,7 +56,7 @@ const BatchDetailPage = () => {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <button
-              onClick={() => navigate("/dashboard")}
+              onClick={() => navigate("/projects")}
               className="h-10 w-10 rounded-xl border border-border flex items-center justify-center hover:bg-secondary transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -80,8 +95,10 @@ const BatchDetailPage = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {jobs.map((job, index) => {
-               const StatusIcon = job.status === "completed" ? CheckCircle2 : job.status === "failed" ? XCircle : Clock3;
-               const statusTone = job.status === "completed" ? "text-green-500" : job.status === "failed" ? "text-destructive" : "text-primary";
+               const normalizedStatus = getBatchJobStatus(job.status);
+               const canView = !["queued", "creating", "uploading", "pending", "pending_upload"].includes(job.status);
+               const StatusIcon = normalizedStatus === "completed" ? CheckCircle2 : normalizedStatus === "failed" ? XCircle : Clock3;
+               const statusTone = normalizedStatus === "completed" ? "text-green-500" : normalizedStatus === "failed" ? "text-destructive" : "text-primary";
                
                return (
                 <motion.div
@@ -89,16 +106,15 @@ const BatchDetailPage = () => {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05 }}
-                  onClick={() => navigate(`/project/${job.job_id}`)}
-                  className="group rounded-xl border border-border bg-card p-4 hover:border-primary/40 transition-all cursor-pointer space-y-3"
+                  className="group rounded-xl border border-border bg-card p-4 transition-all space-y-3"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
                       <ImageIcon className="h-5 w-5" />
                     </div>
                     <div className={`flex items-center gap-1.5 text-xs font-medium ${statusTone}`}>
-                      <StatusIcon className={`h-3.5 w-3.5 ${job.status === "running" ? "animate-spin" : ""}`} />
-                      {job.status}
+                      <StatusIcon className={`h-3.5 w-3.5 ${normalizedStatus === "running" ? "animate-spin" : ""}`} />
+                      {normalizedStatus}
                     </div>
                   </div>
                   <div>
@@ -107,7 +123,18 @@ const BatchDetailPage = () => {
                   </div>
                   <div className="pt-2 flex items-center justify-between text-[11px] text-muted-foreground border-t border-border">
                     <span>{new Date(job.created_at).toLocaleDateString()}</span>
-                    <span className="font-medium text-primary">View Details →</span>
+                    <button
+                      type="button"
+                      disabled={!canView}
+                      onClick={() => {
+                        if (canView) {
+                          navigate(`/project/${job.job_id}`);
+                        }
+                      }}
+                      className={`font-medium ${canView ? "text-primary hover:underline" : "text-muted-foreground/50 cursor-not-allowed"}`}
+                    >
+                      View Details →
+                    </button>
                   </div>
                 </motion.div>
               );

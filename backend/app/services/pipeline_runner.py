@@ -304,7 +304,7 @@ async def run_pipeline_task(job_id: str) -> None:
             social_link_1=job.social_link_1,
             social_link_2=job.social_link_2,
             additional_info=job.additional_input_json,
-            num_images=4,
+            num_images=6,
             temperature=0.1,
             workspace_root=workspace,
         )
@@ -322,7 +322,7 @@ async def run_pipeline_task(job_id: str) -> None:
             return
 
         image_paths: list[Path] = []
-        for raw_asset in raw_assets[:4]:
+        for raw_asset in raw_assets[:5]:
             local_image = workspace / "raw" / (raw_asset.original_filename or "product.jpg")
             await storage_service.download_file(raw_asset.storage_key, local_image)
             image_paths.append(local_image)

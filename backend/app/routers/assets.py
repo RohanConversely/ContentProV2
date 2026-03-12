@@ -16,6 +16,7 @@ from app.services.storage import storage_service
 from app.utils.presigned_urls import generate_url
 
 router = APIRouter(tags=["assets"])
+MAX_SOURCE_IMAGES = 5
 
 
 def _asset_response(asset: Asset) -> AssetResponse:
@@ -58,8 +59,8 @@ async def upload_job_asset(
         select(Asset).where(Asset.job_id == job.id, Asset.asset_type == "raw_image", Asset.is_deleted.is_(False))
     )
     existing_raw_count = len(raw_asset_result.scalars().all())
-    if existing_raw_count + len(files) > 4:
-        raise HTTPException(status_code=400, detail="A job can include at most 4 source images.")
+    if existing_raw_count + len(files) > MAX_SOURCE_IMAGES:
+        raise HTTPException(status_code=400, detail=f"A job can include at most {MAX_SOURCE_IMAGES} source images.")
 
     created_assets: list[Asset] = []
     for file in files:
@@ -152,14 +153,14 @@ async def upload_remote_job_folder_assets(
     )
     existing_raw_count = len(raw_asset_result.scalars().all())
 
-    max_images = max(1, min(payload.max_images, 3))
-    if existing_raw_count >= 4:
-        raise HTTPException(status_code=400, detail="A job can include at most 4 source images.")
+    max_images = max(1, min(payload.max_images, MAX_SOURCE_IMAGES))
+    if existing_raw_count >= MAX_SOURCE_IMAGES:
+        raise HTTPException(status_code=400, detail=f"A job can include at most {MAX_SOURCE_IMAGES} source images.")
 
     try:
         folder_images = await download_drive_folder_image_bytes(
             payload.folder_url,
-            max_images=min(max_images, 4 - existing_raw_count),
+            max_images=min(max_images, MAX_SOURCE_IMAGES - existing_raw_count),
         )
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Unable to download folder images: {exc}") from exc

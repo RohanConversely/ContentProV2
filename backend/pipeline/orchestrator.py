@@ -35,7 +35,7 @@ class JobContext:
     social_link_1: str | None = None
     social_link_2: str | None = None
     additional_info: dict[str, Any] | None = None
-    num_images: int = 4
+    num_images: int = 6
     temperature: float = 0.1
     prompt_file: str = "ImageWithKYCTesting.txt"
     workspace_root: Path | None = None

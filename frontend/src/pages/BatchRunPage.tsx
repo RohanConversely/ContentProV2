@@ -139,53 +139,81 @@ const BatchRunPage = () => {
     };
 
     void (async () => {
-      for (const localJob of jobStatesRef.current) {
+      const preparedJobs = [...jobStatesRef.current];
+
+      for (let index = 0; index < preparedJobs.length; index += 1) {
+        const localJob = preparedJobs[index];
+        if (cancelled) return;
+        const currentJob = preparedJobs[index];
+        if (currentJob.backendJobId) {
+          continue;
+        }
+        try {
+          updateJob(localJob.id, (job) => ({
+            ...job,
+            status: "creating",
+            stage: "queued",
+            message: "Creating backend job.",
+            error: null,
+          }));
+
+          const createdJob = await createJob({
+            brandName: localJob.productData.brandName,
+            brandWebsite: localJob.productData.brandWebsite,
+            productName: localJob.productData.productName,
+            productCategory: localJob.productData.productCategory,
+            socialLink1: localJob.productData.socialLinkInstagram || undefined,
+            socialLink2: localJob.productData.socialLinkFacebook || undefined,
+            socialLink3: localJob.productData.socialLinkLinkedin || undefined,
+            socialLink4: localJob.productData.socialLinkX || undefined,
+            additionalInput: localJob.productData.additionalInfo,
+            batch_id: localJob.batch_id,
+            batch_name: localJob.batch_name,
+          });
+
+          updateJob(localJob.id, (job) => ({
+            ...job,
+            backendJobId: createdJob.job_id,
+            status: "queued",
+            stage: "queued",
+            message: "Queued. Waiting for processing.",
+            error: null,
+          }));
+          preparedJobs[index] = {
+            ...currentJob,
+            backendJobId: createdJob.job_id,
+            status: "queued",
+            stage: "queued",
+            message: "Queued. Waiting for processing.",
+            error: null,
+          };
+        } catch (error) {
+          updateJob(localJob.id, (job) => ({
+            ...job,
+            status: "failed",
+            stage: "queued",
+            message: error instanceof Error ? error.message : "Unable to create backend job.",
+            error: error instanceof Error ? error.message : "Unable to create backend job.",
+          }));
+          preparedJobs[index] = {
+            ...currentJob,
+            status: "failed",
+            stage: "queued",
+            message: error instanceof Error ? error.message : "Unable to create backend job.",
+            error: error instanceof Error ? error.message : "Unable to create backend job.",
+          };
+        }
+      }
+
+      for (const localJob of preparedJobs) {
         if (cancelled) return;
 
         setActiveJobId(localJob.id);
 
         try {
-          let currentJob = jobStatesRef.current.find((job) => job.id === localJob.id) ?? localJob;
+          const currentJob = preparedJobs.find((job) => job.id === localJob.id) ?? localJob;
           if (currentJob.status === "completed" || currentJob.status === "failed") {
             continue;
-          }
-
-          if (!currentJob.backendJobId) {
-            updateJob(localJob.id, (job) => ({
-              ...job,
-              status: "creating",
-              stage: "queued",
-              message: "Creating backend job.",
-              error: null,
-            }));
-            const createdJob = await createJob({
-              brandName: localJob.productData.brandName,
-              brandWebsite: localJob.productData.brandWebsite,
-              productName: localJob.productData.productName,
-              productCategory: localJob.productData.productCategory,
-              socialLink1: localJob.productData.socialLinkInstagram || undefined,
-              socialLink2: localJob.productData.socialLinkFacebook || undefined,
-              socialLink3: localJob.productData.socialLinkLinkedin || undefined,
-              socialLink4: localJob.productData.socialLinkX || undefined,
-              additionalInput: localJob.productData.additionalInfo,
-              batch_id: localJob.batch_id,
-              batch_name: localJob.batch_name,
-            });
-
-            updateJob(localJob.id, (job) => ({
-              ...job,
-              backendJobId: createdJob.job_id,
-              status: "uploading",
-              stage: "queued",
-              message: "Downloading source image and queuing the job.",
-            }));
-            currentJob = {
-              ...currentJob,
-              backendJobId: createdJob.job_id,
-              status: "uploading",
-              stage: "queued",
-              message: "Downloading source image and queuing the job.",
-            };
           }
 
           const backendJobId = currentJob.backendJobId;
@@ -201,8 +229,14 @@ const BatchRunPage = () => {
           const liveJob = await getJob(backendJobId);
           const hasRawImage = liveJob.assets.some((asset) => asset.asset_type === "raw_image" && !asset.is_deleted);
           if (!hasRawImage) {
+            updateJob(localJob.id, (job) => ({
+              ...job,
+              status: "uploading",
+              stage: "queued",
+              message: "Downloading source image and queuing the job.",
+            }));
             if (localJob.sourceType === "drive_folder") {
-              await uploadRemoteFolderAssets(backendJobId, sourceImageUrl, 3);
+              await uploadRemoteFolderAssets(backendJobId, sourceImageUrl, 5);
             } else {
               await uploadRemoteJobAsset(backendJobId, sourceImageUrl);
             }
@@ -251,9 +285,9 @@ const BatchRunPage = () => {
         <Navbar />
         <div className="container pt-24 pb-16">
           <div className="max-w-xl mx-auto rounded-xl border border-border bg-card p-6 space-y-3">
-            <h1 className="font-display text-xl font-semibold">No batch run data</h1>
+            <h1 className="font-display text-xl font-semibold">No batches running currently</h1>
             <p className="text-sm text-muted-foreground">
-              This page is meant to be opened after running a batch from the dashboard.
+              Start a batch from the dashboard and it will stay visible here while it is queued or running.
             </p>
             <button
               onClick={() => navigate("/dashboard")}

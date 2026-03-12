@@ -546,7 +546,7 @@ export async function uploadRemoteJobAsset(jobId: string, imageUrl: string): Pro
   );
 }
 
-export async function uploadRemoteFolderAssets(jobId: string, folderUrl: string, maxImages = 3): Promise<BackendAssetResponse[]> {
+export async function uploadRemoteFolderAssets(jobId: string, folderUrl: string, maxImages = 5): Promise<BackendAssetResponse[]> {
   return apiJson<BackendAssetResponse[]>(
     `/jobs/${encodeURIComponent(jobId)}/assets/remote-folder`,
     {

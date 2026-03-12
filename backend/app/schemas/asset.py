@@ -31,4 +31,4 @@ class RemoteAssetCreateRequest(BaseModel):
 
 class RemoteFolderAssetCreateRequest(BaseModel):
     folder_url: str
-    max_images: int = 3
+    max_images: int = 5

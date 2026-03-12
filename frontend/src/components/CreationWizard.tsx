@@ -81,6 +81,8 @@ const dimensionUnits = [
   { value: "feet", label: "Feet (ft)" },
 ];
 
+const MAX_SOURCE_IMAGES = 5;
+
 const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
   const [formData, setFormData] = useState<ProductFormData>(emptyFormData);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
@@ -105,7 +107,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
     formData.dimensionLength && formData.dimensionBreadth && formData.dimensionHeight;
 
   const handleImageUpload = useCallback((files: FileList) => {
-    const remainingSlots = Math.max(0, 4 - uploadedFiles.length);
+    const remainingSlots = Math.max(0, MAX_SOURCE_IMAGES - uploadedFiles.length);
     const acceptedFiles = Array.from(files)
       .filter((file) => file.type.startsWith("image/"))
       .slice(0, remainingSlots);
@@ -590,7 +592,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
                   <Upload className="h-6 w-6 text-primary" />
                 </div>
                 <div className="text-center">
-                  <p className="font-medium">Drop up to 4 product images here or click to browse</p>
+                  <p className="font-medium">Drop up to 5 product images here or click to browse</p>
                   <p className="text-sm text-muted-foreground mt-1">Supports JPG, PNG, WEBP up to 20MB each</p>
                 </div>
               </div>
@@ -627,7 +629,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
               </label>
             </div>
           )}
-          <p className="text-xs text-muted-foreground">{formData.productImages.length}/4 images selected</p>
+          <p className="text-xs text-muted-foreground">{formData.productImages.length}/{MAX_SOURCE_IMAGES} images selected</p>
         </div>
 
         {/* Short Product Description */}
