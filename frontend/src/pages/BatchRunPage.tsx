@@ -129,6 +129,17 @@ const BatchRunPage = () => {
   }, [state]);
 
   useEffect(() => {
+    if (jobStates.length === 0) return;
+    const stillActive = jobStates.some((job) => ["queued", "creating", "uploading", "running"].includes(job.status));
+    if (stillActive) return;
+
+    clearActiveBatchRun();
+    setJobStates([]);
+    setActiveJobId(null);
+    hasStartedRef.current = false;
+  }, [jobStates]);
+
+  useEffect(() => {
     if (jobStates.length === 0 || hasStartedRef.current) return;
     hasStartedRef.current = true;
 
