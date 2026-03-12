@@ -403,7 +403,17 @@ const ProjectsPage = () => {
         {selectedProject ? (
           <ProjectDetailView
             project={selectedProject}
-            onBack={() => setSelectedProject(null)}
+            onBack={() => {
+              if (selectedProject.batch_id) {
+                navigate(`/batch/${selectedProject.batch_id}`);
+                return;
+              }
+              if (jobId) {
+                navigate("/projects");
+                return;
+              }
+              setSelectedProject(null);
+            }}
           />
         ) : (
           <>

@@ -48,7 +48,7 @@ def generate_images(
     kyc_path: str,
     image_paths: list[str] | None = None,
     image_path: str | None = None,
-    num_images: int = 4,
+    num_images: int = 6,
     temperature: float = 0.1,
     output_dir: str = "generated_images",
     prompt_file: str = "ImageWithKYCTesting.txt",
@@ -117,58 +117,89 @@ def generate_images(
         ),
     )
 
-    response = client.responses.create(
-        model="gpt-4.1",
-        input=[
-            {
-                "role": "user",
-                "content": [
-                    *content,
-                    {
-                        "type": "input_file",
-                        "filename": Path(kyc_path).name,
-                        "file_data": kyc_data_url,
-                    },
-                ],
-            }
-        ],
-        tools=[
-            {
-                "type": "image_generation",
-                "size": "1024x1024",
-                "quality": "high",
-            }
-        ],
-        tool_choice={"type": "image_generation"},
-        temperature=temperature,
-    )
-
-    log_usage(
-        stage_logger,
-        response,
-        with_context(log_context, {"operation": "image_gen_with_kyc"}),
-    )
     input_image_name = Path(resolved_image_paths[0]).stem
     output_format = "png"
 
     generated_files: list[str] = []
-    image_results = [
-        output.result
-        for output in response.output
-        if output.type == "image_generation_call"
-    ]
-    for i, image_b64_out in enumerate(image_results, start=1):
-        image_data = base64.b64decode(image_b64_out)
-        output_filename = f"{brand_name}_{input_image_name}_{i}.{output_format}"
-        output_filepath = output_path / output_filename
-        with open(output_filepath, "wb") as f:
-            f.write(image_data)
-        abs_output_file = str(output_filepath.resolve())
-        generated_files.append(abs_output_file)
-        stage_logger.info(
-            "Image generated.",
-            with_context(log_context, {"output_file": abs_output_file}),
+    attempts = 0
+    max_attempts = max(1, num_images * 2)
+    while len(generated_files) < num_images and attempts < max_attempts:
+        remaining_images = num_images - len(generated_files)
+        response = client.responses.create(
+            model="gpt-4.1",
+            input=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": (
+                                f"{user_message}\n\n"
+                                f"Generate {remaining_images} distinct A+ content image variation(s). "
+                                "Each variation must be visually different while staying faithful to the product and KYC."
+                            ),
+                        },
+                        *content[1:],
+                        {
+                            "type": "input_file",
+                            "filename": Path(kyc_path).name,
+                            "file_data": kyc_data_url,
+                        },
+                    ],
+                }
+            ],
+            tools=[
+                {
+                    "type": "image_generation",
+                    "size": "1024x1024",
+                    "quality": "high",
+                }
+            ],
+            tool_choice={"type": "image_generation"},
+            temperature=temperature,
         )
+
+        log_usage(
+            stage_logger,
+            response,
+            with_context(
+                log_context,
+                {
+                    "operation": "image_gen_with_kyc",
+                    "attempt": attempts + 1,
+                    "remaining_images": remaining_images,
+                },
+            ),
+        )
+
+        image_results = [
+            output.result
+            for output in response.output
+            if output.type == "image_generation_call"
+        ]
+        if not image_results:
+            break
+
+        for image_b64_out in image_results:
+            if len(generated_files) >= num_images:
+                break
+            output_index = len(generated_files) + 1
+            image_data = base64.b64decode(image_b64_out)
+            output_filename = f"{brand_name}_{input_image_name}_{output_index}.{output_format}"
+            output_filepath = output_path / output_filename
+            with open(output_filepath, "wb") as f:
+                f.write(image_data)
+            abs_output_file = str(output_filepath.resolve())
+            generated_files.append(abs_output_file)
+            stage_logger.info(
+                "Image generated.",
+                with_context(log_context, {"output_file": abs_output_file}),
+            )
+
+        attempts += 1
+
+    if not generated_files:
+        raise ValueError("Image generation returned no images.")
 
     return {
         "ok": True,
@@ -222,7 +253,7 @@ def main() -> None:
     parser.add_argument("--image-path", required=True, help="Path to product image")
     parser.add_argument("--brand-name", required=True, help="Brand name")
     parser.add_argument("--kyc-path", required=True, help="Path to KYC JSON file")
-    parser.add_argument("--num-images", type=int, default=4, help="Number of images to generate")
+    parser.add_argument("--num-images", type=int, default=6, help="Number of images to generate")
     parser.add_argument(
         "--temperature",
         type=float,

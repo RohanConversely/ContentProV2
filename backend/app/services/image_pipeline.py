@@ -211,7 +211,7 @@ def _extract_drive_folder_candidate_urls(folder_html: str) -> list[str]:
     return candidates
 
 
-def _download_drive_folder_image_payloads(folder_url: str, max_images: int = 3) -> list[tuple[bytes, str, str, str]]:
+def _download_drive_folder_image_payloads(folder_url: str, max_images: int = 5) -> list[tuple[bytes, str, str, str]]:
     folder_id, _resource_key = _extract_drive_folder_parts(folder_url)
     if not folder_id:
         raise ValueError("Invalid Google Drive folder URL.")
@@ -243,7 +243,7 @@ def _download_drive_folder_image_payloads(folder_url: str, max_images: int = 3) 
         if not mime_type.startswith("image/"):
             continue
         downloaded.append((content, mime_type, filename, candidate_url))
-        if len(downloaded) >= max(1, min(max_images, 3)):
+        if len(downloaded) >= max(1, min(max_images, 5)):
             break
 
     if downloaded:
@@ -284,7 +284,7 @@ async def download_remote_image_bytes(image_url: str) -> tuple[bytes, str, str]:
     return await asyncio.to_thread(_download_remote_image_payload, image_url)
 
 
-async def download_drive_folder_image_bytes(folder_url: str, max_images: int = 3) -> list[tuple[bytes, str, str, str]]:
+async def download_drive_folder_image_bytes(folder_url: str, max_images: int = 5) -> list[tuple[bytes, str, str, str]]:
     return await asyncio.to_thread(_download_drive_folder_image_payloads, folder_url, max_images)
 
 
@@ -298,7 +298,7 @@ async def run_single_image_job(
     social_link_1: str | None = None,
     social_link_2: str | None = None,
     additional_info: dict[str, Any] | None = None,
-    num_images: int = 4,
+    num_images: int = 6,
     temperature: float = 0.1,
 ) -> dict[str, Any]:
     return await run_single_product_upload(
@@ -329,7 +329,7 @@ async def run_batch_image_jobs(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 social_link_1=row.get("social_link_1"),
                 social_link_2=row.get("social_link_2"),
                 additional_info=row.get("additional_info"),
-                num_images=row.get("num_images", 4),
+                num_images=row.get("num_images", 6),
                 temperature=row.get("temperature", 0.1),
                 source_image_url=row["image_url"],
                 source_row_id=row.get("row_id"),
