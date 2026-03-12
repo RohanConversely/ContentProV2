@@ -47,3 +47,23 @@ def _run_schema_patches(sync_conn) -> None:
         sync_conn.execute(text("ALTER TABLE jobs ADD COLUMN batch_id VARCHAR(64)"))
     if "batch_name" not in job_columns:
         sync_conn.execute(text("ALTER TABLE jobs ADD COLUMN batch_name VARCHAR(255)"))
+
+    asset_columns = {column["name"] for column in inspector.get_columns("assets")}
+    if "generation_id" not in asset_columns:
+        sync_conn.execute(text("ALTER TABLE assets ADD COLUMN generation_id VARCHAR(36)"))
+
+    if "job_generations" not in inspector.get_table_names():
+        sync_conn.execute(
+            text(
+                """
+                CREATE TABLE job_generations (
+                    id VARCHAR(36) PRIMARY KEY,
+                    job_id VARCHAR(36) NOT NULL,
+                    round_number INTEGER NOT NULL,
+                    additional_description TEXT NULL,
+                    status VARCHAR(50) NOT NULL DEFAULT 'completed',
+                    created_at DATETIME NOT NULL
+                )
+                """
+            )
+        )

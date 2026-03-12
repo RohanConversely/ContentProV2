@@ -52,6 +52,7 @@ def generate_images(
     temperature: float = 0.1,
     output_dir: str = "generated_images",
     prompt_file: str = "ImageWithKYCTesting.txt",
+    additional_description: str | None = None,
     logger_obj: JsonLogger | None = None,
     log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -79,6 +80,11 @@ def generate_images(
         f"Brand Name: {brand_name}\n\n"
         f"{prompt_template}"
     )
+    if additional_description:
+        user_message += (
+            "\n\nRefinement instructions for this regeneration:\n"
+            f"{additional_description.strip()}"
+        )
 
     resolved_image_paths = [str(Path(path).resolve()) for path in (image_paths or ([image_path] if image_path else []))]
     if not resolved_image_paths:
@@ -113,6 +119,7 @@ def generate_images(
                 "temperature": temperature,
                 "output_dir": str(output_path.resolve()),
                 "prompt_file": prompt_file,
+                "additional_description": additional_description.strip() if additional_description else None,
             },
         ),
     )
@@ -207,6 +214,7 @@ def generate_images(
         "count": len(generated_files),
         "image_paths": resolved_image_paths,
         "kyc_path": str(Path(kyc_path).resolve()),
+        "additional_description": additional_description.strip() if additional_description else None,
     }
 
 

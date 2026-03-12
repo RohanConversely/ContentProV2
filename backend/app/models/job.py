@@ -41,5 +41,6 @@ class Job(Base):
 
     user = relationship("User")
     assets = relationship("Asset", back_populates="job", cascade="all, delete-orphan")
+    generations = relationship("JobGeneration", back_populates="job", cascade="all, delete-orphan", order_by="JobGeneration.round_number")
     pricing_snapshot = relationship("PricingSnapshot", back_populates="job", uselist=False, cascade="all, delete-orphan")
     pipeline_logs = relationship("PipelineLog", back_populates="job", cascade="all, delete-orphan")

@@ -281,7 +281,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
       message: "Creating your image job.",
     });
     try {
-      const imagesToUpload = uploadedFiles.slice(0, 4);
+      const imagesToUpload = uploadedFiles.slice(0, MAX_SOURCE_IMAGES);
       if (imagesToUpload.length === 0) {
         throw new Error("Please upload at least one product image.");
       }
@@ -384,12 +384,23 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
         productData={formData}
         mode={mode}
         generatedImages={generationResult?.generatedImages ?? []}
+        generations={(generationResult?.generations ?? []).map((generation) => ({
+          id: generation.id,
+          roundNumber: generation.round_number,
+          additionalDescription: generation.additional_description ?? undefined,
+          status: generation.status,
+          createdAt: generation.created_at,
+          images: generation.images
+            .map((asset) => asset.presigned_url)
+            .filter((value): value is string => Boolean(value)),
+        }))}
         jobId={generationResult?.jobId ?? jobId}
         isLoading={isGenerating}
         error={generationError}
         statusStage={jobUpdate?.stage ?? null}
         statusMessage={jobUpdate?.message ?? null}
         statusUpdates={jobTimeline}
+        onResultChange={(result) => setGenerationResult(result)}
         onBack={() => setShowResults(false)}
         onStartOver={() => {
           clearActiveSingleRun();
@@ -397,7 +408,8 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
         }}
         onCreateVideo={
           mode === "video"
-            ? () => {
+            ? (images) => {
+              setGenerationResult((prev) => (prev ? { ...prev, generatedImages: images } : prev));
               setShowResults(false);
               setShowVideoCreation(true);
               }

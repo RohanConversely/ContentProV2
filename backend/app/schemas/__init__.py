@@ -1,5 +1,6 @@
 from .asset import AssetResponse, AssetUrlResponse
 from .auth import LoginRequest, MeResponse, RegisterRequest, TokenResponse
+from .generation import JobGenerationResponse, JobRegenerateRequest
 from .image_jobs import BatchImageJobRequest, BatchImageJobResponse, SingleImageJobResponse
 from .job import (
     JobCreateRequest,
@@ -20,6 +21,8 @@ __all__ = [
     "TokenResponse",
     "BatchImageJobRequest",
     "BatchImageJobResponse",
+    "JobGenerationResponse",
+    "JobRegenerateRequest",
     "JobCreateRequest",
     "JobListResponse",
     "JobResponse",

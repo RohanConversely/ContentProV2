@@ -11,6 +11,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.database import get_db
 from app.models.asset import Asset
+from app.models.job_generation import JobGeneration
 from app.models.job import Job
 from app.models.pricing import PipelineLog, PricingSnapshot
 from app.models.user import User
@@ -26,7 +27,8 @@ from app.schemas.job import (
     RecentJobResponse,
     UsageResponse,
 )
-from app.services.pipeline_runner import hydrate_job_assets, subscribe
+from app.schemas.generation import JobGenerationResponse, JobRegenerateRequest
+from app.services.pipeline_runner import hydrate_job_assets, queue_regeneration_task, subscribe
 from app.services.storage import storage_service
 
 router = APIRouter(tags=["jobs"])
@@ -51,6 +53,47 @@ def _job_summary(job: Job) -> JobSummaryResponse:
 
 def _active_job_query(*conditions):
     return select(Job).where(Job.status != SOFT_DELETED_STATUS, *conditions)
+
+
+def _build_generation_responses(
+    assets: list[AssetResponse],
+    generations: list[JobGeneration],
+) -> list[JobGenerationResponse]:
+    generated_assets = [asset for asset in assets if asset.asset_type == "generated_image" and not asset.is_deleted]
+    assets_by_generation: dict[str, list[AssetResponse]] = {}
+    legacy_assets: list[AssetResponse] = []
+    for asset in generated_assets:
+        if asset.generation_id:
+            assets_by_generation.setdefault(asset.generation_id, []).append(asset)
+        else:
+            legacy_assets.append(asset)
+
+    responses: list[JobGenerationResponse] = []
+    if legacy_assets:
+        responses.append(
+            JobGenerationResponse(
+                id="legacy-round-1",
+                round_number=1,
+                additional_description=None,
+                status="completed",
+                created_at=min(asset.created_at for asset in legacy_assets),
+                images=legacy_assets,
+            )
+        )
+
+    for generation in generations:
+        responses.append(
+            JobGenerationResponse(
+                id=generation.id,
+                round_number=generation.round_number,
+                additional_description=generation.additional_description,
+                status=generation.status,
+                created_at=generation.created_at,
+                images=assets_by_generation.get(generation.id, []),
+            )
+        )
+
+    return sorted(responses, key=lambda item: item.round_number)
 
 
 @router.post("/jobs", response_model=JobSummaryResponse)
@@ -238,6 +281,12 @@ async def get_job(
         raise HTTPException(status_code=404, detail="Job not found.")
 
     assets = [AssetResponse(**asset) for asset in await hydrate_job_assets(db, job)]
+    generation_result = await db.execute(
+        select(JobGeneration)
+        .where(JobGeneration.job_id == job.id)
+        .order_by(JobGeneration.round_number.asc())
+    )
+    generations = _build_generation_responses(assets, generation_result.scalars().all())
     pricing_snapshot = None
     pricing_result = await db.execute(select(PricingSnapshot).where(PricingSnapshot.job_id == job.id))
     pricing = pricing_result.scalar_one_or_none()
@@ -276,7 +325,92 @@ async def get_job(
         created_at=job.created_at,
         updated_at=job.updated_at,
         assets=assets,
+        generations=generations,
         pricing_snapshot=pricing_snapshot,
+    )
+
+
+@router.post("/jobs/{job_id}/regenerate-images", response_model=JobGenerationResponse)
+async def regenerate_job_images(
+    job_id: str,
+    payload: JobRegenerateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> JobGenerationResponse:
+    result = await db.execute(_active_job_query(Job.job_id == job_id, Job.user_id == current_user.id))
+    job = result.scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    if job.job_type != "image":
+        raise HTTPException(status_code=400, detail="Only image jobs can be regenerated.")
+    if job.status == "running":
+        raise HTTPException(status_code=409, detail="This job is already running.")
+    if job.status != "completed":
+        raise HTTPException(status_code=400, detail="Only completed jobs can be regenerated.")
+
+    raw_asset_result = await db.execute(
+        select(Asset.id).where(
+            Asset.job_id == job.id,
+            Asset.asset_type == "raw_image",
+            Asset.is_deleted.is_(False),
+        )
+    )
+    if raw_asset_result.first() is None:
+        raise HTTPException(status_code=400, detail="No source images available for regeneration.")
+
+    filtered_kyc_result = await db.execute(
+        select(Asset.id).where(
+            Asset.job_id == job.id,
+            Asset.asset_type == "kyc_json",
+            Asset.is_deleted.is_(False),
+            Asset.storage_key.ilike("%filtered%"),
+        )
+    )
+    if filtered_kyc_result.first() is None:
+        raise HTTPException(status_code=400, detail="No filtered KYC output available for regeneration.")
+
+    generation_result = await db.execute(
+        select(JobGeneration)
+        .where(JobGeneration.job_id == job.id)
+        .order_by(JobGeneration.round_number.desc())
+    )
+    latest_generation = generation_result.scalars().first()
+    has_legacy_generation = await db.execute(
+        select(Asset.id).where(
+            Asset.job_id == job.id,
+            Asset.asset_type == "generated_image",
+            Asset.generation_id.is_(None),
+            Asset.is_deleted.is_(False),
+        )
+    )
+    next_round = 1
+    if latest_generation is not None:
+        next_round = latest_generation.round_number + 1
+    elif has_legacy_generation.first() is not None:
+        next_round = 2
+
+    generation = JobGeneration(
+        job_id=job.id,
+        round_number=next_round,
+        additional_description=payload.additional_description.strip(),
+        status="queued",
+    )
+    db.add(generation)
+    job.status = "queued"
+    job.current_stage = "stage_2"
+    job.error_message = None
+    await db.commit()
+    await db.refresh(generation)
+
+    await queue_regeneration_task(job.job_id, generation.id)
+
+    return JobGenerationResponse(
+        id=generation.id,
+        round_number=generation.round_number,
+        additional_description=generation.additional_description,
+        status=generation.status,
+        created_at=generation.created_at,
+        images=[],
     )
 
 
@@ -371,6 +505,7 @@ async def get_pricing(
 @router.get("/jobs/{job_id}/download/images")
 async def download_job_images_archive(
     job_id: str,
+    generation_id: str | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -379,7 +514,7 @@ async def download_job_images_archive(
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
 
-    asset_result = await db.execute(
+    asset_query = (
         select(Asset)
         .where(
             Asset.job_id == job.id,
@@ -388,6 +523,21 @@ async def download_job_images_archive(
         )
         .order_by(Asset.created_at.asc())
     )
+    if generation_id:
+        if generation_id == "legacy-round-1":
+            asset_query = asset_query.where(Asset.generation_id.is_(None))
+        else:
+            asset_query = asset_query.where(Asset.generation_id == generation_id)
+    else:
+        latest_generation_result = await db.execute(
+            select(JobGeneration)
+            .where(JobGeneration.job_id == job.id)
+            .order_by(JobGeneration.round_number.desc())
+        )
+        latest_generation = latest_generation_result.scalars().first()
+        if latest_generation is not None:
+            asset_query = asset_query.where(Asset.generation_id == latest_generation.id)
+    asset_result = await db.execute(asset_query)
     assets = asset_result.scalars().all()
     if not assets:
         raise HTTPException(status_code=404, detail="No generated images available for this job.")

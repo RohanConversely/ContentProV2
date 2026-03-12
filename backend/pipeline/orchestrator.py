@@ -38,6 +38,7 @@ class JobContext:
     num_images: int = 6
     temperature: float = 0.1
     prompt_file: str = "ImageWithKYCTesting.txt"
+    additional_description: str | None = None
     workspace_root: Path | None = None
     work_dir: Path = field(init=False)
     product_kyc_dir: Path = field(init=False)
@@ -141,9 +142,48 @@ async def _run_stage_2(ctx: JobContext, filtered_kyc_path: Path, logger: JsonLog
         temperature=ctx.temperature,
         output_dir=str(ctx.generated_images_dir),
         prompt_file=ctx.prompt_file,
+        additional_description=ctx.additional_description,
         logger_obj=logger,
         log_context={"job_id": ctx.job_id, "stage": "stage_2_image_generation"},
     )
+
+
+async def run_stage_2_only(ctx: JobContext, filtered_kyc_path: Path) -> dict[str, Any]:
+    logger = build_logger(ctx.job_log_file)
+    logger.info(
+        "Stage 2 regeneration initialized.",
+        {
+            "job_id": ctx.job_id,
+            "brand_name": ctx.brand_name,
+            "product_name": ctx.product_name,
+            "image_paths": [str(image_path.resolve()) for image_path in ctx.image_paths],
+            "workspace": str(ctx.work_dir),
+            "additional_description": ctx.additional_description,
+        },
+    )
+    stage_2_result = await _run_stage_2(ctx, filtered_kyc_path.resolve(), logger)
+    if not stage_2_result.get("ok"):
+        raise PipelineStageError("Stage 2 failed to generate images.")
+
+    generated_images = stage_2_result.get("generated_images")
+    if not isinstance(generated_images, list) or not generated_images:
+        raise PipelineStageError("Stage 2 returned no generated images.")
+
+    image_paths = [str(Path(path).resolve()) for path in generated_images]
+    for path in image_paths:
+        if not Path(path).exists():
+            raise PipelineStageError(f"Stage 2 output missing: {path}")
+
+    logger.info(
+        "Stage 2 regeneration completed.",
+        {"job_id": ctx.job_id, "generated_images": image_paths, "count": len(image_paths)},
+    )
+    return {
+        "ok": True,
+        "generated_images": image_paths,
+        "count": len(image_paths),
+        "filtered_kyc_json_path": str(filtered_kyc_path.resolve()),
+    }
 
 
 async def run_image_pipeline(ctx: JobContext) -> ImagePipelineResult:

@@ -24,6 +24,7 @@ def _asset_response(asset: Asset) -> AssetResponse:
     return AssetResponse(
         id=asset.id,
         job_id=asset.job_id,
+        generation_id=asset.generation_id,
         asset_type=asset.asset_type,
         stage=asset.stage,
         storage_key=asset.storage_key,
@@ -225,6 +226,7 @@ async def list_job_assets(
             AssetResponse(
                 id=asset.id,
                 job_id=asset.job_id,
+                generation_id=asset.generation_id,
                 asset_type=asset.asset_type,
                 stage=asset.stage,
                 storage_key=asset.storage_key,

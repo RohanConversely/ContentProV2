@@ -13,11 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.database import AsyncSessionLocal
 from app.models.asset import Asset
+from app.models.job_generation import JobGeneration
 from app.models.job import Job
 from app.models.pricing import PipelineLog, PricingSnapshot
 from app.services.storage import storage_service
 from app.utils.presigned_urls import generate_url
-from pipeline.orchestrator import JobContext, PipelineStageError, run_image_pipeline
+from pipeline.orchestrator import JobContext, PipelineStageError, run_image_pipeline, run_stage_2_only
 from pipeline.pricing import compute_price_report
 
 EVENT_QUEUES: dict[str, list[asyncio.Queue[dict[str, Any]]]] = defaultdict(list)
@@ -89,6 +90,7 @@ async def _create_asset(
     db: AsyncSession,
     *,
     job: Job,
+    generation: JobGeneration | None = None,
     asset_type: str,
     stage: str,
     local_path: Path,
@@ -111,6 +113,7 @@ async def _create_asset(
     size_bytes = local_path.stat().st_size if local_path.exists() else None
     asset = Asset(
         job_id=job.id,
+        generation_id=generation.id if generation is not None else None,
         asset_type=asset_type,
         stage=stage,
         storage_key=storage_key,
@@ -135,19 +138,36 @@ async def _upload_stage_outputs(db: AsyncSession, job: Job, result: dict[str, An
         await storage_service.upload_file(local_path, storage_key)
         await _create_asset(db, job=job, asset_type=asset_type, stage="stage_1", local_path=local_path, storage_key=storage_key)
 
+    generation = await _ensure_initial_generation(db, job)
     for local_path_str in result["generated_images"]:
         local_path = Path(local_path_str)
-        storage_key = f"{job.storage_prefix}/stage_2/{local_path.name}"
+        storage_key = f"{job.storage_prefix}/stage_2/round_{generation.round_number}/{local_path.name}"
         await storage_service.upload_file(local_path, storage_key)
-        await _create_asset(db, job=job, asset_type="generated_image", stage="stage_2", local_path=local_path, storage_key=storage_key)
+        await _create_asset(
+            db,
+            job=job,
+            generation=generation,
+            asset_type="generated_image",
+            stage="stage_2",
+            local_path=local_path,
+            storage_key=storage_key,
+        )
 
 
-async def _upload_generated_image(db: AsyncSession, job: Job, local_path: Path) -> None:
-    storage_key = f"{job.storage_prefix}/stage_2/{local_path.name}"
+async def _upload_generated_image(
+    db: AsyncSession,
+    job: Job,
+    local_path: Path,
+    generation: JobGeneration | None = None,
+) -> None:
+    if generation is None:
+        generation = await _ensure_initial_generation(db, job)
+    storage_key = f"{job.storage_prefix}/stage_2/round_{generation.round_number}/{local_path.name}"
     await storage_service.upload_file(local_path, storage_key)
     await _create_asset(
         db,
         job=job,
+        generation=generation,
         asset_type="generated_image",
         stage="stage_2",
         local_path=local_path,
@@ -193,6 +213,77 @@ def _build_job_workspace(job: Job) -> Path:
     return workspace
 
 
+async def _legacy_generated_images_exist(db: AsyncSession, job: Job) -> bool:
+    result = await db.execute(
+        select(Asset.id).where(
+            Asset.job_id == job.id,
+            Asset.asset_type == "generated_image",
+            Asset.generation_id.is_(None),
+            Asset.is_deleted.is_(False),
+        )
+    )
+    return result.first() is not None
+
+
+async def _next_generation_round(db: AsyncSession, job: Job) -> int:
+    result = await db.execute(
+        select(JobGeneration).where(JobGeneration.job_id == job.id).order_by(JobGeneration.round_number.desc())
+    )
+    latest = result.scalars().first()
+    if latest is not None:
+        return latest.round_number + 1
+    if await _legacy_generated_images_exist(db, job):
+        return 2
+    return 1
+
+
+async def _create_generation(
+    db: AsyncSession,
+    job: Job,
+    *,
+    additional_description: str | None,
+    status: str,
+) -> JobGeneration:
+    generation = JobGeneration(
+        job_id=job.id,
+        round_number=await _next_generation_round(db, job),
+        additional_description=additional_description,
+        status=status,
+    )
+    db.add(generation)
+    await db.commit()
+    await db.refresh(generation)
+    return generation
+
+
+async def _ensure_initial_generation(db: AsyncSession, job: Job) -> JobGeneration:
+    result = await db.execute(
+        select(JobGeneration).where(JobGeneration.job_id == job.id, JobGeneration.round_number == 1)
+    )
+    generation = result.scalar_one_or_none()
+    if generation is not None:
+        return generation
+    return await _create_generation(db, job, additional_description=None, status="completed")
+
+
+async def _get_latest_filtered_kyc_asset(db: AsyncSession, job: Job) -> Asset | None:
+    result = await db.execute(
+        select(Asset)
+        .where(
+            Asset.job_id == job.id,
+            Asset.asset_type == "kyc_json",
+            Asset.is_deleted.is_(False),
+        )
+        .order_by(Asset.created_at.desc())
+    )
+    for asset in result.scalars().all():
+        filename = (asset.original_filename or "").lower()
+        storage_key = asset.storage_key.lower()
+        if "_filtered" in filename or "_filtered" in storage_key:
+            return asset
+    return None
+
+
 def _parse_log_line(line: str) -> dict[str, Any] | None:
     try:
         payload = json.loads(line)
@@ -203,7 +294,14 @@ def _parse_log_line(line: str) -> dict[str, Any] | None:
     return payload
 
 
-async def _monitor_job_log(job: Job, log_file: Path, stop_event: asyncio.Event) -> None:
+async def _monitor_job_log(
+    job: Job,
+    log_file: Path,
+    stop_event: asyncio.Event,
+    *,
+    generation: JobGeneration | None = None,
+    stage_1_enabled: bool = True,
+) -> None:
     image_counter = 0
     uploaded_paths: set[str] = set()
     position = 0
@@ -225,15 +323,23 @@ async def _monitor_job_log(job: Job, log_file: Path, stop_event: asyncio.Event) 
             message = payload.get("message")
             context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
 
-            if message == "Requesting Product KYC.":
+            if stage_1_enabled and message == "Requesting Product KYC.":
                 async with AsyncSessionLocal() as db:
                     await emit_for_job(job, "stage_1", "running", "Performing Product KYC", db)
-            elif message == "KYC saved.":
+            elif stage_1_enabled and message == "KYC saved.":
                 async with AsyncSessionLocal() as db:
                     await emit_for_job(job, "stage_1", "running", "Product KYC complete", db)
             elif message == "Requesting image generation with KYC.":
                 async with AsyncSessionLocal() as db:
-                    await emit_for_job(job, "stage_2", "running", "Starting image generation", db)
+                    if generation is not None:
+                        generation_result = await db.execute(select(JobGeneration).where(JobGeneration.id == generation.id))
+                        current_generation = generation_result.scalar_one_or_none()
+                    else:
+                        current_generation = None
+                    if current_generation is not None and current_generation.round_number > 1:
+                        await emit_for_job(job, "stage_2", "running", f"Starting regeneration {current_generation.round_number}", db)
+                    else:
+                        await emit_for_job(job, "stage_2", "running", "Starting image generation", db)
             elif message == "Image generated.":
                 output_file = context.get("output_file")
                 if not isinstance(output_file, str) or output_file in uploaded_paths:
@@ -246,7 +352,7 @@ async def _monitor_job_log(job: Job, log_file: Path, stop_event: asyncio.Event) 
                         current_job = result.scalar_one_or_none()
                         if current_job is None:
                             continue
-                        await _upload_generated_image(db, current_job, local_path)
+                        await _upload_generated_image(db, current_job, local_path, generation=generation)
                         await emit_for_job(current_job, "stage_2", "running", f"Generating image {image_counter}", db)
                     uploaded_paths.add(output_file)
 
@@ -274,14 +380,19 @@ async def _upsert_pricing_snapshot(db: AsyncSession, job: Job, pricing_report: d
         pricing = PricingSnapshot(job_id=job.id)
         db.add(pricing)
 
+    stage_1_cost = (steps.get("step_1_product_kyc") or {}).get("cost", {}).get("total")
+    stage_2_cost = (steps.get("step_2_image_generation") or {}).get("cost", {}).get("total")
+    stage_3_cost = (steps.get("step_3_video_prompt_generation") or {}).get("cost", {}).get("total")
+    stage_4_cost = (steps.get("step_4_video_generation") or {}).get("cost", {}).get("total")
+
     pricing.raw_price_data = pricing_report
-    pricing.total_cost_usd = totals.get("grand_total")
-    pricing.stage_1_cost_usd = (steps.get("step_1_product_kyc") or {}).get("cost", {}).get("total")
-    pricing.stage_2_cost_usd = (steps.get("step_2_image_generation") or {}).get("cost", {}).get("total")
-    pricing.stage_3_cost_usd = (steps.get("step_3_video_prompt_generation") or {}).get("cost", {}).get("total")
-    pricing.stage_4_cost_usd = (steps.get("step_4_video_generation") or {}).get("cost", {}).get("total")
-    pricing.total_input_tokens = token_usage.get("input_tokens")
-    pricing.total_output_tokens = token_usage.get("output_tokens")
+    pricing.total_cost_usd = totals.get("grand_total") if totals.get("grand_total") is not None else pricing.total_cost_usd
+    pricing.stage_1_cost_usd = stage_1_cost if stage_1_cost is not None else pricing.stage_1_cost_usd
+    pricing.stage_2_cost_usd = stage_2_cost if stage_2_cost is not None else pricing.stage_2_cost_usd
+    pricing.stage_3_cost_usd = stage_3_cost if stage_3_cost is not None else pricing.stage_3_cost_usd
+    pricing.stage_4_cost_usd = stage_4_cost if stage_4_cost is not None else pricing.stage_4_cost_usd
+    pricing.total_input_tokens = token_usage.get("input_tokens") if token_usage.get("input_tokens") is not None else pricing.total_input_tokens
+    pricing.total_output_tokens = token_usage.get("output_tokens") if token_usage.get("output_tokens") is not None else pricing.total_output_tokens
     await db.commit()
 
 
@@ -388,8 +499,123 @@ async def run_pipeline_task(job_id: str) -> None:
             raise
 
 
+async def run_regeneration_task(job_id: str, generation_id: str) -> None:
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(Job).where(Job.job_id == job_id))
+        job = result.scalar_one_or_none()
+        if job is None:
+            return
+
+        generation_result = await db.execute(select(JobGeneration).where(JobGeneration.id == generation_id, JobGeneration.job_id == job.id))
+        generation = generation_result.scalar_one_or_none()
+        if generation is None:
+            return
+
+        workspace = _build_job_workspace(job) / f"regeneration_round_{generation.round_number}"
+        workspace.mkdir(parents=True, exist_ok=True)
+        filtered_kyc_asset = await _get_latest_filtered_kyc_asset(db, job)
+        if filtered_kyc_asset is None:
+            generation.status = "failed"
+            job.status = "failed"
+            job.error_message = "No filtered KYC asset available for regeneration."
+            await db.commit()
+            await emit_for_job(job, "stage_2", "failed", job.error_message, db)
+            return
+
+        raw_asset_result = await db.execute(
+            select(Asset)
+            .where(Asset.job_id == job.id, Asset.asset_type == "raw_image", Asset.is_deleted.is_(False))
+            .order_by(Asset.created_at.asc())
+        )
+        raw_assets = raw_asset_result.scalars().all()
+        if not raw_assets:
+            generation.status = "failed"
+            job.status = "failed"
+            job.error_message = "No raw input images available for regeneration."
+            await db.commit()
+            await emit_for_job(job, "stage_2", "failed", job.error_message, db)
+            return
+
+        image_paths: list[Path] = []
+        for raw_asset in raw_assets[:5]:
+            local_image = workspace / "raw" / (raw_asset.original_filename or "product.jpg")
+            await storage_service.download_file(raw_asset.storage_key, local_image)
+            image_paths.append(local_image)
+
+        filtered_kyc_path = workspace / "stage_1" / (filtered_kyc_asset.original_filename or Path(filtered_kyc_asset.storage_key).name)
+        await storage_service.download_file(filtered_kyc_asset.storage_key, filtered_kyc_path)
+
+        ctx = JobContext(
+            job_id=job.job_id,
+            brand_name=job.brand_name,
+            brand_website=job.brand_website,
+            product_name=job.product_name,
+            product_category=job.product_category,
+            image_paths=image_paths,
+            social_link_1=job.social_link_1,
+            social_link_2=job.social_link_2,
+            additional_info=job.additional_input_json,
+            num_images=6,
+            temperature=0.1,
+            additional_description=generation.additional_description,
+            workspace_root=workspace,
+        )
+
+        log_stop_event = asyncio.Event()
+        log_monitor_task: asyncio.Task[None] | None = None
+        try:
+            generation.status = "running"
+            job.status = "running"
+            job.current_stage = "stage_2"
+            job.error_message = None
+            await db.commit()
+            log_monitor_task = asyncio.create_task(
+                _monitor_job_log(job, ctx.job_log_file, log_stop_event, generation=generation, stage_1_enabled=False)
+            )
+            await emit_for_job(job, "stage_2", "running", f"Queued regeneration {generation.round_number}.", db)
+
+            await run_stage_2_only(ctx, filtered_kyc_path)
+
+            log_stop_event.set()
+            await log_monitor_task
+
+            pricing_file, pricing_report = _write_pricing_file(job, workspace)
+            await _upsert_pricing_snapshot(db, job, pricing_report)
+            await _upload_job_support_files(db, job, log_file=ctx.job_log_file, pricing_file=pricing_file)
+
+            generation.status = "completed"
+            job.status = "completed"
+            job.current_stage = "stage_2"
+            job.error_message = None
+            await db.commit()
+            await emit_for_job(job, "stage_2", "completed", f"Regeneration {generation.round_number} completed.", db)
+        except Exception as exc:
+            try:
+                log_stop_event.set()
+                if log_monitor_task is not None:
+                    await log_monitor_task
+            except Exception:
+                pass
+            generation.status = "failed"
+            job.status = "failed"
+            job.error_message = str(exc)
+            await db.commit()
+            try:
+                await _upload_job_support_files(db, job, log_file=ctx.job_log_file, pricing_file=None)
+            except Exception:
+                pass
+            await emit_for_job(job, "stage_2", "failed", str(exc), db)
+            if isinstance(exc, PipelineStageError):
+                return
+            raise
+
+
 async def queue_pipeline_task(job_id: str) -> None:
     asyncio.create_task(run_pipeline_task(job_id))
+
+
+async def queue_regeneration_task(job_id: str, generation_id: str) -> None:
+    asyncio.create_task(run_regeneration_task(job_id, generation_id))
 
 
 async def hydrate_job_assets(db: AsyncSession, job: Job) -> list[dict[str, Any]]:
@@ -403,6 +629,7 @@ async def hydrate_job_assets(db: AsyncSession, job: Job) -> list[dict[str, Any]]
             {
                 "id": asset.id,
                 "job_id": asset.job_id,
+                "generation_id": asset.generation_id,
                 "asset_type": asset.asset_type,
                 "stage": asset.stage,
                 "storage_key": asset.storage_key,

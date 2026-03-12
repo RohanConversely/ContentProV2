@@ -5,6 +5,7 @@ from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field
 
 from .asset import AssetResponse
+from .generation import JobGenerationResponse
 
 
 class JobCreateRequest(BaseModel):
@@ -71,6 +72,7 @@ class JobResponse(JobSummaryResponse):
     error_message: str | None = None
     storage_prefix: str
     assets: list[AssetResponse] = Field(default_factory=list)
+    generations: list[JobGenerationResponse] = Field(default_factory=list)
     pricing_snapshot: PricingSnapshotResponse | None = None
 
 
