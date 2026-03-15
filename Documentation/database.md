@@ -184,7 +184,7 @@ Verified on the live droplet database:
 - `users`, `assets`, `pricing_snapshots`, and `pipeline_logs` contain the columns required by the current code
 
 Current live Alembic version:
-- `20260311_0001`
+- `20260311_0002`
 
 Important caveat:
 - the live DB is compatible with the code
