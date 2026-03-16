@@ -415,6 +415,7 @@ async def run_pipeline_task(job_id: str) -> None:
             social_link_1=job.social_link_1,
             social_link_2=job.social_link_2,
             additional_info=job.additional_input_json,
+            image_model=job.image_model or "flux-2-pro",
             num_images=6,
             temperature=0.1,
             workspace_root=workspace,
@@ -499,7 +500,7 @@ async def run_pipeline_task(job_id: str) -> None:
             raise
 
 
-async def run_regeneration_task(job_id: str, generation_id: str) -> None:
+async def run_regeneration_task(job_id: str, generation_id: str, image_model: str | None = None) -> None:
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Job).where(Job.job_id == job_id))
         job = result.scalar_one_or_none()
@@ -555,6 +556,7 @@ async def run_regeneration_task(job_id: str, generation_id: str) -> None:
             social_link_1=job.social_link_1,
             social_link_2=job.social_link_2,
             additional_info=job.additional_input_json,
+            image_model=image_model or job.image_model or "flux-2-pro",
             num_images=6,
             temperature=0.1,
             additional_description=generation.additional_description,
@@ -614,8 +616,8 @@ async def queue_pipeline_task(job_id: str) -> None:
     asyncio.create_task(run_pipeline_task(job_id))
 
 
-async def queue_regeneration_task(job_id: str, generation_id: str) -> None:
-    asyncio.create_task(run_regeneration_task(job_id, generation_id))
+async def queue_regeneration_task(job_id: str, generation_id: str, image_model: str | None = None) -> None:
+    asyncio.create_task(run_regeneration_task(job_id, generation_id, image_model))
 
 
 async def hydrate_job_assets(db: AsyncSession, job: Job) -> list[dict[str, Any]]:

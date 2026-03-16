@@ -17,6 +17,7 @@ class BatchRowInput:
     social_link_1: str | None = None
     social_link_2: str | None = None
     additional_info: dict[str, Any] | None = None
+    image_model: str = "flux-2-pro"
     num_images: int = 6
     temperature: float = 0.1
     source_image_url: str | None = None
@@ -33,10 +34,11 @@ async def run_batch_product_upload(rows: list[BatchRowInput]) -> dict[str, Any]:
             brand_website=row.brand_website,
             product_name=row.product_name,
             product_category=row.product_category,
-            image_path=row.image_path.resolve(),
+            image_paths=[row.image_path.resolve()],
             social_link_1=row.social_link_1,
             social_link_2=row.social_link_2,
             additional_info=row.additional_info,
+            image_model=row.image_model,
             num_images=row.num_images,
             temperature=row.temperature,
         )

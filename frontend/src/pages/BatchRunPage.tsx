@@ -173,6 +173,7 @@ const BatchRunPage = () => {
             brandWebsite: localJob.productData.brandWebsite,
             productName: localJob.productData.productName,
             productCategory: localJob.productData.productCategory,
+            imageModel: localJob.productData.imageModel ?? "flux-2-pro",
             socialLink1: localJob.productData.socialLinkInstagram || undefined,
             socialLink2: localJob.productData.socialLinkFacebook || undefined,
             socialLink3: localJob.productData.socialLinkLinkedin || undefined,

@@ -42,6 +42,7 @@ def _job_summary(job: Job) -> JobSummaryResponse:
         brand_name=job.brand_name,
         product_name=job.product_name,
         job_type=job.job_type,
+        image_model=job.image_model,
         batch_id=job.batch_id,
         batch_name=job.batch_name,
         status=job.status,
@@ -113,6 +114,7 @@ async def create_job(
         product_name=payload.product_name,
         product_category=payload.product_category,
         job_type=payload.job_type,
+        image_model=payload.image_model,
         social_link_1=payload.social_link_1,
         social_link_2=payload.social_link_2,
         social_link_3=payload.social_link_3,
@@ -312,6 +314,7 @@ async def get_job(
         product_name=job.product_name,
         product_category=job.product_category,
         job_type=job.job_type,
+        image_model=job.image_model,
         social_link_1=job.social_link_1,
         social_link_2=job.social_link_2,
         social_link_3=job.social_link_3,
@@ -395,14 +398,16 @@ async def regenerate_job_images(
         additional_description=payload.additional_description.strip(),
         status="queued",
     )
+    selected_image_model = payload.image_model or job.image_model or "flux-2-pro"
     db.add(generation)
+    job.image_model = selected_image_model
     job.status = "queued"
     job.current_stage = "stage_2"
     job.error_message = None
     await db.commit()
     await db.refresh(generation)
 
-    await queue_regeneration_task(job.job_id, generation.id)
+    await queue_regeneration_task(job.job_id, generation.id, selected_image_model)
 
     return JobGenerationResponse(
         id=generation.id,

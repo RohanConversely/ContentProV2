@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .logger import JsonLogger
+from .stages.image_gen_with_flux import generate_images as generate_images_flux
 from .stages.image_gen_with_KYC import generate_images
 from .stages.product_kyc import generate_image_kyc
 
@@ -35,6 +36,7 @@ class JobContext:
     social_link_1: str | None = None
     social_link_2: str | None = None
     additional_info: dict[str, Any] | None = None
+    image_model: str = "flux-2-pro"
     num_images: int = 6
     temperature: float = 0.1
     prompt_file: str = "ImageWithKYCTesting.txt"
@@ -133,8 +135,9 @@ async def _run_stage_1(ctx: JobContext, logger: JsonLogger) -> dict[str, Any]:
 
 
 async def _run_stage_2(ctx: JobContext, filtered_kyc_path: Path, logger: JsonLogger) -> dict[str, Any]:
+    stage_2_fn = generate_images_flux if ctx.image_model == "flux-2-pro" else generate_images
     return await asyncio.to_thread(
-        generate_images,
+        stage_2_fn,
         image_paths=[str(image_path.resolve()) for image_path in ctx.image_paths],
         brand_name=ctx.brand_name,
         kyc_path=str(filtered_kyc_path.resolve()),

@@ -10,6 +10,7 @@ from .generation import JobGenerationResponse
 
 class JobCreateRequest(BaseModel):
     job_type: str = Field(default="image")
+    image_model: str = Field(default="flux-2-pro", pattern="^(flux-2-pro|gpt-image-1)$")
     brand_name: str = Field(min_length=1)
     brand_website: str
     product_name: str = Field(min_length=1)
@@ -30,6 +31,7 @@ class JobSummaryResponse(BaseModel):
     brand_name: str
     product_name: str
     job_type: str
+    image_model: str
     batch_id: str | None = None
     batch_name: str | None = None
     total_jobs: int | None = None

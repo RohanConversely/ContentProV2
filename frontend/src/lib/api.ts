@@ -93,6 +93,7 @@ export interface BackendJobSummaryResponse {
   brand_name: string;
   product_name: string;
   job_type: string;
+  image_model: "flux-2-pro" | "gpt-image-1";
   batch_id?: string;
   batch_name?: string;
   total_jobs?: number;
@@ -168,6 +169,7 @@ export interface GenerateImagesInput {
   socialLink3?: string;
   socialLink4?: string;
   additionalInput?: Record<string, unknown>;
+  imageModel?: "flux-2-pro" | "gpt-image-1";
 }
 
 export interface JobEventPayload {
@@ -509,7 +511,9 @@ export async function getRecentProjects(): Promise<RecentProjectSummary[]> {
   return response.map(mapRecentProject);
 }
 
-export async function createJob(input: Omit<GenerateImagesInput, "imageFiles"> & { batch_id?: string, batch_name?: string }): Promise<BackendJobSummaryResponse> {
+export async function createJob(
+  input: Omit<GenerateImagesInput, "imageFiles"> & { batch_id?: string; batch_name?: string },
+): Promise<BackendJobSummaryResponse> {
   return apiJson<BackendJobSummaryResponse>(
     "/jobs",
     {
@@ -519,6 +523,7 @@ export async function createJob(input: Omit<GenerateImagesInput, "imageFiles"> &
       },
       body: JSON.stringify({
         job_type: "image",
+        image_model: input.imageModel ?? "flux-2-pro",
         brand_name: input.brandName,
         brand_website: input.brandWebsite,
         product_name: input.productName,

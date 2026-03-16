@@ -128,7 +128,35 @@ def _aggregate_tokens(entries: list[dict[str, Any]]) -> dict[str, TokenAggregate
     return per_step
 
 
-def _compute_step_cost(step: str, agg: TokenAggregate) -> dict[str, Any]:
+def _aggregate_flux_stage2_cost(entries: list[dict[str, Any]]) -> tuple[Decimal, int, str]:
+    total_cost = Decimal("0")
+    usage_events = 0
+    model = "flux-2-pro"
+    for entry in entries:
+        if entry.get("message") != "Flux usage":
+            continue
+        context = entry.get("context") or {}
+        if context.get("operation") != "flux_image_generation":
+            continue
+        usage_events += 1
+        raw_cost = context.get("cost_usd", 0)
+        try:
+            total_cost += Decimal(str(raw_cost))
+        except Exception:
+            continue
+        if context.get("model"):
+            model = str(context.get("model"))
+    return total_cost, usage_events, model
+
+
+def _compute_step_cost(
+    step: str,
+    agg: TokenAggregate,
+    *,
+    override_cost_total: Decimal | None = None,
+    override_model: str | None = None,
+    override_usage_events: int | None = None,
+) -> dict[str, Any]:
     model = STEP_TO_MODEL[step]
     pricing = MODEL_PRICING[model]
 
@@ -143,7 +171,7 @@ def _compute_step_cost(step: str, agg: TokenAggregate) -> dict[str, Any]:
     output_cost = (_to_decimal(billable_output_tokens) / TOKEN_SCALE) * pricing["output_per_million"]
     total_cost = input_cost + cached_cost + output_cost
 
-    return {
+    report = {
         "step": step,
         "model": model,
         "usage_events": agg.usage_events,
@@ -168,6 +196,23 @@ def _compute_step_cost(step: str, agg: TokenAggregate) -> dict[str, Any]:
             "total": _decimal_to_float(total_cost),
         },
     }
+    if override_cost_total is not None:
+        report["rates"] = {
+            "input_per_million": 0.0,
+            "cached_input_per_million": 0.0,
+            "output_per_million": 0.0,
+        }
+        report["cost"] = {
+            "input": 0.0,
+            "cached_input": 0.0,
+            "output": _decimal_to_float(override_cost_total),
+            "total": _decimal_to_float(override_cost_total),
+        }
+    if override_model is not None:
+        report["model"] = override_model
+    if override_usage_events is not None:
+        report["usage_events"] = override_usage_events
+    return report
 
 
 def _compute_veo_cost(entries: list[dict[str, Any]]) -> dict[str, Any]:
@@ -247,6 +292,7 @@ def compute_price_report(job_dir: Path, job_log_file: Path, currency: str) -> di
 
     job_meta = _extract_job_meta(entries, job_dir)
     per_step_usage = _aggregate_tokens(entries)
+    flux_stage_2_cost, flux_stage_2_events, flux_stage_2_model = _aggregate_flux_stage2_cost(entries)
 
     step_reports: list[dict[str, Any]] = []
     token_cost_total = Decimal("0")
@@ -257,7 +303,16 @@ def compute_price_report(job_dir: Path, job_log_file: Path, currency: str) -> di
 
     for step in ("step_1_product_kyc", "step_2_image_generation", "step_3_video_prompt_generation"):
         agg = per_step_usage.get(step, TokenAggregate())
-        report = _compute_step_cost(step, agg)
+        if step == "step_2_image_generation" and flux_stage_2_events > 0:
+            report = _compute_step_cost(
+                step,
+                agg,
+                override_cost_total=flux_stage_2_cost,
+                override_model=flux_stage_2_model,
+                override_usage_events=flux_stage_2_events,
+            )
+        else:
+            report = _compute_step_cost(step, agg)
         step_reports.append(report)
         token_cost_total += Decimal(str(report["cost"]["total"]))
         total_input += report["usage"]["input_tokens"]
