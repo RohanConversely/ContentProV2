@@ -292,7 +292,7 @@ function mapUsage(payload: BackendUsageResponse): UsageSummary {
 }
 
 function mapRecentProject(payload: BackendRecentJobResponse): RecentProjectSummary {
-  const inProgress = payload.status !== "completed" && payload.status !== "failed";
+  const inProgress = payload.status !== "completed" && payload.status !== "failed" && payload.status !== "cancelled";
   return {
     id: payload.id,
     name: payload.name,
@@ -300,7 +300,7 @@ function mapRecentProject(payload: BackendRecentJobResponse): RecentProjectSumma
     theme: inProgress ? "Running" : payload.status,
     images: payload.images,
     date: formatDate(payload.date),
-    status: inProgress ? "in-progress" : payload.status === "failed" ? "failed" : "completed",
+    status: inProgress ? "in-progress" : payload.status === "failed" || payload.status === "cancelled" ? "failed" : "completed",
     batch_id: payload.batch_id,
     total_jobs: payload.total_jobs,
   };
@@ -368,7 +368,7 @@ function mapProject(job: BackendJobResponse, summary?: BackendJobSummaryResponse
     status:
       (summary?.status || job.status) === "completed"
         ? "completed"
-        : (summary?.status || job.status) === "failed"
+        : (summary?.status || job.status) === "failed" || (summary?.status || job.status) === "cancelled"
           ? "failed"
           : "processing",
     createdAt: job.created_at,
@@ -684,6 +684,26 @@ export async function waitForJobCompletion(
   jobId: string,
   onStatus: (payload: JobEventPayload) => void,
 ): Promise<GeneratedImageResult> {
+  // Avoid hanging when the job completes before SSE subscription starts.
+  const preflight = await getJob(jobId);
+  if (preflight.status === "completed") {
+    onStatus({ stage: preflight.current_stage ?? "pipeline", status: "completed", message: "Completed." });
+  } else if (preflight.status === "failed") {
+    onStatus({
+      stage: preflight.current_stage ?? "pipeline",
+      status: "failed",
+      message: preflight.error_message ?? "Image generation failed.",
+    });
+    throw new Error(preflight.error_message ?? "Image generation failed.");
+  } else if (preflight.status === "cancelled") {
+    onStatus({
+      stage: preflight.current_stage ?? "pipeline",
+      status: "cancelled",
+      message: preflight.error_message ?? "Job cancelled.",
+    });
+    throw new Error(preflight.error_message ?? "Job cancelled.");
+  }
+
   await new Promise<void>((resolve, reject) => {
     let settled = false;
     const subscription = subscribeToJobEvents(jobId, {
@@ -697,6 +717,10 @@ export async function waitForJobCompletion(
           settled = true;
           subscription.close();
           reject(new Error(payload.message || "Image generation failed."));
+        } else if (payload.status === "cancelled") {
+          settled = true;
+          subscription.close();
+          reject(new Error(payload.message || "Job cancelled."));
         }
       },
       onError: (message) => {

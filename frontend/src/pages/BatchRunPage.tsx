@@ -22,7 +22,7 @@ import {
 } from "@/lib/active-runs";
 
 type BatchMode = "images" | "video";
-type BatchJobStatus = "queued" | "creating" | "uploading" | "running" | "completed" | "failed";
+type BatchJobStatus = "queued" | "creating" | "uploading" | "running" | "completed" | "failed" | "cancelled";
 
 interface BatchJobRunPayload {
   id: string;
@@ -79,7 +79,7 @@ const BatchRunPage = () => {
   );
 
   const isBatchFinished = useMemo(() => 
-    jobStates.every(j => ["completed", "failed"].includes(j.status)), 
+    jobStates.every(j => ["completed", "failed", "cancelled"].includes(j.status)), 
   [jobStates]);
 
   const handleDownloadBatch = async () => {
@@ -151,6 +151,11 @@ const BatchRunPage = () => {
 
     void (async () => {
       const preparedJobs = [...jobStatesRef.current];
+
+      const looksLikeDriveFolder = (value: string) =>
+        value.includes("drive.google.com/drive/folders/") ||
+        value.includes("drive.google.com/folderview") ||
+        (value.includes("drive.google.com/open?id=") && value.toLowerCase().includes("folder"));
 
       for (let index = 0; index < preparedJobs.length; index += 1) {
         const localJob = preparedJobs[index];
@@ -247,7 +252,8 @@ const BatchRunPage = () => {
               stage: "queued",
               message: "Downloading source image and queuing the job.",
             }));
-            if (localJob.sourceType === "drive_folder") {
+            const shouldUseFolder = localJob.sourceType === "drive_folder" || looksLikeDriveFolder(sourceImageUrl);
+            if (shouldUseFolder) {
               await uploadRemoteFolderAssets(backendJobId, sourceImageUrl, 4);
             } else {
               await uploadRemoteJobAsset(backendJobId, sourceImageUrl);
@@ -257,10 +263,17 @@ const BatchRunPage = () => {
           const completionPromise = waitForJobCompletion(backendJobId, (update: JobEventPayload) => {
             updateJob(localJob.id, (job) => ({
               ...job,
-              status: update.status === "failed" ? "failed" : update.status === "completed" ? "completed" : "running",
+              status:
+                update.status === "failed"
+                  ? "failed"
+                  : update.status === "completed"
+                    ? "completed"
+                    : update.status === "cancelled"
+                      ? "cancelled"
+                      : "running",
               stage: update.stage,
               message: update.message,
-              error: update.status === "failed" ? update.message : null,
+              error: update.status === "failed" || update.status === "cancelled" ? update.message : null,
             }));
           });
 

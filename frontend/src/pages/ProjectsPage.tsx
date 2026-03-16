@@ -662,6 +662,9 @@ const ProjectsPage = () => {
                       <p className="text-sm text-muted-foreground mb-4">
                         Created {formatDate(project.createdAt)}
                       </p>
+                      <p className="text-[11px] text-muted-foreground mb-4 font-mono break-all">
+                        Job ID: {project.id}
+                      </p>
 
                       <div className="flex items-center gap-2">
                         <button

@@ -26,7 +26,7 @@ const BatchDetailPage = () => {
   }, [batchId]);
 
   const batchName = jobs[0]?.batch_name || "Batch Results";
-  const anyRunning = jobs.some(j => !["completed", "failed"].includes(j.status));
+  const anyRunning = jobs.some(j => !["completed", "failed", "cancelled"].includes(j.status));
 
   const getBatchJobStatus = (status: string) => {
     if (["pending_upload", "pending", "queued", "creating", "uploading"].includes(status)) {
@@ -40,6 +40,9 @@ const BatchDetailPage = () => {
     }
     if (status === "failed") {
       return "failed";
+    }
+    if (status === "cancelled") {
+      return "cancelled";
     }
     return status;
   };
