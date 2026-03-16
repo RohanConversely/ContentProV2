@@ -298,6 +298,7 @@ async def run_single_image_job(
     social_link_1: str | None = None,
     social_link_2: str | None = None,
     additional_info: dict[str, Any] | None = None,
+    image_model: str = "flux-2-pro",
     num_images: int = 6,
     temperature: float = 0.1,
 ) -> dict[str, Any]:
@@ -310,6 +311,7 @@ async def run_single_image_job(
         social_link_1=social_link_1,
         social_link_2=social_link_2,
         additional_info=additional_info,
+        image_model=image_model,
         num_images=num_images,
         temperature=temperature,
     )
@@ -329,6 +331,7 @@ async def run_batch_image_jobs(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 social_link_1=row.get("social_link_1"),
                 social_link_2=row.get("social_link_2"),
                 additional_info=row.get("additional_info"),
+                image_model=row.get("image_model", "flux-2-pro"),
                 num_images=row.get("num_images", 6),
                 temperature=row.get("temperature", 0.1),
                 source_image_url=row["image_url"],

@@ -4,6 +4,8 @@ services:
       context: ./backend
     env_file:
       - ./backend/.env
+    volumes:
+      - ./backend/storage:/app/storage
     ports:
       - "8001:8000"
     restart: unless-stopped

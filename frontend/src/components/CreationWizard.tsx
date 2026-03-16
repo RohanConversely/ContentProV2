@@ -48,6 +48,7 @@ export interface ProductFormData {
   dimensionBreadth: string;
   dimensionHeight: string;
   productDescription: string;
+  imageModel: "flux-2-pro" | "gpt-image-1";
   productImages: string[];
   additionalInfo?: Record<string, string>;
 }
@@ -71,6 +72,7 @@ const emptyFormData: ProductFormData = {
   dimensionBreadth: "",
   dimensionHeight: "",
   productDescription: "",
+  imageModel: "flux-2-pro",
   productImages: [],
 };
 
@@ -82,6 +84,7 @@ const dimensionUnits = [
 ];
 
 const MAX_SOURCE_IMAGES = 5;
+const DEFAULT_IMAGE_MODEL: "flux-2-pro" | "gpt-image-1" = "flux-2-pro";
 
 const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
   const [formData, setFormData] = useState<ProductFormData>(emptyFormData);
@@ -159,7 +162,10 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
     const persisted = readActiveSingleRun();
     if (!persisted || persisted.mode !== mode || !persisted.jobId) return;
 
-    setFormData(persisted.formData);
+    setFormData({
+      ...persisted.formData,
+      imageModel: persisted.formData.imageModel ?? DEFAULT_IMAGE_MODEL,
+    });
     setShowResults(true);
     setIsGenerating(persisted.isGenerating);
     setGenerationError(persisted.generationError);
@@ -294,6 +300,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
         brandWebsite: formData.brandWebsite,
         productName: formData.productName,
         productCategory: formData.productCategory,
+        imageModel: formData.imageModel,
         socialLink1: formData.socialLinkInstagram || undefined,
         socialLink2: formData.socialLinkFacebook || undefined,
         socialLink3: formData.socialLinkLinkedin || undefined,
@@ -518,6 +525,18 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
               />
             </div>
           </div>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Image Generation Model</label>
+          <select
+            value={formData.imageModel}
+            onChange={(e) => updateField("imageModel", e.target.value as "flux-2-pro" | "gpt-image-1")}
+            className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+          >
+            <option value="flux-2-pro">flux.2 pro</option>
+            <option value="gpt-image-1">gpt-image-1</option>
+          </select>
         </div>
 
         {/* Product Dimensions */}

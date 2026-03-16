@@ -16,6 +16,7 @@ async def run_single_product_upload(
     social_link_1: str | None = None,
     social_link_2: str | None = None,
     additional_info: dict[str, Any] | None = None,
+    image_model: str = "flux-2-pro",
     num_images: int = 6,
     temperature: float = 0.1,
 ) -> dict[str, Any]:
@@ -29,6 +30,7 @@ async def run_single_product_upload(
         social_link_1=social_link_1,
         social_link_2=social_link_2,
         additional_info=additional_info,
+        image_model=image_model,
         num_images=num_images,
         temperature=temperature,
     )

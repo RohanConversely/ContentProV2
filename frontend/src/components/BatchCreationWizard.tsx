@@ -41,6 +41,8 @@ type BatchJobRunPayload = {
   batch_name?: string;
 };
 
+type ImageModel = "flux-2-pro" | "gpt-image-1";
+
 const TEMPLATE_HEADERS = [
   "image link",
   "brand name",
@@ -273,6 +275,7 @@ export default function BatchCreationWizard({
   const [columnHeaders, setColumnHeaders] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sourceType, setSourceType] = useState<BatchSourceType>("image_link");
+  const [imageModel, setImageModel] = useState<ImageModel>("flux-2-pro");
   const isRunning = false;
 
   const validJobs = useMemo(() => jobs.filter((j) => j.errors.length === 0), [jobs]);
@@ -385,6 +388,7 @@ export default function BatchCreationWizard({
         dimensionBreadth: "",
         dimensionHeight: "",
         productDescription: j.productDescription,
+        imageModel,
         productImages: [j.imageLink],
         additionalInfo: j.additionalInfo,
       };
@@ -478,6 +482,17 @@ export default function BatchCreationWizard({
             ? 'Each row should contain a public Google Drive folder link in the "image link" column. The first up to 5 images in that folder will be used.'
             : 'Each row should contain one direct image link in the "image link" column.'}
         </p>
+        <div className="mt-4 space-y-2">
+          <p className="text-sm font-medium">Image Generation Model</p>
+          <select
+            value={imageModel}
+            onChange={(e) => setImageModel(e.target.value as ImageModel)}
+            className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+          >
+            <option value="flux-2-pro">flux.2 pro</option>
+            <option value="gpt-image-1">gpt-image-1</option>
+          </select>
+        </div>
       </div>
 
       {/* Upload box */}

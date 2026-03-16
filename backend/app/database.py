@@ -47,6 +47,8 @@ def _run_schema_patches(sync_conn) -> None:
         sync_conn.execute(text("ALTER TABLE jobs ADD COLUMN batch_id VARCHAR(64)"))
     if "batch_name" not in job_columns:
         sync_conn.execute(text("ALTER TABLE jobs ADD COLUMN batch_name VARCHAR(255)"))
+    if "image_model" not in job_columns:
+        sync_conn.execute(text("ALTER TABLE jobs ADD COLUMN image_model VARCHAR(50) DEFAULT 'flux-2-pro'"))
 
     asset_columns = {column["name"] for column in inspector.get_columns("assets")}
     if "generation_id" not in asset_columns:
