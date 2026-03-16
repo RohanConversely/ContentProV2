@@ -248,7 +248,7 @@ const BatchRunPage = () => {
               message: "Downloading source image and queuing the job.",
             }));
             if (localJob.sourceType === "drive_folder") {
-              await uploadRemoteFolderAssets(backendJobId, sourceImageUrl, 5);
+              await uploadRemoteFolderAssets(backendJobId, sourceImageUrl, 4);
             } else {
               await uploadRemoteJobAsset(backendJobId, sourceImageUrl);
             }

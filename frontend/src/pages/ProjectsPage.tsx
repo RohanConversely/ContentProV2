@@ -30,6 +30,7 @@ import {
   type Project,
 } from "@/lib/api";
 import { useNavigate, useParams } from "react-router-dom";
+import { LazyImage } from "@/components/ui/lazy-image";
 
 /* ──────────────────────────────────────────────────── */
 /*  Project Detail View                                 */
@@ -234,10 +235,10 @@ const ProjectDetailView = ({
                   onClick={() => setPreviewImage(src)}
                   className="overflow-hidden rounded-lg border border-border bg-background/60 aspect-square"
                 >
-                  <img
+                  <LazyImage
                     src={src}
                     alt={`Input image ${index + 1}`}
-                    className="h-full w-full object-cover"
+                    className="h-full w-full"
                   />
                 </button>
               ))}
@@ -359,10 +360,10 @@ const ProjectDetailView = ({
               transition={{ delay: i * 0.06 }}
               className="group relative aspect-square rounded-xl border border-border bg-card overflow-hidden hover:border-primary/40 hover:shadow-glow transition-all duration-300"
             >
-              <img
+              <LazyImage
                 src={src}
                 alt={`Generated Image ${i + 1}`}
-                className="h-full w-full object-cover"
+                className="h-full w-full"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
               <div className="absolute bottom-0 left-0 right-0 p-3 flex items-end justify-between">
@@ -487,14 +488,18 @@ const ProjectDetailView = ({
             >
               <X className="h-5 w-5" />
             </button>
-            <motion.img
+            <motion.div
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
-              src={previewImage}
-              alt="Preview"
-              className="max-h-full max-w-full rounded-xl object-contain"
+              className="max-h-full max-w-full rounded-xl overflow-hidden"
               onClick={(e) => e.stopPropagation()}
-            />
+            >
+              <LazyImage
+                src={previewImage}
+                alt="Preview"
+                className="max-h-full max-w-full"
+              />
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -614,10 +619,10 @@ const ProjectsPage = () => {
                     className="group rounded-xl border border-border bg-card overflow-hidden hover:shadow-lg transition-all duration-300"
                   >
                     <div className="relative aspect-video bg-muted overflow-hidden">
-                      <img
+                      <LazyImage
                         src={project.thumbnail}
                         alt={project.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                       />
                       <div className="absolute top-3 right-3 flex flex-col items-end gap-2">
                         <span
