@@ -83,7 +83,7 @@ const dimensionUnits = [
   { value: "feet", label: "Feet (ft)" },
 ];
 
-const MAX_SOURCE_IMAGES = 5;
+const MAX_SOURCE_IMAGES = 4;
 const DEFAULT_IMAGE_MODEL: "flux-2-pro" | "gpt-image-1" = "flux-2-pro";
 
 const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
@@ -623,7 +623,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
                   <Upload className="h-6 w-6 text-primary" />
                 </div>
                 <div className="text-center">
-                  <p className="font-medium">Drop up to 5 product images here or click to browse</p>
+                  <p className="font-medium">Drop up to 4 product images here or click to browse</p>
                   <p className="text-sm text-muted-foreground mt-1">Supports JPG, PNG, WEBP up to 20MB each</p>
                 </div>
               </div>
