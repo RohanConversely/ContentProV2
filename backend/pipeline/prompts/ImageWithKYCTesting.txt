@@ -72,6 +72,26 @@ If the product is handmade or handcrafted:
 - Final images must look like they were shot using a **professional DSLR or mirrorless camera**
 - All enhancements must support **Amazon listing clarity and trust-building**
 
+## **SINGLE-IMAGE OUTPUT RULE (ABSOLUTE)**
+
+Every output must contain exactly ONE finished image only.
+Strictly forbidden:
+• grids
+• collages
+• contact sheets
+• diptychs
+• triptychs
+• split-screen layouts
+• multi-panel layouts
+• before/after layouts
+• multiple angles in one frame
+• multiple scenes in one frame
+• tiled compositions
+• image-within-image compositions
+
+The final output must be one full-frame standalone photograph of a single shot type only.
+Do not place multiple renders, multiple crops, or multiple variants on the same canvas.
+
 ## **IMAGE SIZE COMPLIANCE (STRICT)**
 
 - The generated images must strictly follow the **exact image dimensions (in pixels)** provided
