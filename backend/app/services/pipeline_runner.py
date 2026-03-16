@@ -24,6 +24,13 @@ from pipeline.pricing import compute_price_report
 EVENT_QUEUES: dict[str, list[asyncio.Queue[dict[str, Any]]]] = defaultdict(list)
 settings = get_settings()
 
+# In-process task registry for cancellation.
+# Note: this only works within a single backend process.
+RUNNING_PIPELINE_TASKS: dict[str, asyncio.Task[None]] = {}
+RUNNING_REGENERATION_TASKS: dict[tuple[str, str], asyncio.Task[None]] = {}
+
+TERMINAL_JOB_STATUSES = {"completed", "failed", "cancelled"}
+
 
 async def emit(job_id: str, stage: str, status: str, message: str, db: AsyncSession | None = None) -> None:
     payload = {
@@ -80,7 +87,7 @@ async def subscribe(job_id: str):
             item = await queue.get()
             yield item
             payload = json.loads(item["data"])
-            if payload["status"] in {"completed", "failed"}:
+            if payload["status"] in TERMINAL_JOB_STATUSES:
                 break
     finally:
         EVENT_QUEUES[job_id].remove(queue)
@@ -403,23 +410,15 @@ async def run_pipeline_task(job_id: str) -> None:
         if job is None:
             return
 
-        workspace = _build_job_workspace(job)
+        if job.status in {"cancel_requested", "cancelled"}:
+            job.status = "cancelled"
+            job.error_message = job.error_message or "Job cancelled."
+            await db.commit()
+            await emit_for_job(job, job.current_stage or "queued", "cancelled", job.error_message, db)
+            return
 
-        ctx = JobContext(
-            job_id=job.job_id,
-            brand_name=job.brand_name,
-            brand_website=job.brand_website,
-            product_name=job.product_name,
-            product_category=job.product_category,
-            image_paths=[],
-            social_link_1=job.social_link_1,
-            social_link_2=job.social_link_2,
-            additional_info=job.additional_input_json,
-            image_model=job.image_model or "flux-2-pro",
-            num_images=6,
-            temperature=0.1,
-            workspace_root=workspace,
-        )
+        workspace: Path | None = None
+        ctx: JobContext | None = None
         raw_asset_result = await db.execute(
             select(Asset)
             .where(Asset.job_id == job.id, Asset.asset_type == "raw_image", Asset.is_deleted.is_(False))
@@ -433,16 +432,42 @@ async def run_pipeline_task(job_id: str) -> None:
             await emit_for_job(job, "pipeline", "failed", job.error_message, db)
             return
 
-        image_paths: list[Path] = []
-        for raw_asset in raw_assets[:5]:
-            local_image = workspace / "raw" / (raw_asset.original_filename or "product.jpg")
-            await storage_service.download_file(raw_asset.storage_key, local_image)
-            image_paths.append(local_image)
-        ctx.image_paths = image_paths
-
         log_stop_event = asyncio.Event()
         log_monitor_task: asyncio.Task[None] | None = None
         try:
+            workspace = _build_job_workspace(job)
+            ctx = JobContext(
+                job_id=job.job_id,
+                brand_name=job.brand_name,
+                brand_website=job.brand_website,
+                product_name=job.product_name,
+                product_category=job.product_category,
+                image_paths=[],
+                social_link_1=job.social_link_1,
+                social_link_2=job.social_link_2,
+                additional_info=job.additional_input_json,
+                image_model=job.image_model or "flux-2-pro",
+                num_images=6,
+                temperature=0.1,
+                workspace_root=workspace,
+            )
+
+            image_paths: list[Path] = []
+            for raw_asset in raw_assets[:5]:
+                local_image = workspace / "raw" / (raw_asset.original_filename or "product.jpg")
+                await storage_service.download_file(raw_asset.storage_key, local_image)
+                image_paths.append(local_image)
+            ctx.image_paths = image_paths
+
+            result = await db.execute(select(Job.status, Job.current_stage).where(Job.id == job.id))
+            current = result.first()
+            if current and current[0] in {"cancel_requested", "cancelled"}:
+                job.status = "cancelled"
+                job.error_message = "Job cancelled."
+                await db.commit()
+                await emit_for_job(job, job.current_stage or "queued", "cancelled", job.error_message, db)
+                return
+
             log_monitor_task = asyncio.create_task(_monitor_job_log(job, ctx.job_log_file, log_stop_event))
             job.status = "running"
             job.current_stage = "stage_1"
@@ -453,6 +478,15 @@ async def run_pipeline_task(job_id: str) -> None:
 
             log_stop_event.set()
             await log_monitor_task
+
+            result = await db.execute(select(Job.status).where(Job.id == job.id))
+            current_status = result.scalar_one_or_none()
+            if current_status in {"cancel_requested", "cancelled"}:
+                job.status = "cancelled"
+                job.error_message = "Job cancelled."
+                await db.commit()
+                await emit_for_job(job, job.current_stage or "pipeline", "cancelled", job.error_message, db)
+                return
 
             job.current_stage = "stage_2"
             job.status = "running"
@@ -475,29 +509,44 @@ async def run_pipeline_task(job_id: str) -> None:
             job.error_message = None
             await db.commit()
             await emit_for_job(job, "stage_2", "completed", "Image pipeline completed.", db)
-        except Exception as exc:
+        except asyncio.CancelledError:
             try:
                 log_stop_event.set()
                 if log_monitor_task is not None:
                     await log_monitor_task
             except Exception:
                 pass
+            job.status = "cancelled"
+            job.error_message = "Job cancelled."
+            await db.commit()
+            await emit_for_job(job, job.current_stage or "pipeline", "cancelled", job.error_message, db)
+        except Exception as exc:
+            try:
+                if ctx is not None:
+                    log_stop_event.set()
+                    if log_monitor_task is not None:
+                        await log_monitor_task
+            except Exception:
+                pass
             job.status = "failed"
             job.error_message = str(exc)
             await db.commit()
             try:
-                await _upload_job_support_files(
-                    db,
-                    job,
-                    log_file=ctx.job_log_file,
-                    pricing_file=None,
-                )
+                if ctx is not None:
+                    await _upload_job_support_files(
+                        db,
+                        job,
+                        log_file=ctx.job_log_file,
+                        pricing_file=None,
+                    )
             except Exception:
                 pass
             await emit_for_job(job, job.current_stage or "pipeline", "failed", str(exc), db)
             if isinstance(exc, PipelineStageError):
                 return
             raise
+        finally:
+            RUNNING_PIPELINE_TASKS.pop(job_id, None)
 
 
 async def run_regeneration_task(job_id: str, generation_id: str, image_model: str | None = None) -> None:
@@ -512,8 +561,15 @@ async def run_regeneration_task(job_id: str, generation_id: str, image_model: st
         if generation is None:
             return
 
-        workspace = _build_job_workspace(job) / f"regeneration_round_{generation.round_number}"
-        workspace.mkdir(parents=True, exist_ok=True)
+        if job.status in {"cancel_requested", "cancelled"} or generation.status in {"cancel_requested", "cancelled"}:
+            generation.status = "cancelled"
+            job.status = "cancelled"
+            job.error_message = job.error_message or "Job cancelled."
+            await db.commit()
+            await emit_for_job(job, job.current_stage or "stage_2", "cancelled", job.error_message, db)
+            return
+
+        workspace: Path | None = None
         filtered_kyc_asset = await _get_latest_filtered_kyc_asset(db, job)
         if filtered_kyc_asset is None:
             generation.status = "failed"
@@ -537,35 +593,40 @@ async def run_regeneration_task(job_id: str, generation_id: str, image_model: st
             await emit_for_job(job, "stage_2", "failed", job.error_message, db)
             return
 
-        image_paths: list[Path] = []
-        for raw_asset in raw_assets[:5]:
-            local_image = workspace / "raw" / (raw_asset.original_filename or "product.jpg")
-            await storage_service.download_file(raw_asset.storage_key, local_image)
-            image_paths.append(local_image)
-
-        filtered_kyc_path = workspace / "stage_1" / (filtered_kyc_asset.original_filename or Path(filtered_kyc_asset.storage_key).name)
-        await storage_service.download_file(filtered_kyc_asset.storage_key, filtered_kyc_path)
-
-        ctx = JobContext(
-            job_id=job.job_id,
-            brand_name=job.brand_name,
-            brand_website=job.brand_website,
-            product_name=job.product_name,
-            product_category=job.product_category,
-            image_paths=image_paths,
-            social_link_1=job.social_link_1,
-            social_link_2=job.social_link_2,
-            additional_info=job.additional_input_json,
-            image_model=image_model or job.image_model or "flux-2-pro",
-            num_images=6,
-            temperature=0.1,
-            additional_description=generation.additional_description,
-            workspace_root=workspace,
-        )
-
+        ctx: JobContext | None = None
         log_stop_event = asyncio.Event()
         log_monitor_task: asyncio.Task[None] | None = None
+        filtered_kyc_path: Path | None = None
         try:
+            workspace = _build_job_workspace(job) / f"regeneration_round_{generation.round_number}"
+            workspace.mkdir(parents=True, exist_ok=True)
+
+            image_paths: list[Path] = []
+            for raw_asset in raw_assets[:5]:
+                local_image = workspace / "raw" / (raw_asset.original_filename or "product.jpg")
+                await storage_service.download_file(raw_asset.storage_key, local_image)
+                image_paths.append(local_image)
+
+            filtered_kyc_path = workspace / "stage_1" / (filtered_kyc_asset.original_filename or Path(filtered_kyc_asset.storage_key).name)
+            await storage_service.download_file(filtered_kyc_asset.storage_key, filtered_kyc_path)
+
+            ctx = JobContext(
+                job_id=job.job_id,
+                brand_name=job.brand_name,
+                brand_website=job.brand_website,
+                product_name=job.product_name,
+                product_category=job.product_category,
+                image_paths=image_paths,
+                social_link_1=job.social_link_1,
+                social_link_2=job.social_link_2,
+                additional_info=job.additional_input_json,
+                image_model=image_model or job.image_model or "flux-2-pro",
+                num_images=6,
+                temperature=0.1,
+                additional_description=generation.additional_description,
+                workspace_root=workspace,
+            )
+
             generation.status = "running"
             job.status = "running"
             job.current_stage = "stage_2"
@@ -591,6 +652,18 @@ async def run_regeneration_task(job_id: str, generation_id: str, image_model: st
             job.error_message = None
             await db.commit()
             await emit_for_job(job, "stage_2", "completed", f"Regeneration {generation.round_number} completed.", db)
+        except asyncio.CancelledError:
+            try:
+                log_stop_event.set()
+                if log_monitor_task is not None:
+                    await log_monitor_task
+            except Exception:
+                pass
+            generation.status = "cancelled"
+            job.status = "cancelled"
+            job.error_message = "Job cancelled."
+            await db.commit()
+            await emit_for_job(job, "stage_2", "cancelled", job.error_message, db)
         except Exception as exc:
             try:
                 log_stop_event.set()
@@ -603,21 +676,49 @@ async def run_regeneration_task(job_id: str, generation_id: str, image_model: st
             job.error_message = str(exc)
             await db.commit()
             try:
-                await _upload_job_support_files(db, job, log_file=ctx.job_log_file, pricing_file=None)
+                if ctx is not None:
+                    await _upload_job_support_files(db, job, log_file=ctx.job_log_file, pricing_file=None)
             except Exception:
                 pass
             await emit_for_job(job, "stage_2", "failed", str(exc), db)
             if isinstance(exc, PipelineStageError):
                 return
             raise
+        finally:
+            RUNNING_REGENERATION_TASKS.pop((job_id, generation_id), None)
 
 
 async def queue_pipeline_task(job_id: str) -> None:
-    asyncio.create_task(run_pipeline_task(job_id))
+    existing = RUNNING_PIPELINE_TASKS.get(job_id)
+    if existing is not None and not existing.done():
+        return
+    task = asyncio.create_task(run_pipeline_task(job_id))
+    RUNNING_PIPELINE_TASKS[job_id] = task
 
 
 async def queue_regeneration_task(job_id: str, generation_id: str, image_model: str | None = None) -> None:
-    asyncio.create_task(run_regeneration_task(job_id, generation_id, image_model))
+    key = (job_id, generation_id)
+    existing = RUNNING_REGENERATION_TASKS.get(key)
+    if existing is not None and not existing.done():
+        return
+    task = asyncio.create_task(run_regeneration_task(job_id, generation_id, image_model))
+    RUNNING_REGENERATION_TASKS[key] = task
+
+
+async def cancel_pipeline_task(job_id: str) -> bool:
+    task = RUNNING_PIPELINE_TASKS.get(job_id)
+    if task is None or task.done():
+        return False
+    task.cancel()
+    return True
+
+
+async def cancel_regeneration_task(job_id: str, generation_id: str) -> bool:
+    task = RUNNING_REGENERATION_TASKS.get((job_id, generation_id))
+    if task is None or task.done():
+        return False
+    task.cancel()
+    return True
 
 
 async def hydrate_job_assets(db: AsyncSession, job: Job) -> list[dict[str, Any]]:

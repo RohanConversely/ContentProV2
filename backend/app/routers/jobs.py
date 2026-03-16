@@ -2,6 +2,7 @@ import io
 import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -28,11 +29,20 @@ from app.schemas.job import (
     UsageResponse,
 )
 from app.schemas.generation import JobGenerationResponse, JobRegenerateRequest
-from app.services.pipeline_runner import hydrate_job_assets, queue_regeneration_task, subscribe
+from app.services.pipeline_runner import (
+    cancel_pipeline_task,
+    emit_for_job,
+    hydrate_job_assets,
+    queue_regeneration_task,
+    subscribe,
+)
 from app.services.storage import storage_service
 
 router = APIRouter(tags=["jobs"])
 SOFT_DELETED_STATUS = "deleted"
+CANCELLED_STATUS = "cancelled"
+CANCEL_REQUESTED_STATUS = "cancel_requested"
+TERMINAL_JOB_STATUSES = {"completed", "failed", CANCELLED_STATUS}
 
 
 def _job_summary(job: Job) -> JobSummaryResponse:
@@ -158,8 +168,9 @@ async def list_jobs(
             batch_jobs = [j for j in all_jobs if j.batch_id == job.batch_id]
             total_jobs_in_batch = len(batch_jobs)
             any_failed = any(j.status == "failed" for j in batch_jobs)
-            any_running = any(j.status not in ["completed", "failed"] for j in batch_jobs)
-            batch_status = "processing" if any_running else "failed" if any_failed else "completed"
+            any_cancelled = any(j.status == CANCELLED_STATUS for j in batch_jobs)
+            any_running = any(j.status not in TERMINAL_JOB_STATUSES for j in batch_jobs)
+            batch_status = "processing" if any_running else "failed" if any_failed else "cancelled" if any_cancelled else "completed"
 
             # Filter by status if requested
             if status and batch_status != status:
@@ -214,11 +225,11 @@ async def recent_jobs(
             # Aggregate stats for the batch
             batch_jobs = [j for j in all_jobs if j.batch_id == job.batch_id]
             total_jobs = len(batch_jobs)
-            all_completed = all(j.status == "completed" for j in batch_jobs)
             any_failed = any(j.status == "failed" for j in batch_jobs)
-            any_running = any(j.status not in ["completed", "failed"] for j in batch_jobs)
+            any_cancelled = any(j.status == CANCELLED_STATUS for j in batch_jobs)
+            any_running = any(j.status not in TERMINAL_JOB_STATUSES for j in batch_jobs)
 
-            status = "processing" if any_running else "failed" if any_failed else "completed"
+            status = "processing" if any_running else "failed" if any_failed else "cancelled" if any_cancelled else "completed"
 
             # Image count across all jobs in batch
             batch_job_ids = [j.id for j in batch_jobs]
@@ -480,6 +491,36 @@ async def delete_job(
     return {"ok": True}
 
 
+@router.post("/jobs/{job_id}/cancel")
+async def cancel_job(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    result = await db.execute(_active_job_query(Job.job_id == job_id, Job.user_id == current_user.id))
+    job = result.scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
+    if job.status in {SOFT_DELETED_STATUS, "completed", "failed", CANCELLED_STATUS}:
+        return {"ok": True, "status": job.status}
+
+    # If job isn't running yet, we can cancel immediately.
+    if job.status in {"pending_upload", "pending", "queued"}:
+        job.status = CANCELLED_STATUS
+        job.error_message = "Job cancelled."
+        await db.commit()
+        await emit_for_job(job, job.current_stage or "queued", CANCELLED_STATUS, job.error_message, db)
+        return {"ok": True, "status": job.status}
+
+    job.status = CANCEL_REQUESTED_STATUS
+    job.error_message = None
+    await db.commit()
+    cancelled_in_process = await cancel_pipeline_task(job.job_id)
+    # If it's not running in this process, it will still be picked up by cooperative checks.
+    return {"ok": True, "status": job.status, "signal_sent": cancelled_in_process}
+
+
 @router.get("/jobs/{job_id}/pricing", response_model=PricingSnapshotResponse)
 async def get_pricing(
     job_id: str,
@@ -652,6 +693,42 @@ async def delete_batch(
     
     await db.commit()
     return {"ok": True}
+
+
+@router.post("/batches/{batch_id}/cancel")
+async def cancel_batch(
+    batch_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    result = await db.execute(
+        select(Job).where(Job.batch_id == batch_id, Job.user_id == current_user.id, Job.status != SOFT_DELETED_STATUS)
+    )
+    jobs = result.scalars().all()
+    if not jobs:
+        raise HTTPException(status_code=404, detail="Batch not found.")
+
+    cancelled: list[str] = []
+    requested: list[str] = []
+    for job in jobs:
+        if job.status in {"completed", "failed", CANCELLED_STATUS}:
+            continue
+        if job.status in {"pending_upload", "pending", "queued"}:
+            job.status = CANCELLED_STATUS
+            job.error_message = "Job cancelled."
+            cancelled.append(job.job_id)
+        else:
+            job.status = CANCEL_REQUESTED_STATUS
+            job.error_message = None
+            requested.append(job.job_id)
+
+    await db.commit()
+
+    signals_sent = 0
+    for jid in requested:
+        if await cancel_pipeline_task(jid):
+            signals_sent += 1
+    return {"ok": True, "cancelled": cancelled, "cancel_requested": requested, "signals_sent": signals_sent}
 
 
 @router.get("/usage", response_model=UsageResponse)

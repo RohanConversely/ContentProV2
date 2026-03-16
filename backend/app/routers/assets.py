@@ -53,6 +53,9 @@ async def upload_job_asset(
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
 
+    if job.status in {"cancel_requested", "cancelled"}:
+        raise HTTPException(status_code=409, detail="Job has been cancelled.")
+
     if not files:
         raise HTTPException(status_code=400, detail="At least one image file is required.")
 
@@ -106,9 +109,16 @@ async def upload_remote_job_asset(
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
 
+    if job.status in {"cancel_requested", "cancelled"}:
+        raise HTTPException(status_code=409, detail="Job has been cancelled.")
+
     try:
         contents, mime_type, filename = await download_remote_image_bytes(payload.image_url)
     except Exception as exc:
+        job.status = "failed"
+        job.current_stage = "queued"
+        job.error_message = f"Unable to download remote image: {exc}"
+        await db.commit()
         raise HTTPException(status_code=422, detail=f"Unable to download remote image: {exc}") from exc
 
     storage_key = f"{job.storage_prefix}/raw/{filename}"
@@ -149,6 +159,9 @@ async def upload_remote_job_folder_assets(
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
 
+    if job.status in {"cancel_requested", "cancelled"}:
+        raise HTTPException(status_code=409, detail="Job has been cancelled.")
+
     raw_asset_result = await db.execute(
         select(Asset).where(Asset.job_id == job.id, Asset.asset_type == "raw_image", Asset.is_deleted.is_(False))
     )
@@ -164,6 +177,10 @@ async def upload_remote_job_folder_assets(
             max_images=min(max_images, MAX_SOURCE_IMAGES - existing_raw_count),
         )
     except Exception as exc:
+        job.status = "failed"
+        job.current_stage = "queued"
+        job.error_message = f"Unable to download folder images: {exc}"
+        await db.commit()
         raise HTTPException(status_code=422, detail=f"Unable to download folder images: {exc}") from exc
 
     created_assets: list[Asset] = []
