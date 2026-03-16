@@ -479,7 +479,7 @@ export default function BatchCreationWizard({
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
           {sourceType === "drive_folder"
-            ? 'Each row should contain a public Google Drive folder link in the "image link" column. The first up to 5 images in that folder will be used.'
+            ? 'Each row should contain a public Google Drive folder link in the "image link" column. The first 4 images will be used.'
             : 'Each row should contain one direct image link in the "image link" column.'}
         </p>
         <div className="mt-4 space-y-2">
