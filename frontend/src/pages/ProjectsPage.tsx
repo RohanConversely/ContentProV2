@@ -507,30 +507,37 @@ const ProjectDetailView = ({
   );
 };
 
-/* ──────────────────────────────────────────────────── */
-/*  Projects Page                                       */
-/* ──────────────────────────────────────────────────── */
+
 const ProjectsPage = () => {
   const navigate = useNavigate();
   const { jobId } = useParams<{ jobId: string }>();
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const [isLoadingProject, setIsLoadingProject] = useState(false);
 
   useEffect(() => {
+
+    if (!jobId) {
+      setSelectedProject(null);
+    }
+
     void (async () => {
       const data = await getProjects();
       setProjects(data);
       if (jobId) {
+        setIsLoadingProject(true);
         const existing = data.find((project) => project.id === jobId);
         if (existing) {
           setSelectedProject(existing);
+          setIsLoadingProject(false);
           return;
         }
         const fetched = await getProjectById(jobId);
         if (fetched) {
           setSelectedProject(fetched);
         }
+        setIsLoadingProject(false);
       }
     })();
   }, [jobId]);
@@ -562,19 +569,19 @@ const ProjectsPage = () => {
       <Navbar />
 
       <div className="container pt-24 pb-16">
-        {selectedProject ? (
+        {selectedProject && !isLoadingProject ? (
           <ProjectDetailView
             project={selectedProject}
             onBack={() => {
-              if (selectedProject.batch_id) {
-                navigate(`/batch/${selectedProject.batch_id}`);
-                return;
-              }
-              if (jobId) {
-                navigate("/projects");
-                return;
-              }
+              // Explicitly clear selected project to ensure UI resets correctly
+              const batchId = selectedProject.batch_id;
               setSelectedProject(null);
+              
+              if (batchId) {
+                navigate(`/batch/${batchId}`);
+              } else {
+                navigate("/projects");
+              }
             }}
           />
         ) : (
@@ -662,9 +669,11 @@ const ProjectsPage = () => {
                       <p className="text-sm text-muted-foreground mb-4">
                         Created {formatDate(project.createdAt)}
                       </p>
-                      <p className="text-[11px] text-muted-foreground mb-4 font-mono break-all">
-                        Job ID: {project.id}
-                      </p>
+                      {!project.batch_id && (
+                        <p className="text-[11px] text-muted-foreground mb-4 font-mono break-all">
+                          Job ID: {project.id}
+                        </p>
+                      )}
 
                       <div className="flex items-center gap-2">
                         <button
