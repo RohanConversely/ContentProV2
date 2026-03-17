@@ -25,6 +25,49 @@ import {
   type JobGenerationSummary,
 } from "@/lib/api";
 
+const ImageLightbox = ({
+  src,
+  onClose,
+}: {
+  src: string;
+  onClose: () => void;
+}) => {
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center p-4 sm:p-8"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 sm:top-6 sm:right-6 h-10 w-10 rounded-xl border border-border bg-card flex items-center justify-center hover:bg-secondary transition-colors z-10"
+      >
+        <X className="h-5 w-5" />
+      </button>
+      <motion.img
+        initial={{ scale: 0.9 }}
+        animate={{ scale: 1 }}
+        src={src}
+        alt="Preview"
+        className="max-w-[70vw] max-h-[70vh] w-auto h-auto object-contain rounded-xl"
+        onClick={(e) => e.stopPropagation()}
+      />
+    </motion.div>
+  );
+};
+
 interface GenerationResultsProps {
   productData: ProductFormData;
   mode: string;
@@ -593,28 +636,7 @@ const GenerationResults = ({
 
       {/* Lightbox */}
       {previewImage && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center p-8"
-          onClick={() => setPreviewImage(null)}
-        >
-          <button
-            onClick={() => setPreviewImage(null)}
-            className="absolute top-6 right-6 h-10 w-10 rounded-xl border border-border bg-card flex items-center justify-center hover:bg-secondary transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
-          <motion.img
-            initial={{ scale: 0.9 }}
-            animate={{ scale: 1 }}
-            src={previewImage}
-            alt="Preview"
-            className="max-h-full max-w-full rounded-xl object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </motion.div>
+        <ImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />
       )}
     </motion.div>
   );

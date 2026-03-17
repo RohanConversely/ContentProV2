@@ -32,6 +32,53 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 import { LazyImage } from "@/components/ui/lazy-image";
 
+const ImageLightbox = ({
+  src,
+  onClose,
+}: {
+  src: string;
+  onClose: () => void;
+}) => {
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center p-4 sm:p-8"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 sm:top-6 sm:right-6 h-10 w-10 rounded-xl border border-border bg-card flex items-center justify-center hover:bg-secondary transition-colors z-10"
+      >
+        <X className="h-5 w-5" />
+      </button>
+      <motion.div
+        initial={{ scale: 0.9 }}
+        animate={{ scale: 1 }}
+        className="max-w-[70vw] max-h-[70vh] overflow-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <LazyImage
+          src={src}
+          alt="Preview"
+          className="w-auto h-auto max-w-none rounded-xl"
+        />
+      </motion.div>
+    </motion.div>
+  );
+};
+
 /* ──────────────────────────────────────────────────── */
 /*  Project Detail View                                 */
 /* ──────────────────────────────────────────────────── */
@@ -475,32 +522,7 @@ const ProjectDetailView = ({
       {/* Lightbox */}
       <AnimatePresence>
         {previewImage && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center p-8"
-            onClick={() => setPreviewImage(null)}
-          >
-            <button
-              onClick={() => setPreviewImage(null)}
-              className="absolute top-6 right-6 h-10 w-10 rounded-xl border border-border bg-card flex items-center justify-center hover:bg-secondary transition-colors"
-            >
-              <X className="h-5 w-5" />
-            </button>
-            <motion.div
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
-              className="max-h-full max-w-full rounded-xl overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <LazyImage
-                src={previewImage}
-                alt="Preview"
-                className="max-h-full max-w-full"
-              />
-            </motion.div>
-          </motion.div>
+          <ImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />
         )}
       </AnimatePresence>
     </motion.div>

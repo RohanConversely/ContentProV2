@@ -17,11 +17,11 @@ MAX_PROMPT_CHARS = 2560
 REVE_ENDPOINT = "https://api.reve.com/v1/image/remix"
 
 SHOT_REQUIREMENTS = (
-    "Shot 1 - HERO: clean studio hero shot, premium balanced lighting, product centered, pure ecommerce clarity.",
-    "Shot 2 - LIFESTYLE: modern Indian lifestyle setting, natural context, believable usage styling, product remains unchanged.",
-    "Shot 3 - STORY: emotional storytelling moment in an Indian urban scenario, confidence and elegance, realistic human context.",
-    "Shot 4 - ZOOM DETAIL: macro close-up of craftsmanship, chain texture, stone/pearl shine, crisp fine-detail rendering.",
-    "Shot 5 - AMAZON READY: clear enhanced premium studio view optimized for listing quality with clean minimal background.",
+    "Shot 1 - HERO: replace the entire background with a pure white seamless luxury studio background, create a premium ecommerce hero image, centered composition with the jewelry cleanly presented, soft luxury studio lighting with natural shadow under the product, do not keep any part of the original background.",
+    "Shot 2 - LIFESTYLE: create a premium Indian festive gifting scene around the exact same jewelry product, show elegant gift-box styling with luxury presentation, warm lovely Indian setting with tasteful festive styling and premium editorial photography, replace the original background completely, jewelry remains the hero and fully visible.",
+    "Shot 3 - WEARABLE: create a luxury wearable jewelry editorial shot with one model only, product remains clearly visible, keep the exact same jewelry design, replace the original background completely.",
+    "Shot 4 - WEARABLE ETHNIC: create a premium Indian ethnic wearable jewelry editorial shot with one model only, model should wear elegant Indian or ethnic attire in a tasteful premium way, jewelry remains clearly visible and dominant, keep the exact same jewelry design, replace the original background completely.",
+    "Shot 5 - JEWELRY BOX: create a premium jewelry box presentation shot, show the exact same jewelry beautifully presented with an elegant open jewelry box, luxury gifting setup with tasteful Indian festive mood and premium styled product photography, product design must remain exactly the same and fully visible, replace the original background completely.",
     "Shot 6 - CLOSE DETAIL: alternate tight close-up angle showing finishing, materials, and reflections without design change.",
 )
 
@@ -100,6 +100,17 @@ def _shot_instructions_for_count(num_images: int) -> list[str]:
     while len(repeated) < capped:
         repeated.extend(SHOT_REQUIREMENTS)
     return repeated[:capped]
+
+
+def _shot_slug(shot_instruction: str, fallback_index: int) -> str:
+    prefix = shot_instruction.split(":", maxsplit=1)[0]
+    if "-" in prefix:
+        name = prefix.split("-", maxsplit=1)[1].strip()
+    else:
+        name = f"shot_{fallback_index}"
+
+    slug = "_".join(name.lower().replace("/", " ").replace("-", " ").split())
+    return slug or f"shot_{fallback_index}"
 
 
 def generate_images(
@@ -183,6 +194,7 @@ def generate_images(
     )
 
     for iteration, shot_instruction in enumerate(shot_instructions, start=1):
+        shot_slug = _shot_slug(shot_instruction, iteration)
         prompt = _build_iteration_prompt(base_prompt, kyc_summary, shot_instruction)
         if additional_description:
             merged = f"{prompt}\n\nRefinement instructions: {additional_description.strip()}"
@@ -202,6 +214,7 @@ def generate_images(
                 {
                     "operation": "reve_image_generation",
                     "image_index": iteration,
+                    "shot": shot_slug,
                     "prompt_length": len(prompt),
                 },
             ),
@@ -225,7 +238,7 @@ def generate_images(
         if not decoded_images or not decoded_images[0]:
             raise RuntimeError(f"REVE response missing image payload at image {iteration}: {response_data}")
 
-        output_file = output_path / f"{brand_name}_reve_{iteration}.png"
+        output_file = output_path / f"{brand_name}_reve_{iteration}_{shot_slug}.png"
         output_file.write_bytes(base64.b64decode(decoded_images[0]))
         generated_files.append(str(output_file.resolve()))
 
@@ -237,6 +250,7 @@ def generate_images(
                     "provider": "reve",
                     "operation": "reve_image_generation",
                     "image_index": iteration,
+                    "shot": shot_slug,
                     "output_file": str(output_file.resolve()),
                 },
             ),
