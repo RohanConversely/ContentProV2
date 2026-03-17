@@ -102,7 +102,10 @@ const BatchRunPage = () => {
         batch_name,
         productData,
       })),
-      jobStates,
+      jobStates: jobStates.map((job) => ({
+        ...job,
+        status: job.status === "cancelled" ? "failed" : job.status,
+      })),
       activeJobId,
     });
     const stillActive = jobStates.some((job) => ["queued", "creating", "uploading", "running"].includes(job.status));
@@ -286,6 +289,38 @@ const BatchRunPage = () => {
               message: update.message,
               error: update.status === "failed" || update.status === "cancelled" ? update.message : null,
             }));
+
+            if (update.stage === "stage_2" && update.status === "running") {
+              void (async () => {
+                try {
+                  const liveJob = await getJob(backendJobId);
+                  const generationImages = (liveJob.generations ?? [])
+                    .map((generation) =>
+                      generation.images
+                        .map((asset) => asset.presigned_url)
+                        .filter((value): value is string => Boolean(value)),
+                    )
+                    .flat();
+
+                  const fallbackImages = liveJob.assets
+                    .filter((asset) => asset.asset_type === "generated_image" && !asset.is_deleted)
+                    .map((asset) => asset.presigned_url)
+                    .filter((value): value is string => Boolean(value));
+
+                  const partialImages = generationImages.length > 0 ? generationImages : fallbackImages;
+                  if (partialImages.length === 0) {
+                    return;
+                  }
+
+                  updateJob(localJob.id, (job) => ({
+                    ...job,
+                    generatedImages: partialImages,
+                  }));
+                } catch {
+                  // keep current state when live refresh fails
+                }
+              })();
+            }
           });
 
           const result = await completionPromise;
