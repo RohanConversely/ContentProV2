@@ -409,7 +409,7 @@ async def regenerate_job_images(
         additional_description=payload.additional_description.strip(),
         status="queued",
     )
-    selected_image_model = payload.image_model or job.image_model or "flux-2-pro"
+    selected_image_model = payload.image_model or job.image_model or "reve"
     db.add(generation)
     job.image_model = selected_image_model
     job.status = "queued"

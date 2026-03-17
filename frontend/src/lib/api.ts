@@ -93,7 +93,7 @@ export interface BackendJobSummaryResponse {
   brand_name: string;
   product_name: string;
   job_type: string;
-  image_model: "flux-2-pro" | "gpt-image-1";
+  image_model: "reve" | "flux-2-pro" | "gpt-image-1";
   batch_id?: string;
   batch_name?: string;
   total_jobs?: number;
@@ -169,7 +169,7 @@ export interface GenerateImagesInput {
   socialLink3?: string;
   socialLink4?: string;
   additionalInput?: Record<string, unknown>;
-  imageModel?: "flux-2-pro" | "gpt-image-1";
+  imageModel?: "reve" | "flux-2-pro" | "gpt-image-1";
 }
 
 export interface JobEventPayload {
@@ -523,7 +523,7 @@ export async function createJob(
       },
       body: JSON.stringify({
         job_type: "image",
-        image_model: input.imageModel ?? "flux-2-pro",
+        image_model: input.imageModel ?? "reve",
         brand_name: input.brandName,
         brand_website: input.brandWebsite,
         product_name: input.productName,

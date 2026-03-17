@@ -17,7 +17,7 @@ class BatchRowInput:
     social_link_1: str | None = None
     social_link_2: str | None = None
     additional_info: dict[str, Any] | None = None
-    image_model: str = "flux-2-pro"
+    image_model: str = "reve"
     num_images: int = 6
     temperature: float = 0.1
     source_image_url: str | None = None
