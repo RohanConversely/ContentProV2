@@ -209,6 +209,12 @@ export interface JobGenerationSummary {
   images: string[];
 }
 
+export interface RegenerateImagesInput {
+  additionalDescription: string;
+  imageModel?: "reve" | "flux-2-pro" | "gpt-image-1";
+  inputImages?: File[];
+}
+
 function inferFilename(url: string, fallback: string): string {
   try {
     const parsed = new URL(url);
@@ -607,15 +613,19 @@ export async function getJob(jobId: string): Promise<BackendJobResponse> {
   return apiJson<BackendJobResponse>(`/jobs/${encodeURIComponent(jobId)}`, {}, true);
 }
 
-export async function regenerateJobImages(jobId: string, additionalDescription: string): Promise<JobGenerationSummary> {
+export async function regenerateJobImages(jobId: string, input: RegenerateImagesInput): Promise<JobGenerationSummary> {
+  const formData = new FormData();
+  formData.append("additional_description", input.additionalDescription);
+  if (input.imageModel) {
+    formData.append("image_model", input.imageModel);
+  }
+  (input.inputImages ?? []).forEach((file) => formData.append("input_images", file));
+
   const response = await apiJson<BackendJobGenerationResponse>(
     `/jobs/${encodeURIComponent(jobId)}/regenerate-images`,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ additional_description: additionalDescription }),
+      body: formData,
     },
     true,
   );
