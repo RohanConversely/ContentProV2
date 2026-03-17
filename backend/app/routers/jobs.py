@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,7 +28,7 @@ from app.schemas.job import (
     RecentJobResponse,
     UsageResponse,
 )
-from app.schemas.generation import JobGenerationResponse, JobRegenerateRequest
+from app.schemas.generation import JobGenerationResponse
 from app.services.pipeline_runner import (
     cancel_pipeline_task,
     emit_for_job,
@@ -43,6 +43,8 @@ SOFT_DELETED_STATUS = "deleted"
 CANCELLED_STATUS = "cancelled"
 CANCEL_REQUESTED_STATUS = "cancel_requested"
 TERMINAL_JOB_STATUSES = {"completed", "failed", CANCELLED_STATUS}
+ALLOWED_IMAGE_MODELS = {"reve", "flux-2-pro", "gpt-image-1"}
+MAX_REGEN_INPUT_IMAGES = 2
 
 
 def _job_summary(job: Job) -> JobSummaryResponse:
@@ -347,7 +349,9 @@ async def get_job(
 @router.post("/jobs/{job_id}/regenerate-images", response_model=JobGenerationResponse)
 async def regenerate_job_images(
     job_id: str,
-    payload: JobRegenerateRequest,
+    additional_description: str = Form(...),
+    image_model: str | None = Form(default=None),
+    input_images: list[UploadFile] = File(default=[]),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> JobGenerationResponse:
@@ -403,14 +407,54 @@ async def regenerate_job_images(
     elif has_legacy_generation.first() is not None:
         next_round = 2
 
+    description = additional_description.strip()
+    if not description:
+        raise HTTPException(status_code=422, detail="additional_description is required.")
+    if len(description) > 250:
+        raise HTTPException(status_code=422, detail="additional_description must be at most 250 characters.")
+
+    if image_model and image_model not in ALLOWED_IMAGE_MODELS:
+        raise HTTPException(status_code=422, detail="Unsupported image_model for regeneration.")
+
+    if len(input_images) > MAX_REGEN_INPUT_IMAGES:
+        raise HTTPException(status_code=422, detail=f"You can upload at most {MAX_REGEN_INPUT_IMAGES} input images for regeneration.")
+
     generation = JobGeneration(
         job_id=job.id,
         round_number=next_round,
-        additional_description=payload.additional_description.strip(),
+        additional_description=description,
         status="queued",
     )
-    selected_image_model = payload.image_model or job.image_model or "reve"
+    selected_image_model = image_model or job.image_model or "reve"
     db.add(generation)
+    await db.flush()
+
+    for index, file in enumerate(input_images, start=1):
+        if not file.content_type or not file.content_type.startswith("image/"):
+            raise HTTPException(status_code=422, detail="All regeneration input files must be images.")
+
+        contents = await file.read()
+        if not contents:
+            continue
+
+        filename = file.filename or f"regeneration_input_{index}.png"
+        storage_key = f"{job.storage_prefix}/regeneration/{generation.id}/{index:02d}_{filename}"
+        await storage_service.upload_bytes(contents, storage_key, file.content_type)
+
+        db.add(
+            Asset(
+                job_id=job.id,
+                generation_id=generation.id,
+                asset_type="regeneration_input_image",
+                stage="stage_2",
+                storage_key=storage_key,
+                original_filename=filename,
+                mime_type=file.content_type,
+                size_bytes=len(contents),
+                metadata_json={"source": "regenerate_upload", "index": index},
+            )
+        )
+
     job.image_model = selected_image_model
     job.status = "queued"
     job.current_stage = "stage_2"

@@ -12,6 +12,7 @@ import {
   Film,
   Check,
   Loader2,
+  Upload,
 } from "lucide-react";
 import { type ProductFormData } from "./CreationWizard";
 import {
@@ -104,6 +105,8 @@ const GenerationResults = ({
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [selectedImages, setSelectedImages] = useState<number[]>([]);
   const [additionalDescription, setAdditionalDescription] = useState("");
+  const [regenerationModel, setRegenerationModel] = useState<"reve" | "flux-2-pro" | "gpt-image-1">("reve");
+  const [regenerationInputFiles, setRegenerationInputFiles] = useState<File[]>([]);
   const [regenerationError, setRegenerationError] = useState<string | null>(null);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [activeGenerationId, setActiveGenerationId] = useState<string | null>(null);
@@ -223,7 +226,11 @@ const GenerationResults = ({
     });
 
     try {
-      const queuedGeneration = await regenerateJobImages(jobId, additionalDescription.trim());
+      const queuedGeneration = await regenerateJobImages(jobId, {
+        additionalDescription: additionalDescription.trim(),
+        imageModel: regenerationModel,
+        inputImages: regenerationInputFiles,
+      });
       setLocalGenerations((prev) => [
         ...prev.filter((generation) => generation.id !== queuedGeneration.id),
         queuedGeneration,
@@ -262,12 +269,24 @@ const GenerationResults = ({
       setLocalGenerations(refreshedGenerations);
       setActiveGenerationId(refreshedGenerations[refreshedGenerations.length - 1]?.id ?? null);
       setAdditionalDescription("");
+      setRegenerationInputFiles([]);
       onResultChange?.(refreshedResult);
     } catch (submitError) {
       setRegenerationError(submitError instanceof Error ? submitError.message : "Unable to regenerate images.");
     } finally {
       setIsRegenerating(false);
     }
+  };
+
+  const handleRegenerationInputImages = (files: FileList | null) => {
+    if (!files) return;
+    const incoming = Array.from(files).filter((file) => file.type.startsWith("image/"));
+    const merged = [...regenerationInputFiles, ...incoming].slice(0, 2);
+    setRegenerationInputFiles(merged);
+  };
+
+  const removeRegenerationInputImage = (index: number) => {
+    setRegenerationInputFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   return (
@@ -506,6 +525,48 @@ const GenerationResults = ({
             placeholder="Example: make the background warmer, more premium, and suitable for luxury ecommerce."
             className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
           />
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Input Images (optional, up to 2)</p>
+            <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-border bg-background px-4 py-3 text-sm hover:border-primary/50 hover:bg-secondary/40 transition-colors">
+              <Upload className="h-4 w-4" />
+              Attach images
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(event) => handleRegenerationInputImages(event.target.files)}
+                className="hidden"
+              />
+            </label>
+            {regenerationInputFiles.length > 0 && (
+              <div className="grid grid-cols-2 gap-2">
+                {regenerationInputFiles.map((file, index) => (
+                  <div key={`${file.name}-${index}`} className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2 text-xs">
+                    <span className="truncate pr-2">{file.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeRegenerationInputImage(index)}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Image Generation Model</p>
+            <select
+              value={regenerationModel}
+              onChange={(event) => setRegenerationModel(event.target.value as "reve" | "flux-2-pro" | "gpt-image-1")}
+              className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+            >
+              <option value="reve">reve</option>
+              <option value="flux-2-pro">flux.2 pro</option>
+              <option value="gpt-image-1">gpt-image-1</option>
+            </select>
+          </div>
           <div className="flex items-center justify-between gap-3">
             <span className="text-xs text-muted-foreground">{additionalDescription.length}/250</span>
             <button

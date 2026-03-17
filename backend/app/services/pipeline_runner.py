@@ -607,6 +607,22 @@ async def run_regeneration_task(job_id: str, generation_id: str, image_model: st
                 await storage_service.download_file(raw_asset.storage_key, local_image)
                 image_paths.append(local_image)
 
+            regeneration_input_result = await db.execute(
+                select(Asset)
+                .where(
+                    Asset.job_id == job.id,
+                    Asset.generation_id == generation.id,
+                    Asset.asset_type == "regeneration_input_image",
+                    Asset.is_deleted.is_(False),
+                )
+                .order_by(Asset.created_at.asc())
+            )
+            regeneration_input_assets = regeneration_input_result.scalars().all()
+            for extra_asset in regeneration_input_assets[:2]:
+                local_extra = workspace / "regeneration_inputs" / (extra_asset.original_filename or "extra_input.jpg")
+                await storage_service.download_file(extra_asset.storage_key, local_extra)
+                image_paths.append(local_extra)
+
             filtered_kyc_path = workspace / "stage_1" / (filtered_kyc_asset.original_filename or Path(filtered_kyc_asset.storage_key).name)
             await storage_service.download_file(filtered_kyc_asset.storage_key, filtered_kyc_path)
 
