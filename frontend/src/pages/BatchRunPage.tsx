@@ -113,6 +113,14 @@ const BatchRunPage = () => {
 
   useEffect(() => {
     if (!state?.jobs?.length) return;
+    
+    // Check if we've already processed these jobs by comparing with persisted state
+    const persistedRun = readActiveBatchRun();
+    if (persistedRun?.jobStates?.length) {
+      // Jobs already processed, skip re-initialization to prevent duplicates
+      return;
+    }
+    
     setJobStates(
       state.jobs.map((job) => ({
         ...job,
@@ -126,6 +134,9 @@ const BatchRunPage = () => {
     );
     setActiveJobId(state.jobs[0]?.id ?? null);
     hasStartedRef.current = false;
+    
+    // Clear the location state to prevent re-processing on navigation
+    window.history.replaceState(null, "");
   }, [state]);
 
   useEffect(() => {

@@ -123,6 +123,9 @@ const BatchDetailPage = () => {
                   <div>
                     <h4 className="font-semibold text-sm truncate">{job.product_name}</h4>
                     <p className="text-xs text-muted-foreground">{job.brand_name}</p>
+                    <p className="text-[10px] text-muted-foreground mt-1 font-mono break-all opacity-70">
+                      Job ID: {job.job_id}
+                    </p>
                   </div>
                   <div className="pt-2 flex items-center justify-between text-[11px] text-muted-foreground border-t border-border">
                     <span>{new Date(job.created_at).toLocaleDateString()}</span>
