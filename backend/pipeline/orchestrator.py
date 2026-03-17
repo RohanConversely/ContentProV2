@@ -13,6 +13,7 @@ from typing import Any
 from .logger import JsonLogger
 from .stages.image_gen_with_flux import generate_images as generate_images_flux
 from .stages.image_gen_with_KYC import generate_images
+from .stages.reve.image_gen_reve import generate_images as generate_images_reve
 from .stages.product_kyc import generate_image_kyc
 
 
@@ -36,7 +37,7 @@ class JobContext:
     social_link_1: str | None = None
     social_link_2: str | None = None
     additional_info: dict[str, Any] | None = None
-    image_model: str = "flux-2-pro"
+    image_model: str = "reve"
     num_images: int = 6
     temperature: float = 0.1
     prompt_file: str = "ImageWithKYCTesting.txt"
@@ -135,7 +136,19 @@ async def _run_stage_1(ctx: JobContext, logger: JsonLogger) -> dict[str, Any]:
 
 
 async def _run_stage_2(ctx: JobContext, filtered_kyc_path: Path, logger: JsonLogger) -> dict[str, Any]:
-    stage_2_fn = generate_images_flux if ctx.image_model == "flux-2-pro" else generate_images
+    stage_2_map = {
+        "flux-2-pro": generate_images_flux,
+        "gpt-image-1": generate_images,
+        "reve": generate_images_reve,
+    }
+    stage_2_fn = stage_2_map.get(ctx.image_model)
+    if stage_2_fn is None:
+        raise PipelineStageError(f"Unsupported image model: {ctx.image_model}")
+
+    prompt_file = ctx.prompt_file
+    if ctx.image_model == "reve":
+        prompt_file = "imageGen.txt"
+
     return await asyncio.to_thread(
         stage_2_fn,
         image_paths=[str(image_path.resolve()) for image_path in ctx.image_paths],
@@ -144,7 +157,7 @@ async def _run_stage_2(ctx: JobContext, filtered_kyc_path: Path, logger: JsonLog
         num_images=ctx.num_images,
         temperature=ctx.temperature,
         output_dir=str(ctx.generated_images_dir),
-        prompt_file=ctx.prompt_file,
+        prompt_file=prompt_file,
         additional_description=ctx.additional_description,
         logger_obj=logger,
         log_context={"job_id": ctx.job_id, "stage": "stage_2_image_generation"},

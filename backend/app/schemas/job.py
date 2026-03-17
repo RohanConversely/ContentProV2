@@ -10,7 +10,7 @@ from .generation import JobGenerationResponse
 
 class JobCreateRequest(BaseModel):
     job_type: str = Field(default="image")
-    image_model: str = Field(default="flux-2-pro", pattern="^(flux-2-pro|gpt-image-1)$")
+    image_model: str = Field(default="reve", pattern="^(reve|flux-2-pro|gpt-image-1)$")
     brand_name: str = Field(min_length=1)
     brand_website: str
     product_name: str = Field(min_length=1)
