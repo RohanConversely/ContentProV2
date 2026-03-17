@@ -26,7 +26,7 @@ export interface PersistedBatchRunPayload {
 
 export interface PersistedBatchJobState extends PersistedBatchRunPayload {
   backendJobId: string | null;
-  status: "queued" | "creating" | "uploading" | "running" | "completed" | "failed";
+  status: "queued" | "creating" | "uploading" | "running" | "completed" | "failed" | "cancelled";
   stage: string | null;
   message: string | null;
   generatedImages: string[];
