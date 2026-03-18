@@ -23,9 +23,10 @@ class Settings(BaseSettings):
 
     do_spaces_key: str | None = None
     do_spaces_secret: str | None = None
-    do_spaces_region: str = "blr1"
+    do_spaces_region: str = "sfo3"
     do_spaces_bucket: str | None = None
     do_spaces_endpoint: str | None = None
+    do_spaces_cdn_endpoint: str | None = None
 
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
@@ -43,7 +44,11 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins(self) -> list[str]:
-        return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
+        return [
+            origin.strip()
+            for origin in self.allowed_origins.split(",")
+            if origin.strip()
+        ]
 
     @property
     def storage_root(self) -> Path:
@@ -51,7 +56,13 @@ class Settings(BaseSettings):
 
     @property
     def spaces_enabled(self) -> bool:
-        return bool(self.do_spaces_key and self.do_spaces_secret and self.do_spaces_bucket)
+        return bool(
+            self.do_spaces_key and self.do_spaces_secret and self.do_spaces_bucket
+        )
+
+    @property
+    def spaces_cdn_enabled(self) -> bool:
+        return bool(self.spaces_enabled and self.do_spaces_cdn_endpoint)
 
     @property
     def resolved_spaces_endpoint(self) -> str:
