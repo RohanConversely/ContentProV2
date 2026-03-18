@@ -44,7 +44,7 @@ CANCELLED_STATUS = "cancelled"
 CANCEL_REQUESTED_STATUS = "cancel_requested"
 TERMINAL_JOB_STATUSES = {"completed", "failed", CANCELLED_STATUS}
 ALLOWED_IMAGE_MODELS = {"reve", "flux-2-pro", "gpt-image-1"}
-MAX_REGEN_INPUT_IMAGES = 2
+MAX_REGEN_INPUT_IMAGES = 3
 
 
 def _job_summary(job: Job) -> JobSummaryResponse:
