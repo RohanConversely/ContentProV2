@@ -145,7 +145,8 @@ class StorageService:
                 and Path(storage_key).suffix.lower() in image_extensions
             ):
                 cdn_base = (settings.do_spaces_cdn_endpoint or "").rstrip("/")
-                return f"{cdn_base}/{storage_key}", expires_at
+                bucket_name = settings.do_spaces_bucket or ""
+                return f"{cdn_base}/{bucket_name}/{storage_key}", expires_at
             url = self._client.generate_presigned_url(
                 "get_object",
                 Params={"Bucket": settings.do_spaces_bucket, "Key": storage_key},
