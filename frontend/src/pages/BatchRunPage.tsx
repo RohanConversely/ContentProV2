@@ -11,6 +11,7 @@ import {
   getJob,
   uploadRemoteFolderAssets,
   uploadRemoteJobAsset,
+  cancelJob,
   waitForJobCompletion,
   downloadBatchArchive,
   type JobEventPayload,
@@ -70,6 +71,7 @@ const BatchRunPage = () => {
   });
   const [activeJobId, setActiveJobId] = useState<string | null>(persistedRun?.activeJobId ?? initialJobs[0]?.id ?? null);
   const [showVideoCreation, setShowVideoCreation] = useState(false);
+  const [isCancellingJob, setIsCancellingJob] = useState(false);
   const hasStartedRef = useRef(false);
   const jobStatesRef = useRef<BatchJobExecutionState[]>(jobStates);
 
@@ -89,6 +91,43 @@ const BatchRunPage = () => {
     }
   };
 
+  const handleCancelActiveJob = async (backendJobId: string | null, localJobId: string) => {
+    if (!backendJobId || isCancellingJob) return;
+    setIsCancellingJob(true);
+    try {
+      await cancelJob(backendJobId);
+      setJobStates((prev) =>
+        prev.map((job) =>
+          job.id === localJobId
+            ? {
+                ...job,
+                status: "cancelled",
+                stage: job.stage ?? "pipeline",
+                message: "User cancelled the job.",
+                error: null,
+              }
+            : job,
+        ),
+      );
+    } catch (error) {
+      setJobStates((prev) =>
+        prev.map((job) =>
+          job.id === localJobId
+            ? {
+                ...job,
+                status: "failed",
+                stage: job.stage ?? "pipeline",
+                message: error instanceof Error ? error.message : "Unable to cancel job.",
+                error: error instanceof Error ? error.message : "Unable to cancel job.",
+              }
+            : job,
+        ),
+      );
+    } finally {
+      setIsCancellingJob(false);
+    }
+  };
+
   useEffect(() => {
     jobStatesRef.current = jobStates;
     if (jobStates.length === 0) return;
@@ -104,7 +143,6 @@ const BatchRunPage = () => {
       })),
       jobStates: jobStates.map((job) => ({
         ...job,
-        status: job.status === "cancelled" ? "failed" : job.status,
       })),
       activeJobId,
     });
@@ -243,7 +281,7 @@ const BatchRunPage = () => {
 
         try {
           const currentJob = preparedJobs.find((job) => job.id === localJob.id) ?? localJob;
-          if (currentJob.status === "completed" || currentJob.status === "failed") {
+          if (["completed", "failed", "cancelled"].includes(currentJob.status)) {
             continue;
           }
 
@@ -327,19 +365,30 @@ const BatchRunPage = () => {
           updateJob(localJob.id, (job) => ({
             ...job,
             backendJobId: result.jobId,
-            status: result.status === "completed" ? "completed" : "failed",
+            status:
+              result.status === "completed"
+                ? "completed"
+                : result.status === "cancelled"
+                  ? "cancelled"
+                  : "failed",
             stage: result.currentStage,
-            message: result.status === "completed" ? "Generated images are ready." : result.errorMessage,
+            message:
+              result.status === "completed"
+                ? "Generated images are ready."
+                : result.status === "cancelled"
+                  ? "User cancelled the job."
+                  : result.errorMessage,
             generatedImages: result.generatedImages,
             error: result.errorMessage,
           }));
         } catch (error) {
+          const message = error instanceof Error ? error.message : "Batch job failed.";
           updateJob(localJob.id, (job) => ({
             ...job,
-            status: "failed",
+            status: message.toLowerCase().includes("cancelled") ? "cancelled" : "failed",
             stage: job.stage ?? "pipeline",
-            message: error instanceof Error ? error.message : "Batch job failed.",
-            error: error instanceof Error ? error.message : "Batch job failed.",
+            message: message.toLowerCase().includes("cancelled") ? "User cancelled the job." : message,
+            error: message.toLowerCase().includes("cancelled") ? null : message,
           }));
         }
       }
@@ -411,14 +460,16 @@ const BatchRunPage = () => {
             </div>
           </div>
 
-          {isBatchFinished && (
-            <button
-              onClick={handleDownloadBatch}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold shadow-glow hover:opacity-90 transition-opacity"
-            >
-              <Download className="h-4 w-4" /> Download All (ZIP)
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {isBatchFinished && (
+              <button
+                onClick={handleDownloadBatch}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold shadow-glow hover:opacity-90 transition-opacity"
+              >
+                <Download className="h-4 w-4" /> Download All (ZIP)
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -431,10 +482,16 @@ const BatchRunPage = () => {
                 const isActive = job.id === activeJob.id;
                 const ModeIcon = job.mode === "video" ? VideoIcon : ImageIcon;
                 const StatusIcon =
-                  job.status === "completed" ? CheckCircle2 : job.status === "failed" ? XCircle : Clock3;
+                  job.status === "completed"
+                    ? CheckCircle2
+                    : job.status === "failed" || job.status === "cancelled"
+                      ? XCircle
+                      : Clock3;
                 const statusTone =
                   job.status === "completed"
                     ? "text-green-500"
+                    : job.status === "cancelled"
+                      ? "text-slate-500"
                     : job.status === "failed"
                       ? "text-destructive"
                       : "text-primary";
@@ -465,13 +522,13 @@ const BatchRunPage = () => {
                           <p className="font-medium truncate">
                             {job.productData.productName || `Job ${index + 1}`}
                           </p>
-                          <p className="text-[11px] text-muted-foreground truncate flex items-center gap-1.5">
-                            <span>{job.productData.brandName || "Untitled brand"}</span>
-                            <span className={`inline-flex items-center gap-1 ${statusTone}`}>
-                              <StatusIcon className={`h-3 w-3 ${job.status === "running" ? "animate-spin" : ""}`} />
-                              {job.status}
-                            </span>
-                          </p>
+              <p className="text-[11px] text-muted-foreground truncate flex items-center gap-1.5">
+                <span>{job.productData.brandName || "Untitled brand"}</span>
+                <span className={`inline-flex items-center gap-1 ${statusTone}`}>
+                  <StatusIcon className={`h-3 w-3 ${job.status === "running" ? "animate-spin" : ""}`} />
+                  {job.status}
+                </span>
+              </p>
                         </div>
                       </div>
                       <span className="text-[11px] text-muted-foreground shrink-0">
@@ -490,7 +547,7 @@ const BatchRunPage = () => {
               mode={effectiveMode === "video" ? "video" : "images"}
               generatedImages={activeJob.generatedImages}
               jobId={activeJob.backendJobId}
-              isLoading={!["completed", "failed"].includes(activeJob.status)}
+              isLoading={!["completed", "failed", "cancelled"].includes(activeJob.status)}
               error={activeJob.error}
               statusStage={activeJob.stage}
               statusMessage={activeJob.message}
@@ -499,6 +556,11 @@ const BatchRunPage = () => {
                 clearActiveBatchRun();
                 navigate("/dashboard");
               }}
+              onCancel={
+                activeJob.backendJobId && activeJob.status === "running"
+                  ? () => void handleCancelActiveJob(activeJob.backendJobId, activeJob.id)
+                  : undefined
+              }
               onCreateVideo={
                 effectiveMode === "video"
                   ? () => {

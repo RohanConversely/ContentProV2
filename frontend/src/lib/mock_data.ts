@@ -36,6 +36,7 @@ export interface ProjectDetail {
   brandName: string;
   productName: string;
   productCategory: string;
+  imageModel?: string;
   productDescription?: string;
   brandWebsite?: string;
   dimensions?: string;
@@ -59,7 +60,7 @@ export interface Project {
   id: string;
   name: string;
   type: "images" | "video";
-  status: "processing" | "completed" | "failed";
+  status: "processing" | "completed" | "failed" | "cancelled";
   createdAt: string;
   thumbnail: string;
   detail: ProjectDetail;

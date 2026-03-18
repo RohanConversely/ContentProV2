@@ -586,7 +586,7 @@ export default function BatchCreationWizard({
       {/* Row preview */}
       {jobs.length > 0 && (
         <div className="rounded-xl border border-border bg-card p-5 space-y-4">
-          <div className="flex items-center justify-between gap-4">
+          <div className="sticky top-20 z-20 -mx-5 -mt-5 mb-4 flex items-center justify-between gap-4 border-b border-border bg-card/95 px-5 py-4 backdrop-blur supports-[backdrop-filter]:bg-card/85">
             <div>
               <p className="text-sm font-semibold">Jobs</p>
               <p className="text-xs text-muted-foreground">

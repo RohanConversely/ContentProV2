@@ -31,6 +31,7 @@ from app.schemas.job import (
 from app.schemas.generation import JobGenerationResponse
 from app.services.pipeline_runner import (
     cancel_pipeline_task,
+    cancel_regeneration_task,
     emit_for_job,
     hydrate_job_assets,
     queue_regeneration_task,
@@ -45,6 +46,7 @@ CANCEL_REQUESTED_STATUS = "cancel_requested"
 TERMINAL_JOB_STATUSES = {"completed", "failed", CANCELLED_STATUS}
 ALLOWED_IMAGE_MODELS = {"reve", "flux-2-pro", "gpt-image-1"}
 MAX_REGEN_INPUT_IMAGES = 3
+USER_CANCELLED_MESSAGE = "User cancelled the job."
 
 
 def _job_summary(job: Job) -> JobSummaryResponse:
@@ -546,13 +548,42 @@ async def cancel_job(
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
 
+    latest_generation_result = await db.execute(
+        select(JobGeneration)
+        .where(JobGeneration.job_id == job.id)
+        .order_by(JobGeneration.round_number.desc())
+    )
+    latest_generation = latest_generation_result.scalars().first()
+    regeneration_in_progress = (
+        latest_generation is not None
+        and latest_generation.round_number > 1
+        and latest_generation.status in {"queued", "running", "cancel_requested"}
+    )
+
     if job.status in {SOFT_DELETED_STATUS, "completed", "failed", CANCELLED_STATUS}:
         return {"ok": True, "status": job.status}
+
+    if regeneration_in_progress and latest_generation is not None:
+        if latest_generation.status == "queued":
+            latest_generation.status = CANCELLED_STATUS
+            job.status = "completed"
+            job.current_stage = "stage_2"
+            job.error_message = None
+            await db.commit()
+            await emit_for_job(job, "stage_2", CANCELLED_STATUS, USER_CANCELLED_MESSAGE, db)
+            return {"ok": True, "status": job.status, "signal_sent": False}
+
+        latest_generation.status = CANCEL_REQUESTED_STATUS
+        job.status = CANCEL_REQUESTED_STATUS
+        job.error_message = None
+        await db.commit()
+        cancelled_in_process = await cancel_regeneration_task(job.job_id, latest_generation.id)
+        return {"ok": True, "status": job.status, "signal_sent": cancelled_in_process}
 
     # If job isn't running yet, we can cancel immediately.
     if job.status in {"pending_upload", "pending", "queued"}:
         job.status = CANCELLED_STATUS
-        job.error_message = "Job cancelled."
+        job.error_message = USER_CANCELLED_MESSAGE
         await db.commit()
         await emit_for_job(job, job.current_stage or "queued", CANCELLED_STATUS, job.error_message, db)
         return {"ok": True, "status": job.status}
@@ -561,6 +592,9 @@ async def cancel_job(
     job.error_message = None
     await db.commit()
     cancelled_in_process = await cancel_pipeline_task(job.job_id)
+    if latest_generation is not None:
+        cancelled_in_process = await cancel_regeneration_task(job.job_id, latest_generation.id) or cancelled_in_process
+
     # If it's not running in this process, it will still be picked up by cooperative checks.
     return {"ok": True, "status": job.status, "signal_sent": cancelled_in_process}
 
@@ -759,7 +793,7 @@ async def cancel_batch(
             continue
         if job.status in {"pending_upload", "pending", "queued"}:
             job.status = CANCELLED_STATUS
-            job.error_message = "Job cancelled."
+            job.error_message = USER_CANCELLED_MESSAGE
             cancelled.append(job.job_id)
         else:
             job.status = CANCEL_REQUESTED_STATUS

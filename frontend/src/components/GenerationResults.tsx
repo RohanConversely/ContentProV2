@@ -18,6 +18,7 @@ import { type ProductFormData } from "./CreationWizard";
 import {
   downloadFile,
   downloadJobImagesArchive,
+  cancelJob,
   getJob,
   regenerateJobImages,
   waitForJobCompletion,
@@ -81,6 +82,7 @@ interface GenerationResultsProps {
   statusMessage?: string | null;
   statusUpdates?: { stage: string; status: string; message: string }[];
   onResultChange?: (result: GeneratedImageResult) => void;
+  onCancel?: () => Promise<void> | void;
   onBack: () => void;
   onStartOver: () => void;
   onCreateVideo?: (images: string[]) => void;
@@ -98,6 +100,7 @@ const GenerationResults = ({
   statusMessage = null,
   statusUpdates = [],
   onResultChange,
+  onCancel,
   onBack,
   onStartOver,
   onCreateVideo,
@@ -109,6 +112,7 @@ const GenerationResults = ({
   const [regenerationInputFiles, setRegenerationInputFiles] = useState<File[]>([]);
   const [regenerationError, setRegenerationError] = useState<string | null>(null);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [activeGenerationId, setActiveGenerationId] = useState<string | null>(null);
   const [localGenerations, setLocalGenerations] = useState<JobGenerationSummary[]>(generations);
   const [localTimeline, setLocalTimeline] = useState<{ stage: string; status: string; message: string }[]>([]);
@@ -137,12 +141,13 @@ const GenerationResults = ({
   const selectedGeneration = useMemo(() => {
     if (localGenerations.length === 0) return null;
     return (
-      localGenerations.find((generation) => generation.id === activeGenerationId) ??
+      localGenerations.find((generation) => generation.id === activeGenerationId && generation.images.length > 0) ??
+      [...localGenerations].reverse().find((generation) => generation.images.length > 0) ??
       localGenerations[localGenerations.length - 1]
     );
   }, [activeGenerationId, localGenerations]);
 
-  const displayImages = selectedGeneration
+  const displayImages = selectedGeneration?.images.length
     ? selectedGeneration.images
     : Array.isArray(generatedImages)
       ? generatedImages.filter(Boolean)
@@ -165,6 +170,7 @@ const GenerationResults = ({
 
   const canCreateVideo = selectedImages.length >= 3;
   const isVideoMode = mode === "video";
+  const canCancelJob = Boolean(jobId) && (effectiveLoading || isRegenerating);
 
   const handleDownloadImage = async (src: string, index: number) => {
     await downloadFile(src, `${productData.productName || "generated-image"}-${index + 1}.png`);
@@ -218,6 +224,7 @@ const GenerationResults = ({
     if (!jobId || !additionalDescription.trim()) return;
 
     setIsRegenerating(true);
+    setIsCancelling(false);
     setRegenerationError(null);
     setLocalTimeline([]);
     setLocalStatus({
@@ -272,9 +279,49 @@ const GenerationResults = ({
       setRegenerationInputFiles([]);
       onResultChange?.(refreshedResult);
     } catch (submitError) {
-      setRegenerationError(submitError instanceof Error ? submitError.message : "Unable to regenerate images.");
+      const message = submitError instanceof Error ? submitError.message : "Unable to regenerate images.";
+      if (!message.toLowerCase().includes("cancelled")) {
+        setRegenerationError(message);
+      } else {
+        try {
+          const refreshedJob = await getJob(jobId);
+          const refreshedResult = toGeneratedImageResult(refreshedJob);
+          const refreshedGenerations = toGenerationSummary(refreshedJob);
+          setLocalGenerations(refreshedGenerations);
+          setActiveGenerationId(
+            [...refreshedGenerations].reverse().find((generation) => generation.images.length > 0)?.id ??
+              refreshedGenerations[refreshedGenerations.length - 1]?.id ??
+              null,
+          );
+          onResultChange?.(refreshedResult);
+        } catch {
+          // keep the last known state if refresh fails
+        }
+        setRegenerationError(null);
+        setLocalStatus({
+          stage: "stage_2",
+          message: "User cancelled the job.",
+        });
+      }
     } finally {
       setIsRegenerating(false);
+      setIsCancelling(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!jobId || isCancelling) return;
+    setIsCancelling(true);
+    try {
+      if (onCancel) {
+        await onCancel();
+      } else {
+        await cancelJob(jobId);
+      }
+    } catch (error) {
+      setRegenerationError(error instanceof Error ? error.message : "Unable to cancel job.");
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -318,6 +365,17 @@ const GenerationResults = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {canCancelJob && (
+            <button
+              type="button"
+              onClick={() => void handleCancel()}
+              disabled={isCancelling}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isCancelling ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+              Cancel Job
+            </button>
+          )}
           {effectiveAllDone && (
             <motion.button
               initial={{ opacity: 0, scale: 0.9 }}
@@ -511,7 +569,7 @@ const GenerationResults = ({
         })}
       </div>
 
-      {!effectiveLoading && !effectiveError && jobId && (
+      {!effectiveError && jobId && (!isLoading || isRegenerating) && (
         <div className="rounded-xl border border-border bg-card/60 p-4 space-y-4">
           <div>
             <h3 className="font-display text-lg font-semibold">Generate Again</h3>
@@ -570,15 +628,28 @@ const GenerationResults = ({
           </div>
           <div className="flex items-center justify-between gap-3">
             <span className="text-xs text-muted-foreground">{additionalDescription.length}/250</span>
-            <button
-              type="button"
-              disabled={!canRegenerate || isRegenerating}
-              onClick={() => void handleRegenerate()}
-              className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {isRegenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              Generate Again
-            </button>
+            <div className="flex items-center gap-2">
+              {isRegenerating && (
+                <button
+                  type="button"
+                  onClick={() => void handleCancel()}
+                  disabled={isCancelling}
+                  className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {isCancelling ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+                  Cancel
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={!canRegenerate || isRegenerating}
+                onClick={() => void handleRegenerate()}
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {isRegenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                Generate Again
+              </button>
+            </div>
           </div>
         </div>
       )}
