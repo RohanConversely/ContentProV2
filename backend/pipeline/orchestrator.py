@@ -42,6 +42,7 @@ class JobContext:
     temperature: float = 0.1
     prompt_file: str = "ImageWithKYCTesting.txt"
     additional_description: str | None = None
+    regeneration_only_inputs: bool = False
     workspace_root: Path | None = None
     work_dir: Path = field(init=False)
     product_kyc_dir: Path = field(init=False)
@@ -135,7 +136,7 @@ async def _run_stage_1(ctx: JobContext, logger: JsonLogger) -> dict[str, Any]:
     )
 
 
-async def _run_stage_2(ctx: JobContext, filtered_kyc_path: Path, logger: JsonLogger) -> dict[str, Any]:
+async def _run_stage_2(ctx: JobContext, filtered_kyc_path: Path | None, logger: JsonLogger) -> dict[str, Any]:
     stage_2_map = {
         "flux-2-pro": generate_images_flux,
         "gpt-image-1": generate_images,
@@ -149,22 +150,26 @@ async def _run_stage_2(ctx: JobContext, filtered_kyc_path: Path, logger: JsonLog
     if ctx.image_model == "reve":
         prompt_file = "imageGen.txt"
 
+    if not ctx.regeneration_only_inputs and filtered_kyc_path is None:
+        raise PipelineStageError("KYC path is required for standard stage 2 generation.")
+
     return await asyncio.to_thread(
         stage_2_fn,
         image_paths=[str(image_path.resolve()) for image_path in ctx.image_paths],
         brand_name=ctx.brand_name,
-        kyc_path=str(filtered_kyc_path.resolve()),
+        kyc_path=str(filtered_kyc_path.resolve()) if filtered_kyc_path is not None else "",
         num_images=ctx.num_images,
         temperature=ctx.temperature,
         output_dir=str(ctx.generated_images_dir),
         prompt_file=prompt_file,
         additional_description=ctx.additional_description,
+        regeneration_only_inputs=ctx.regeneration_only_inputs,
         logger_obj=logger,
         log_context={"job_id": ctx.job_id, "stage": "stage_2_image_generation"},
     )
 
 
-async def run_stage_2_only(ctx: JobContext, filtered_kyc_path: Path) -> dict[str, Any]:
+async def run_stage_2_only(ctx: JobContext, filtered_kyc_path: Path | None) -> dict[str, Any]:
     logger = build_logger(ctx.job_log_file)
     logger.info(
         "Stage 2 regeneration initialized.",
@@ -177,7 +182,8 @@ async def run_stage_2_only(ctx: JobContext, filtered_kyc_path: Path) -> dict[str
             "additional_description": ctx.additional_description,
         },
     )
-    stage_2_result = await _run_stage_2(ctx, filtered_kyc_path.resolve(), logger)
+    resolved_filtered_kyc_path = filtered_kyc_path.resolve() if filtered_kyc_path is not None else None
+    stage_2_result = await _run_stage_2(ctx, resolved_filtered_kyc_path, logger)
     if not stage_2_result.get("ok"):
         raise PipelineStageError("Stage 2 failed to generate images.")
 
@@ -198,7 +204,7 @@ async def run_stage_2_only(ctx: JobContext, filtered_kyc_path: Path) -> dict[str
         "ok": True,
         "generated_images": image_paths,
         "count": len(image_paths),
-        "filtered_kyc_json_path": str(filtered_kyc_path.resolve()),
+        "filtered_kyc_json_path": str(resolved_filtered_kyc_path) if resolved_filtered_kyc_path is not None else None,
     }
 
 

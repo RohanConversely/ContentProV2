@@ -44,7 +44,7 @@ SOFT_DELETED_STATUS = "deleted"
 CANCELLED_STATUS = "cancelled"
 CANCEL_REQUESTED_STATUS = "cancel_requested"
 TERMINAL_JOB_STATUSES = {"completed", "failed", CANCELLED_STATUS}
-ALLOWED_IMAGE_MODELS = {"reve", "flux-2-pro", "gpt-image-1"}
+ALLOWED_IMAGE_MODELS = {"reve", "gpt-image-1"}
 MAX_REGEN_INPUT_IMAGES = 3
 USER_CANCELLED_MESSAGE = "User cancelled the job."
 
@@ -400,27 +400,6 @@ async def regenerate_job_images(
     if job.status != "completed":
         raise HTTPException(status_code=400, detail="Only completed jobs can be regenerated.")
 
-    raw_asset_result = await db.execute(
-        select(Asset.id).where(
-            Asset.job_id == job.id,
-            Asset.asset_type == "raw_image",
-            Asset.is_deleted.is_(False),
-        )
-    )
-    if raw_asset_result.first() is None:
-        raise HTTPException(status_code=400, detail="No source images available for regeneration.")
-
-    filtered_kyc_result = await db.execute(
-        select(Asset.id).where(
-            Asset.job_id == job.id,
-            Asset.asset_type == "kyc_json",
-            Asset.is_deleted.is_(False),
-            Asset.storage_key.ilike("%filtered%"),
-        )
-    )
-    if filtered_kyc_result.first() is None:
-        raise HTTPException(status_code=400, detail="No filtered KYC output available for regeneration.")
-
     generation_result = await db.execute(
         select(JobGeneration)
         .where(JobGeneration.job_id == job.id)
@@ -450,6 +429,9 @@ async def regenerate_job_images(
     if image_model and image_model not in ALLOWED_IMAGE_MODELS:
         raise HTTPException(status_code=422, detail="Unsupported image_model for regeneration.")
 
+    if len(input_images) < 1:
+        raise HTTPException(status_code=422, detail="Attach at least 1 input image for regeneration.")
+
     if len(input_images) > MAX_REGEN_INPUT_IMAGES:
         raise HTTPException(status_code=422, detail=f"You can upload at most {MAX_REGEN_INPUT_IMAGES} input images for regeneration.")
 
@@ -463,6 +445,7 @@ async def regenerate_job_images(
     db.add(generation)
     await db.flush()
 
+    uploaded_input_count = 0
     for index, file in enumerate(input_images, start=1):
         if not file.content_type or not file.content_type.startswith("image/"):
             raise HTTPException(status_code=422, detail="All regeneration input files must be images.")
@@ -488,6 +471,10 @@ async def regenerate_job_images(
                 metadata_json={"source": "regenerate_upload", "index": index},
             )
         )
+        uploaded_input_count += 1
+
+    if uploaded_input_count < 1:
+        raise HTTPException(status_code=422, detail="Attach at least 1 non-empty input image for regeneration.")
 
     job.image_model = selected_image_model
     job.status = "queued"
