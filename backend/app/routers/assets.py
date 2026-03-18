@@ -7,10 +7,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.asset import Asset
 from app.models.job import Job
+from app.models.pricing import PipelineLog
 from app.models.user import User
 from app.routers.auth import get_current_user
-from app.schemas.asset import AssetResponse, AssetUrlResponse, RemoteAssetCreateRequest, RemoteFolderAssetCreateRequest
-from app.services.image_pipeline import download_drive_folder_image_bytes, download_remote_image_bytes
+from app.schemas.asset import (
+    AssetResponse,
+    AssetUrlResponse,
+    RemoteAssetCreateRequest,
+    RemoteFolderAssetCreateRequest,
+)
+from app.services.image_pipeline import (
+    download_drive_folder_image_bytes,
+    download_remote_image_bytes,
+)
 from app.services.pipeline_runner import emit_for_job, queue_pipeline_task
 from app.services.storage import storage_service
 from app.utils.presigned_urls import generate_url
@@ -49,7 +58,9 @@ async def upload_job_asset(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[AssetResponse]:
-    result = await db.execute(select(Job).where(Job.job_id == job_id, Job.user_id == current_user.id))
+    result = await db.execute(
+        select(Job).where(Job.job_id == job_id, Job.user_id == current_user.id)
+    )
     job = result.scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
@@ -58,20 +69,31 @@ async def upload_job_asset(
         raise HTTPException(status_code=409, detail="Job has been cancelled.")
 
     if not files:
-        raise HTTPException(status_code=400, detail="At least one image file is required.")
+        raise HTTPException(
+            status_code=400, detail="At least one image file is required."
+        )
 
     raw_asset_result = await db.execute(
-        select(Asset).where(Asset.job_id == job.id, Asset.asset_type == "raw_image", Asset.is_deleted.is_(False))
+        select(Asset).where(
+            Asset.job_id == job.id,
+            Asset.asset_type == "raw_image",
+            Asset.is_deleted.is_(False),
+        )
     )
     existing_raw_count = len(raw_asset_result.scalars().all())
     if existing_raw_count + len(files) > MAX_SOURCE_IMAGES:
-        raise HTTPException(status_code=400, detail=f"A job can include at most {MAX_SOURCE_IMAGES} source images.")
+        raise HTTPException(
+            status_code=400,
+            detail=f"A job can include at most {MAX_SOURCE_IMAGES} source images.",
+        )
 
     created_assets: list[Asset] = []
     for file in files:
         contents = await file.read()
         storage_key = f"{job.storage_prefix}/raw/{file.filename}"
-        await storage_service.upload_bytes(contents, storage_key, file.content_type or "application/octet-stream")
+        await storage_service.upload_bytes(
+            contents, storage_key, file.content_type or "application/octet-stream"
+        )
 
         asset = Asset(
             job_id=job.id,
@@ -91,7 +113,9 @@ async def upload_job_asset(
         job.status = "cancelled"
         job.error_message = USER_CANCELLED_MESSAGE
         await db.commit()
-        await emit_for_job(job, job.current_stage or "queued", "cancelled", USER_CANCELLED_MESSAGE, db)
+        await emit_for_job(
+            job, job.current_stage or "queued", "cancelled", USER_CANCELLED_MESSAGE, db
+        )
         for asset in created_assets:
             await db.refresh(asset)
         return [_asset_response(asset) for asset in created_assets]
@@ -115,7 +139,9 @@ async def upload_remote_job_asset(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> AssetResponse:
-    result = await db.execute(select(Job).where(Job.job_id == job_id, Job.user_id == current_user.id))
+    result = await db.execute(
+        select(Job).where(Job.job_id == job_id, Job.user_id == current_user.id)
+    )
     job = result.scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
@@ -124,13 +150,17 @@ async def upload_remote_job_asset(
         raise HTTPException(status_code=409, detail="Job has been cancelled.")
 
     try:
-        contents, mime_type, filename = await download_remote_image_bytes(payload.image_url)
+        contents, mime_type, filename = await download_remote_image_bytes(
+            payload.image_url
+        )
     except Exception as exc:
         job.status = "failed"
         job.current_stage = "queued"
         job.error_message = f"Unable to download remote image: {exc}"
         await db.commit()
-        raise HTTPException(status_code=422, detail=f"Unable to download remote image: {exc}") from exc
+        raise HTTPException(
+            status_code=422, detail=f"Unable to download remote image: {exc}"
+        ) from exc
 
     storage_key = f"{job.storage_prefix}/raw/{filename}"
     await storage_service.upload_bytes(contents, storage_key, mime_type)
@@ -151,7 +181,9 @@ async def upload_remote_job_asset(
         job.status = "cancelled"
         job.error_message = USER_CANCELLED_MESSAGE
         await db.commit()
-        await emit_for_job(job, job.current_stage or "queued", "cancelled", USER_CANCELLED_MESSAGE, db)
+        await emit_for_job(
+            job, job.current_stage or "queued", "cancelled", USER_CANCELLED_MESSAGE, db
+        )
         await db.refresh(asset)
         return _asset_response(asset)
 
@@ -174,7 +206,9 @@ async def upload_remote_job_folder_assets(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[AssetResponse]:
-    result = await db.execute(select(Job).where(Job.job_id == job_id, Job.user_id == current_user.id))
+    result = await db.execute(
+        select(Job).where(Job.job_id == job_id, Job.user_id == current_user.id)
+    )
     job = result.scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
@@ -183,13 +217,20 @@ async def upload_remote_job_folder_assets(
         raise HTTPException(status_code=409, detail="Job has been cancelled.")
 
     raw_asset_result = await db.execute(
-        select(Asset).where(Asset.job_id == job.id, Asset.asset_type == "raw_image", Asset.is_deleted.is_(False))
+        select(Asset).where(
+            Asset.job_id == job.id,
+            Asset.asset_type == "raw_image",
+            Asset.is_deleted.is_(False),
+        )
     )
     existing_raw_count = len(raw_asset_result.scalars().all())
 
     max_images = max(1, min(payload.max_images, MAX_SOURCE_IMAGES))
     if existing_raw_count >= MAX_SOURCE_IMAGES:
-        raise HTTPException(status_code=400, detail=f"A job can include at most {MAX_SOURCE_IMAGES} source images.")
+        raise HTTPException(
+            status_code=400,
+            detail=f"A job can include at most {MAX_SOURCE_IMAGES} source images.",
+        )
 
     try:
         folder_images = await download_drive_folder_image_bytes(
@@ -200,11 +241,24 @@ async def upload_remote_job_folder_assets(
         job.status = "failed"
         job.current_stage = "queued"
         job.error_message = f"Unable to download folder images: {exc}"
+        db.add(
+            PipelineLog(
+                job_id=job.id,
+                level="ERROR",
+                stage="asset_download",
+                message="Did not find any images in the Google Drive folder provided.",
+                context={"error": str(exc), "folder_url": payload.folder_url},
+            )
+        )
         await db.commit()
-        raise HTTPException(status_code=422, detail=f"Unable to download folder images: {exc}") from exc
+        raise HTTPException(
+            status_code=422, detail=f"Unable to download folder images: {exc}"
+        ) from exc
 
     created_assets: list[Asset] = []
-    for index, (contents, mime_type, filename, source_url) in enumerate(folder_images, start=1):
+    for index, (contents, mime_type, filename, source_url) in enumerate(
+        folder_images, start=1
+    ):
         stored_filename = f"{index:02d}_{filename}"
         storage_key = f"{job.storage_prefix}/raw/{stored_filename}"
         await storage_service.upload_bytes(contents, storage_key, mime_type)
@@ -231,7 +285,9 @@ async def upload_remote_job_folder_assets(
         job.status = "cancelled"
         job.error_message = USER_CANCELLED_MESSAGE
         await db.commit()
-        await emit_for_job(job, job.current_stage or "queued", "cancelled", USER_CANCELLED_MESSAGE, db)
+        await emit_for_job(
+            job, job.current_stage or "queued", "cancelled", USER_CANCELLED_MESSAGE, db
+        )
         for asset in created_assets:
             await db.refresh(asset)
         return [_asset_response(asset) for asset in created_assets]
@@ -256,7 +312,9 @@ async def list_job_assets(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[AssetResponse]:
-    result = await db.execute(select(Job).where(Job.job_id == job_id, Job.user_id == current_user.id))
+    result = await db.execute(
+        select(Job).where(Job.job_id == job_id, Job.user_id == current_user.id)
+    )
     job = result.scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
@@ -296,12 +354,18 @@ async def get_asset_url(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> AssetUrlResponse:
-    result = await db.execute(select(Job).where(Job.job_id == job_id, Job.user_id == current_user.id))
+    result = await db.execute(
+        select(Job).where(Job.job_id == job_id, Job.user_id == current_user.id)
+    )
     job = result.scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
 
-    asset_result = await db.execute(select(Asset).where(Asset.id == asset_id, Asset.job_id == job.id, Asset.is_deleted.is_(False)))
+    asset_result = await db.execute(
+        select(Asset).where(
+            Asset.id == asset_id, Asset.job_id == job.id, Asset.is_deleted.is_(False)
+        )
+    )
     asset = asset_result.scalar_one_or_none()
     if asset is None:
         raise HTTPException(status_code=404, detail="Asset not found.")
