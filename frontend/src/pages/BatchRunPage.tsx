@@ -268,7 +268,7 @@ const BatchRunPage = () => {
             }));
             const shouldUseFolder = localJob.sourceType === "drive_folder" || looksLikeDriveFolder(sourceImageUrl);
             if (shouldUseFolder) {
-              await uploadRemoteFolderAssets(backendJobId, sourceImageUrl, 4);
+              await uploadRemoteFolderAssets(backendJobId, sourceImageUrl, 5);
             } else {
               await uploadRemoteJobAsset(backendJobId, sourceImageUrl);
             }

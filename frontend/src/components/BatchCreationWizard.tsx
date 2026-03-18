@@ -41,7 +41,7 @@ type BatchJobRunPayload = {
   batch_name?: string;
 };
 
-type ImageModel = "reve" | "flux-2-pro" | "gpt-image-1";
+type ImageModel = "reve" | "gpt-image-1";
 
 const TEMPLATE_HEADERS = [
   "image link",
@@ -479,7 +479,7 @@ export default function BatchCreationWizard({
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
           {sourceType === "drive_folder"
-            ? 'Each row should contain a public Google Drive folder link in the "image link" column. The first 4 images will be used.'
+            ? 'Each row should contain a public Google Drive folder link in the "image link" column. The first 5 images will be used.'
             : 'Each row should contain one direct image link in the "image link" column.'}
         </p>
         <div className="mt-4 space-y-2">
@@ -490,7 +490,6 @@ export default function BatchCreationWizard({
             className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
           >
             <option value="reve">reve</option>
-            <option value="flux-2-pro">flux.2 pro</option>
             <option value="gpt-image-1">gpt-image-1</option>
           </select>
         </div>

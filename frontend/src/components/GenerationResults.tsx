@@ -105,7 +105,7 @@ const GenerationResults = ({
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [selectedImages, setSelectedImages] = useState<number[]>([]);
   const [additionalDescription, setAdditionalDescription] = useState("");
-  const [regenerationModel, setRegenerationModel] = useState<"reve" | "flux-2-pro" | "gpt-image-1">("reve");
+  const [regenerationModel, setRegenerationModel] = useState<"reve" | "gpt-image-1">("reve");
   const [regenerationInputFiles, setRegenerationInputFiles] = useState<File[]>([]);
   const [regenerationError, setRegenerationError] = useState<string | null>(null);
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -281,7 +281,7 @@ const GenerationResults = ({
   const handleRegenerationInputImages = (files: FileList | null) => {
     if (!files) return;
     const incoming = Array.from(files).filter((file) => file.type.startsWith("image/"));
-    const merged = [...regenerationInputFiles, ...incoming].slice(0, 2);
+    const merged = [...regenerationInputFiles, ...incoming].slice(0, 3);
     setRegenerationInputFiles(merged);
   };
 
@@ -337,16 +337,6 @@ const GenerationResults = ({
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-primary text-primary-foreground text-sm font-semibold shadow-glow hover:opacity-90 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed"
             >
               <Film className="h-4 w-4" /> Create Video
-            </motion.button>
-          )}
-          {effectiveAllDone && (
-            <motion.button
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              onClick={() => void handleDownloadAll()}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border text-sm font-medium hover:bg-secondary transition-colors"
-            >
-              <Download className="h-4 w-4" /> Download All
             </motion.button>
           )}
         </div>
@@ -412,6 +402,18 @@ const GenerationResults = ({
               Round {generation.roundNumber}
             </button>
           ))}
+        </div>
+      )}
+
+      {effectiveAllDone && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => void handleDownloadAll()}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border text-sm font-medium hover:bg-secondary transition-colors"
+          >
+            <Download className="h-4 w-4" /> Download All
+          </button>
         </div>
       )}
 
@@ -526,7 +528,7 @@ const GenerationResults = ({
             className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
           />
           <div className="space-y-2">
-            <p className="text-sm font-medium">Input Images (optional, up to 2)</p>
+            <p className="text-sm font-medium">Input Images (optional, up to 3)</p>
             <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-border bg-background px-4 py-3 text-sm hover:border-primary/50 hover:bg-secondary/40 transition-colors">
               <Upload className="h-4 w-4" />
               Attach images
@@ -559,11 +561,10 @@ const GenerationResults = ({
             <p className="text-sm font-medium">Image Generation Model</p>
             <select
               value={regenerationModel}
-              onChange={(event) => setRegenerationModel(event.target.value as "reve" | "flux-2-pro" | "gpt-image-1")}
+              onChange={(event) => setRegenerationModel(event.target.value as "reve" | "gpt-image-1")}
               className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
             >
               <option value="reve">reve</option>
-              <option value="flux-2-pro">flux.2 pro</option>
               <option value="gpt-image-1">gpt-image-1</option>
             </select>
           </div>

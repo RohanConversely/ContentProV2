@@ -48,7 +48,7 @@ export interface ProductFormData {
   dimensionBreadth: string;
   dimensionHeight: string;
   productDescription: string;
-  imageModel: "reve" | "flux-2-pro" | "gpt-image-1";
+  imageModel: "reve" | "gpt-image-1";
   productImages: string[];
   additionalInfo?: Record<string, string>;
 }
@@ -83,8 +83,8 @@ const dimensionUnits = [
   { value: "feet", label: "Feet (ft)" },
 ];
 
-const MAX_SOURCE_IMAGES = 4;
-const DEFAULT_IMAGE_MODEL: "reve" | "flux-2-pro" | "gpt-image-1" = "reve";
+const MAX_SOURCE_IMAGES = 5;
+const DEFAULT_IMAGE_MODEL: "reve" | "gpt-image-1" = "reve";
 
 const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
   const [formData, setFormData] = useState<ProductFormData>(emptyFormData);
@@ -161,10 +161,14 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
   useEffect(() => {
     const persisted = readActiveSingleRun();
     if (!persisted || persisted.mode !== mode || !persisted.jobId) return;
+    const persistedImageModel =
+      persisted.formData.imageModel === "reve" || persisted.formData.imageModel === "gpt-image-1"
+        ? persisted.formData.imageModel
+        : DEFAULT_IMAGE_MODEL;
 
     setFormData({
       ...persisted.formData,
-      imageModel: persisted.formData.imageModel ?? DEFAULT_IMAGE_MODEL,
+      imageModel: persistedImageModel,
     });
     setShowResults(true);
     setIsGenerating(persisted.isGenerating);
@@ -529,15 +533,14 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
 
         <div className="space-y-2">
           <label className="text-sm font-medium">Image Generation Model</label>
-          <select
-            value={formData.imageModel}
-            onChange={(e) => updateField("imageModel", e.target.value as "reve" | "flux-2-pro" | "gpt-image-1")}
-            className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
-          >
-            <option value="reve">reve</option>
-            <option value="flux-2-pro">flux.2 pro</option>
-            <option value="gpt-image-1">gpt-image-1</option>
-          </select>
+            <select
+              value={formData.imageModel}
+              onChange={(e) => updateField("imageModel", e.target.value as "reve" | "gpt-image-1")}
+              className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+            >
+              <option value="reve">reve</option>
+              <option value="gpt-image-1">gpt-image-1</option>
+            </select>
         </div>
 
         {/* Product Dimensions */}
@@ -624,7 +627,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
                   <Upload className="h-6 w-6 text-primary" />
                 </div>
                 <div className="text-center">
-                  <p className="font-medium">Drop up to 4 product images here or click to browse</p>
+                  <p className="font-medium">Drop up to 5 product images here or click to browse</p>
                   <p className="text-sm text-muted-foreground mt-1">Supports JPG, PNG, WEBP up to 20MB each</p>
                 </div>
               </div>
