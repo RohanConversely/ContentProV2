@@ -111,6 +111,38 @@ def _build_generation_responses(
     return sorted(responses, key=lambda item: item.round_number)
 
 
+async def _get_generated_assets_for_download(
+    db: AsyncSession,
+    job: Job,
+    generation_id: str | None = None,
+) -> list[Asset]:
+    asset_query = (
+        select(Asset)
+        .where(
+            Asset.job_id == job.id,
+            Asset.asset_type == "generated_image",
+            Asset.is_deleted.is_(False),
+        )
+        .order_by(Asset.created_at.asc())
+    )
+    if generation_id:
+        if generation_id == "legacy-round-1":
+            asset_query = asset_query.where(Asset.generation_id.is_(None))
+        else:
+            asset_query = asset_query.where(Asset.generation_id == generation_id)
+    else:
+        latest_generation_result = await db.execute(
+            select(JobGeneration)
+            .where(JobGeneration.job_id == job.id)
+            .order_by(JobGeneration.round_number.desc())
+        )
+        latest_generation = latest_generation_result.scalars().first()
+        if latest_generation is not None:
+            asset_query = asset_query.where(Asset.generation_id == latest_generation.id)
+    asset_result = await db.execute(asset_query)
+    return asset_result.scalars().all()
+
+
 @router.post("/jobs", response_model=JobSummaryResponse)
 async def create_job(
     payload: JobCreateRequest,
@@ -638,31 +670,7 @@ async def download_job_images_archive(
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
 
-    asset_query = (
-        select(Asset)
-        .where(
-            Asset.job_id == job.id,
-            Asset.asset_type == "generated_image",
-            Asset.is_deleted.is_(False),
-        )
-        .order_by(Asset.created_at.asc())
-    )
-    if generation_id:
-        if generation_id == "legacy-round-1":
-            asset_query = asset_query.where(Asset.generation_id.is_(None))
-        else:
-            asset_query = asset_query.where(Asset.generation_id == generation_id)
-    else:
-        latest_generation_result = await db.execute(
-            select(JobGeneration)
-            .where(JobGeneration.job_id == job.id)
-            .order_by(JobGeneration.round_number.desc())
-        )
-        latest_generation = latest_generation_result.scalars().first()
-        if latest_generation is not None:
-            asset_query = asset_query.where(Asset.generation_id == latest_generation.id)
-    asset_result = await db.execute(asset_query)
-    assets = asset_result.scalars().all()
+    assets = await _get_generated_assets_for_download(db, job, generation_id)
     if not assets:
         raise HTTPException(status_code=404, detail="No generated images available for this job.")
 
@@ -677,6 +685,35 @@ async def download_job_images_archive(
     archive_name = f"{job.brand_name}_{job.product_name}".replace("/", "_").replace("\\", "_")
     headers = {"Content-Disposition": f'attachment; filename="{archive_name}.zip"'}
     return StreamingResponse(archive_bytes, media_type="application/zip", headers=headers)
+
+
+@router.get("/jobs/{job_id}/download/image")
+async def download_job_image(
+    job_id: str,
+    index: int,
+    generation_id: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(_active_job_query(Job.job_id == job_id, Job.user_id == current_user.id))
+    job = result.scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    if index < 0:
+        raise HTTPException(status_code=422, detail="index must be 0 or greater.")
+
+    assets = await _get_generated_assets_for_download(db, job, generation_id)
+    if not assets:
+        raise HTTPException(status_code=404, detail="No generated images available for this job.")
+    if index >= len(assets):
+        raise HTTPException(status_code=404, detail="Generated image not found.")
+
+    asset = assets[index]
+    file_bytes = await storage_service.download_bytes(asset.storage_key)
+    filename = asset.original_filename or Path(asset.storage_key).name or f"image_{index + 1}.png"
+    safe_filename = filename.replace("/", "_").replace("\\", "_")
+    headers = {"Content-Disposition": f'attachment; filename="{safe_filename}"'}
+    return StreamingResponse(io.BytesIO(file_bytes), media_type=asset.mime_type or "application/octet-stream", headers=headers)
 
 
 @router.get("/batches/{batch_id}", response_model=list[JobSummaryResponse])

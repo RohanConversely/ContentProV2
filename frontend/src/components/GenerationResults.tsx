@@ -17,6 +17,7 @@ import {
 import { type ProductFormData } from "./CreationWizard";
 import {
   downloadFile,
+  downloadJobImage,
   downloadJobImagesArchive,
   cancelJob,
   getJob,
@@ -173,6 +174,15 @@ const GenerationResults = ({
   const canCancelJob = Boolean(jobId) && (effectiveLoading || isRegenerating);
 
   const handleDownloadImage = async (src: string, index: number) => {
+    if (jobId) {
+      await downloadJobImage(
+        jobId,
+        index,
+        `${productData.productName || "generated-image"}-${index + 1}.png`,
+        selectedGeneration?.id ?? null,
+      );
+      return;
+    }
     await downloadFile(src, `${productData.productName || "generated-image"}-${index + 1}.png`);
   };
 

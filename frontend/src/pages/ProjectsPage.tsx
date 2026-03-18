@@ -20,7 +20,7 @@ import {
   getProjectById,
   deleteProject,
   deleteBatch,
-  downloadFile,
+  downloadJobImage,
   downloadJobImagesArchive,
   getJobLogs,
   downloadBatchArchive,
@@ -154,7 +154,12 @@ const ProjectDetailView = ({
   const displayImages = selectedGeneration?.images.length ? selectedGeneration.images : detail.images;
 
   const handleDownloadImage = async (src: string, index: number) => {
-    await downloadFile(src, `${localProject.name || "project-image"}-${index + 1}.png`);
+    await downloadJobImage(
+      localProject.id,
+      index,
+      `${localProject.name || "project-image"}-${index + 1}.png`,
+      selectedGeneration?.id ?? null,
+    );
   };
   const handleDownloadAll = async () => {
     await downloadJobImagesArchive(localProject.id, `${detail.brandName}_${detail.productName}`, selectedGeneration?.id ?? null);
