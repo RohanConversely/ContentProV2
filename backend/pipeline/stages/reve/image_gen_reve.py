@@ -17,7 +17,7 @@ MAX_PROMPT_CHARS = 2560
 REVE_ENDPOINT = "https://api.reve.com/v1/image/remix"
 
 SHOT_REQUIREMENTS = (
-    "Shot 1 - HERO: replace the entire background with a pastel shade satin cloth background, create a premium ecommerce hero image, centered composition with the jewelry cleanly presented, soft luxury studio lighting with natural shadow under the product, do not keep any part of the original background.",
+    "Shot 1 - HERO: replace the entire background with a pure white seamless luxury studio background, create a premium ecommerce hero image, centered composition with the jewelry cleanly presented, soft luxury studio lighting with natural shadow under the product, do not keep any part of the original background.",
     "Shot 2 - LIFESTYLE: create a premium Indian festive gifting scene around the exact same jewelry product, show elegant gift-box styling with luxury presentation, warm lovely Indian setting with tasteful festive styling and premium editorial photography, replace the original background completely, jewelry remains the hero and fully visible.",
     "Shot 3 - WEARABLE: create a luxury wearable jewelry editorial shot with one model only, product remains clearly visible, keep the exact same jewelry design, replace the original background completely.",
     "Shot 4 - WEARABLE ETHNIC: create a premium Indian ethnic wearable jewelry editorial shot with one model only, model should wear elegant Indian or ethnic attire in a tasteful premium way, jewelry remains clearly visible and dominant, keep the exact same jewelry design, replace the original background completely, keep the exact same jewelry design and size.",
