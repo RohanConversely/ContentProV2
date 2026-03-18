@@ -123,6 +123,7 @@ def generate_images(
     output_dir: str = "generated_images",
     prompt_file: str = "imageGen.txt",
     additional_description: str | None = None,
+    regeneration_only_inputs: bool = False,
     logger_obj: JsonLogger | None = None,
     log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -136,26 +137,34 @@ def generate_images(
     if not resolved_image_paths:
         raise ValueError("At least one product image is required for REVE generation.")
 
-    resolved_kyc_path = Path(kyc_path).resolve()
-    if not resolved_kyc_path.exists():
-        raise ValueError(f"KYC JSON file not found: {resolved_kyc_path}")
+    resolved_kyc_path: Path | None = None
+    if not regeneration_only_inputs:
+        resolved_kyc_path = Path(kyc_path).resolve()
+        if not resolved_kyc_path.exists():
+            raise ValueError(f"KYC JSON file not found: {resolved_kyc_path}")
 
     api_key = os.getenv("REVE_API_KEY")
     if not api_key:
         raise ValueError("REVE_API_KEY missing from environment")
 
-    base_prompt = load_prompt(prompt_file)
-    compressed_kyc_file = output_path / "compressed_kyc.json"
-    kyc_summary = build_compressed_kyc(
-        resolved_kyc_path,
-        compressed_kyc_file,
-        stage_logger,
-        min_chars=400,
-        max_chars=600,
-        log_context=log_context,
-    )
-    if not kyc_summary:
-        raise ValueError("Failed to build compressed KYC summary for REVE.")
+    base_prompt = ""
+    kyc_summary = ""
+    if regeneration_only_inputs:
+        if not additional_description or not additional_description.strip():
+            raise ValueError("additional_description is required for regeneration-only REVE generation.")
+    else:
+        base_prompt = load_prompt(prompt_file)
+        compressed_kyc_file = output_path / "compressed_kyc.json"
+        kyc_summary = build_compressed_kyc(
+            resolved_kyc_path,
+            compressed_kyc_file,
+            stage_logger,
+            min_chars=400,
+            max_chars=600,
+            log_context=log_context,
+        )
+        if not kyc_summary:
+            raise ValueError("Failed to build compressed KYC summary for REVE.")
 
     encoded_images = prepare_reference_images(
         resolved_image_paths,
@@ -172,7 +181,11 @@ def generate_images(
         "Content-Type": "application/json",
     }
 
-    shot_instructions = _shot_instructions_for_count(num_images)
+    shot_instructions = (
+        [additional_description.strip() for _ in range(max(1, num_images))]
+        if regeneration_only_inputs
+        else _shot_instructions_for_count(num_images)
+    )
     generated_files: list[str] = []
 
     stage_logger.info(
@@ -185,18 +198,23 @@ def generate_images(
                 "num_images_requested": num_images,
                 "shot_count": len(shot_instructions),
                 "image_paths": resolved_image_paths,
-                "kyc_path": str(resolved_kyc_path),
+                "kyc_path": str(resolved_kyc_path) if resolved_kyc_path is not None else None,
                 "prompt_file": prompt_file,
                 "output_dir": str(output_path),
                 "additional_description": additional_description.strip() if additional_description else None,
+                "regeneration_only_inputs": regeneration_only_inputs,
             },
         ),
     )
 
     for iteration, shot_instruction in enumerate(shot_instructions, start=1):
         shot_slug = _shot_slug(shot_instruction, iteration)
-        prompt = _build_iteration_prompt(base_prompt, kyc_summary, shot_instruction)
-        if additional_description:
+        prompt = (
+            additional_description.strip()
+            if regeneration_only_inputs
+            else _build_iteration_prompt(base_prompt, kyc_summary, shot_instruction)
+        )
+        if additional_description and not regeneration_only_inputs:
             merged = f"{prompt}\n\nRefinement instructions: {additional_description.strip()}"
             prompt = merged[:MAX_PROMPT_CHARS]
 
@@ -261,7 +279,7 @@ def generate_images(
         "generated_images": generated_files,
         "count": len(generated_files),
         "image_paths": resolved_image_paths,
-        "kyc_path": str(resolved_kyc_path),
+        "kyc_path": str(resolved_kyc_path) if resolved_kyc_path is not None else None,
         "provider": "reve",
         "additional_description": additional_description.strip() if additional_description else None,
     }

@@ -18,4 +18,4 @@ class JobGenerationResponse(BaseModel):
 
 class JobRegenerateRequest(BaseModel):
     additional_description: str = Field(min_length=1, max_length=250)
-    image_model: str | None = Field(default=None, pattern="^(reve|flux-2-pro|gpt-image-1)$")
+    image_model: str | None = Field(default=None, pattern="^(reve|gpt-image-1)$")

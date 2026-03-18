@@ -585,42 +585,14 @@ async def run_regeneration_task(job_id: str, generation_id: str, image_model: st
             return
 
         workspace: Path | None = None
-        filtered_kyc_asset = await _get_latest_filtered_kyc_asset(db, job)
-        if filtered_kyc_asset is None:
-            generation.status = "failed"
-            job.status = "failed"
-            job.error_message = "No filtered KYC asset available for regeneration."
-            await db.commit()
-            await emit_for_job(job, "stage_2", "failed", job.error_message, db)
-            return
-
-        raw_asset_result = await db.execute(
-            select(Asset)
-            .where(Asset.job_id == job.id, Asset.asset_type == "raw_image", Asset.is_deleted.is_(False))
-            .order_by(Asset.created_at.asc())
-        )
-        raw_assets = raw_asset_result.scalars().all()
-        if not raw_assets:
-            generation.status = "failed"
-            job.status = "failed"
-            job.error_message = "No raw input images available for regeneration."
-            await db.commit()
-            await emit_for_job(job, "stage_2", "failed", job.error_message, db)
-            return
-
         ctx: JobContext | None = None
         log_stop_event = asyncio.Event()
         log_monitor_task: asyncio.Task[None] | None = None
-        filtered_kyc_path: Path | None = None
         try:
             workspace = _build_job_workspace(job) / f"regeneration_round_{generation.round_number}"
             workspace.mkdir(parents=True, exist_ok=True)
 
             image_paths: list[Path] = []
-            for raw_asset in raw_assets[:5]:
-                local_image = workspace / "raw" / (raw_asset.original_filename or "product.jpg")
-                await storage_service.download_file(raw_asset.storage_key, local_image)
-                image_paths.append(local_image)
 
             regeneration_input_result = await db.execute(
                 select(Asset)
@@ -638,8 +610,13 @@ async def run_regeneration_task(job_id: str, generation_id: str, image_model: st
                 await storage_service.download_file(extra_asset.storage_key, local_extra)
                 image_paths.append(local_extra)
 
-            filtered_kyc_path = workspace / "stage_1" / (filtered_kyc_asset.original_filename or Path(filtered_kyc_asset.storage_key).name)
-            await storage_service.download_file(filtered_kyc_asset.storage_key, filtered_kyc_path)
+            if not image_paths:
+                generation.status = "failed"
+                job.status = "failed"
+                job.error_message = "At least one regeneration input image is required."
+                await db.commit()
+                await emit_for_job(job, "stage_2", "failed", job.error_message, db)
+                return
 
             ctx = JobContext(
                 job_id=job.job_id,
@@ -648,13 +625,14 @@ async def run_regeneration_task(job_id: str, generation_id: str, image_model: st
                 product_name=job.product_name,
                 product_category=job.product_category,
                 image_paths=image_paths,
-                social_link_1=job.social_link_1,
-                social_link_2=job.social_link_2,
-                additional_info=job.additional_input_json,
+                social_link_1=None,
+                social_link_2=None,
+                additional_info=None,
                 image_model=image_model or job.image_model or "reve",
                 num_images=2,
                 temperature=0.1,
                 additional_description=generation.additional_description,
+                regeneration_only_inputs=True,
                 workspace_root=workspace,
             )
 
@@ -668,7 +646,7 @@ async def run_regeneration_task(job_id: str, generation_id: str, image_model: st
             )
             await emit_for_job(job, "stage_2", "running", f"Queued regeneration {generation.round_number}.", db)
 
-            await run_stage_2_only(ctx, filtered_kyc_path)
+            await run_stage_2_only(ctx, None)
 
             log_stop_event.set()
             await log_monitor_task

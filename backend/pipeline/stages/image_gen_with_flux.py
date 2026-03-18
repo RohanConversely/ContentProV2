@@ -129,9 +129,11 @@ def generate_images(
     output_dir: str = "generated_images",
     prompt_file: str = "ImageWithKYCTesting.txt",
     additional_description: str | None = None,
+    regeneration_only_inputs: bool = False,
     logger_obj: JsonLogger | None = None,
     log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    del regeneration_only_inputs
     stage_logger = logger_obj or JsonLogger()
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)

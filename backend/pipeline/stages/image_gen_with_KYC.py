@@ -53,6 +53,7 @@ def generate_images(
     output_dir: str = "generated_images",
     prompt_file: str = "ImageWithKYCTesting.txt",
     additional_description: str | None = None,
+    regeneration_only_inputs: bool = False,
     logger_obj: JsonLogger | None = None,
     log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -69,22 +70,25 @@ def generate_images(
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    prompt_template = load_prompt(prompt_file)
-
-    if not kyc_path or not Path(kyc_path).exists():
-        raise ValueError(f"KYC JSON file not found: {kyc_path}")
-
-    user_message = (
-        "Generate A+ content images based on the attached product image, the "
-        "attached KYC JSON file, and the instructions below.\n"
-        f"Brand Name: {brand_name}\n\n"
-        f"{prompt_template}"
-    )
-    if additional_description:
-        user_message += (
-            "\n\nRefinement instructions for this regeneration:\n"
-            f"{additional_description.strip()}"
+    if regeneration_only_inputs:
+        if not additional_description or not additional_description.strip():
+            raise ValueError("additional_description is required for regeneration-only image generation.")
+        user_message = additional_description.strip()
+    else:
+        prompt_template = load_prompt(prompt_file)
+        if not kyc_path or not Path(kyc_path).exists():
+            raise ValueError(f"KYC JSON file not found: {kyc_path}")
+        user_message = (
+            "Generate A+ content images based on the attached product image, the "
+            "attached KYC JSON file, and the instructions below.\n"
+            f"Brand Name: {brand_name}\n\n"
+            f"{prompt_template}"
         )
+        if additional_description:
+            user_message += (
+                "\n\nRefinement instructions for this regeneration:\n"
+                f"{additional_description.strip()}"
+            )
 
     resolved_image_paths = [str(Path(path).resolve()) for path in (image_paths or ([image_path] if image_path else []))]
     if not resolved_image_paths:
@@ -102,9 +106,11 @@ def generate_images(
         image_data_url = f"data:{mime_type};base64,{image_b64}"
         content.append({"type": "input_image", "image_url": image_data_url})
 
-    with open(kyc_path, "rb") as kyc_file:
-        kyc_b64 = base64.b64encode(kyc_file.read()).decode("utf-8")
-    kyc_data_url = f"data:application/json;base64,{kyc_b64}"
+    kyc_data_url: str | None = None
+    if not regeneration_only_inputs:
+        with open(kyc_path, "rb") as kyc_file:
+            kyc_b64 = base64.b64encode(kyc_file.read()).decode("utf-8")
+        kyc_data_url = f"data:application/json;base64,{kyc_b64}"
 
     stage_logger.info(
         "Requesting image generation with KYC.",
@@ -120,6 +126,7 @@ def generate_images(
                 "output_dir": str(output_path.resolve()),
                 "prompt_file": prompt_file,
                 "additional_description": additional_description.strip() if additional_description else None,
+                "regeneration_only_inputs": regeneration_only_inputs,
             },
         ),
     )
@@ -137,22 +144,32 @@ def generate_images(
             input=[
                 {
                     "role": "user",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": (
-                                f"{user_message}\n\n"
-                                f"Generate {remaining_images} distinct A+ content image variation(s). "
-                                "Each variation must be visually different while staying faithful to the product and KYC."
-                            ),
-                        },
-                        *content[1:],
-                        {
-                            "type": "input_file",
-                            "filename": Path(kyc_path).name,
-                            "file_data": kyc_data_url,
-                        },
-                    ],
+                    "content": (
+                        [
+                            {
+                                "type": "input_text",
+                                "text": user_message,
+                            },
+                            *content[1:],
+                        ]
+                        if regeneration_only_inputs
+                        else [
+                            {
+                                "type": "input_text",
+                                "text": (
+                                    f"{user_message}\n\n"
+                                    f"Generate {remaining_images} distinct A+ content image variation(s). "
+                                    "Each variation must be visually different while staying faithful to the product and KYC."
+                                ),
+                            },
+                            *content[1:],
+                            {
+                                "type": "input_file",
+                                "filename": Path(kyc_path).name,
+                                "file_data": kyc_data_url,
+                            },
+                        ]
+                    ),
                 }
             ],
             tools=[
@@ -213,7 +230,7 @@ def generate_images(
         "generated_images": generated_files,
         "count": len(generated_files),
         "image_paths": resolved_image_paths,
-        "kyc_path": str(Path(kyc_path).resolve()),
+        "kyc_path": str(Path(kyc_path).resolve()) if (kyc_path and not regeneration_only_inputs) else None,
         "additional_description": additional_description.strip() if additional_description else None,
     }
 

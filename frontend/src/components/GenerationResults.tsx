@@ -159,7 +159,7 @@ const GenerationResults = ({
   const effectiveStatusMessage = isRegenerating ? localStatus.message : statusMessage;
   const effectiveStatusStage = isRegenerating ? localStatus.stage : statusStage;
   const effectiveStatusUpdates = isRegenerating ? localTimeline : statusUpdates;
-  const canRegenerate = Boolean(jobId && additionalDescription.trim());
+  const canRegenerate = Boolean(jobId && additionalDescription.trim() && regenerationInputFiles.length > 0);
 
   const toggleImageSelection = (index: number) => {
     setSelectedImages(prev => 
@@ -596,7 +596,7 @@ const GenerationResults = ({
             className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
           />
           <div className="space-y-2">
-            <p className="text-sm font-medium">Input Images (optional, up to 3)</p>
+            <p className="text-sm font-medium">Input Images (required, 1 to 3)</p>
             <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-border bg-background px-4 py-3 text-sm hover:border-primary/50 hover:bg-secondary/40 transition-colors">
               <Upload className="h-4 w-4" />
               Attach images
@@ -650,9 +650,9 @@ const GenerationResults = ({
                   Cancel
                 </button>
               )}
-              <button
-                type="button"
-                disabled={!canRegenerate || isRegenerating}
+            <button
+              type="button"
+              disabled={!canRegenerate || isRegenerating}
                 onClick={() => void handleRegenerate()}
                 className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
               >
