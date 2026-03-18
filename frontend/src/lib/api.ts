@@ -169,7 +169,7 @@ export interface GenerateImagesInput {
   socialLink3?: string;
   socialLink4?: string;
   additionalInput?: Record<string, unknown>;
-  imageModel?: "reve" | "flux-2-pro" | "gpt-image-1";
+  imageModel?: "reve" | "gpt-image-1";
 }
 
 export interface JobEventPayload {
@@ -211,7 +211,7 @@ export interface JobGenerationSummary {
 
 export interface RegenerateImagesInput {
   additionalDescription: string;
-  imageModel?: "reve" | "flux-2-pro" | "gpt-image-1";
+  imageModel?: "reve" | "gpt-image-1";
   inputImages?: File[];
 }
 
@@ -316,6 +316,20 @@ function assetUrl(asset: BackendAssetResponse): string | null {
   return asset.presigned_url ?? null;
 }
 
+function pickDisplayGeneration(
+  generations: JobGenerationSummary[],
+  preferredGenerationId?: string | null,
+): JobGenerationSummary | null {
+  if (preferredGenerationId) {
+    const preferred = generations.find((generation) => generation.id === preferredGenerationId);
+    if (preferred && preferred.images.length > 0) {
+      return preferred;
+    }
+  }
+
+  return [...generations].reverse().find((generation) => generation.images.length > 0) ?? generations[generations.length - 1] ?? null;
+}
+
 function mapProject(job: BackendJobResponse, summary?: BackendJobSummaryResponse): Project {
   const additionalInput = job.additional_input ?? {};
   const dimensions =
@@ -356,13 +370,12 @@ function mapProject(job: BackendJobResponse, summary?: BackendJobSummaryResponse
         .filter((value): value is string => Boolean(value)),
     }))
     .sort((a, b) => a.roundNumber - b.roundNumber);
-  const activeGeneration = generations[generations.length - 1];
-  const generatedImages =
-    activeGeneration?.images ??
-    job.assets
-      .filter((asset) => asset.asset_type === "generated_image" && !asset.is_deleted)
-      .map((asset) => assetUrl(asset))
-      .filter((value): value is string => Boolean(value));
+  const activeGeneration = pickDisplayGeneration(generations);
+  const fallbackGeneratedImages = job.assets
+    .filter((asset) => asset.asset_type === "generated_image" && !asset.is_deleted)
+    .map((asset) => assetUrl(asset))
+    .filter((value): value is string => Boolean(value));
+  const generatedImages = activeGeneration && activeGeneration.images.length > 0 ? activeGeneration.images : fallbackGeneratedImages;
   const thumbnail =
     rawImages[0] ||
     generatedImages[0] ||
@@ -374,9 +387,11 @@ function mapProject(job: BackendJobResponse, summary?: BackendJobSummaryResponse
     status:
       (summary?.status || job.status) === "completed"
         ? "completed"
-        : (summary?.status || job.status) === "failed" || (summary?.status || job.status) === "cancelled"
-          ? "failed"
-          : "processing",
+        : (summary?.status || job.status) === "cancelled"
+          ? "cancelled"
+          : (summary?.status || job.status) === "failed"
+            ? "failed"
+            : "processing",
     createdAt: job.created_at,
     thumbnail,
     batch_id: summary?.batch_id || job.batch_id,
@@ -394,6 +409,7 @@ function mapProject(job: BackendJobResponse, summary?: BackendJobSummaryResponse
       images: generatedImages,
       activeGenerationId: activeGeneration?.id ?? null,
       generations,
+      imageModel: summary?.image_model ?? job.image_model,
     },
   };
 }
@@ -595,7 +611,7 @@ export async function uploadRemoteJobAsset(jobId: string, imageUrl: string): Pro
   );
 }
 
-export async function uploadRemoteFolderAssets(jobId: string, folderUrl: string, maxImages = 4): Promise<BackendAssetResponse[]> {
+export async function uploadRemoteFolderAssets(jobId: string, folderUrl: string, maxImages = 5): Promise<BackendAssetResponse[]> {
   return apiJson<BackendAssetResponse[]>(
     `/jobs/${encodeURIComponent(jobId)}/assets/remote-folder`,
     {
@@ -637,6 +653,16 @@ export async function regenerateJobImages(jobId: string, input: RegenerateImages
     createdAt: response.created_at,
     images: [],
   };
+}
+
+export async function cancelJob(jobId: string): Promise<{ ok: boolean; status: string; signal_sent?: boolean }> {
+  return apiJson<{ ok: boolean; status: string; signal_sent?: boolean }>(
+    `/jobs/${encodeURIComponent(jobId)}/cancel`,
+    {
+      method: "POST",
+    },
+    true,
+  );
 }
 
 export async function getJobLogs(jobId: string): Promise<JobLogEntry[]> {
@@ -709,9 +735,9 @@ export async function waitForJobCompletion(
     onStatus({
       stage: preflight.current_stage ?? "pipeline",
       status: "cancelled",
-      message: preflight.error_message ?? "Job cancelled.",
+      message: preflight.error_message ?? "User cancelled the job.",
     });
-    throw new Error(preflight.error_message ?? "Job cancelled.");
+    throw new Error(preflight.error_message ?? "User cancelled the job.");
   }
 
   await new Promise<void>((resolve, reject) => {
@@ -730,7 +756,7 @@ export async function waitForJobCompletion(
         } else if (payload.status === "cancelled") {
           settled = true;
           subscription.close();
-          reject(new Error(payload.message || "Job cancelled."));
+          reject(new Error(payload.message || "User cancelled the job."));
         }
       },
       onError: (message) => {
@@ -803,20 +829,31 @@ export async function deleteBatch(batchId: string): Promise<void> {
 }
 
 export async function downloadFile(url: string, fallbackFilename = "download.bin"): Promise<void> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(await parseErrorResponse(response));
-  }
-
-  const blob = await response.blob();
-  const blobUrl = window.URL.createObjectURL(blob);
   const anchor = document.createElement("a");
-  anchor.href = blobUrl;
   anchor.download = inferFilename(url, fallbackFilename);
   document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.URL.revokeObjectURL(blobUrl);
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(await parseErrorResponse(response));
+    }
+
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+    anchor.href = blobUrl;
+    anchor.click();
+    window.URL.revokeObjectURL(blobUrl);
+    return;
+  } catch {
+    anchor.href = url;
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
+    anchor.click();
+    return;
+  } finally {
+    anchor.remove();
+  }
 }
 
 export async function downloadJobImagesArchive(

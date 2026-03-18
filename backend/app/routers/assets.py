@@ -11,12 +11,13 @@ from app.models.user import User
 from app.routers.auth import get_current_user
 from app.schemas.asset import AssetResponse, AssetUrlResponse, RemoteAssetCreateRequest, RemoteFolderAssetCreateRequest
 from app.services.image_pipeline import download_drive_folder_image_bytes, download_remote_image_bytes
-from app.services.pipeline_runner import queue_pipeline_task
+from app.services.pipeline_runner import emit_for_job, queue_pipeline_task
 from app.services.storage import storage_service
 from app.utils.presigned_urls import generate_url
 
 router = APIRouter(tags=["assets"])
 MAX_SOURCE_IMAGES = 5
+USER_CANCELLED_MESSAGE = "User cancelled the job."
 
 
 def _asset_response(asset: Asset) -> AssetResponse:
@@ -85,6 +86,16 @@ async def upload_job_asset(
         db.add(asset)
         created_assets.append(asset)
 
+    await db.refresh(job)
+    if job.status in {"cancel_requested", "cancelled"}:
+        job.status = "cancelled"
+        job.error_message = USER_CANCELLED_MESSAGE
+        await db.commit()
+        await emit_for_job(job, job.current_stage or "queued", "cancelled", USER_CANCELLED_MESSAGE, db)
+        for asset in created_assets:
+            await db.refresh(asset)
+        return [_asset_response(asset) for asset in created_assets]
+
     job.status = "pending"
     job.current_stage = "queued"
     job.error_message = None
@@ -135,6 +146,15 @@ async def upload_remote_job_asset(
         metadata_json={"source_image_url": payload.image_url},
     )
     db.add(asset)
+    await db.refresh(job)
+    if job.status in {"cancel_requested", "cancelled"}:
+        job.status = "cancelled"
+        job.error_message = USER_CANCELLED_MESSAGE
+        await db.commit()
+        await emit_for_job(job, job.current_stage or "queued", "cancelled", USER_CANCELLED_MESSAGE, db)
+        await db.refresh(asset)
+        return _asset_response(asset)
+
     job.status = "pending"
     job.current_stage = "queued"
     job.error_message = None
@@ -205,6 +225,16 @@ async def upload_remote_job_folder_assets(
         )
         db.add(asset)
         created_assets.append(asset)
+
+    await db.refresh(job)
+    if job.status in {"cancel_requested", "cancelled"}:
+        job.status = "cancelled"
+        job.error_message = USER_CANCELLED_MESSAGE
+        await db.commit()
+        await emit_for_job(job, job.current_stage or "queued", "cancelled", USER_CANCELLED_MESSAGE, db)
+        for asset in created_assets:
+            await db.refresh(asset)
+        return [_asset_response(asset) for asset in created_assets]
 
     job.status = "pending"
     job.current_stage = "queued"

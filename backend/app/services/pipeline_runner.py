@@ -30,6 +30,7 @@ RUNNING_PIPELINE_TASKS: dict[str, asyncio.Task[None]] = {}
 RUNNING_REGENERATION_TASKS: dict[tuple[str, str], asyncio.Task[None]] = {}
 
 TERMINAL_JOB_STATUSES = {"completed", "failed", "cancelled"}
+USER_CANCELLED_MESSAGE = "User cancelled the job."
 
 
 async def emit(job_id: str, stage: str, status: str, message: str, db: AsyncSession | None = None) -> None:
@@ -273,6 +274,16 @@ async def _ensure_initial_generation(db: AsyncSession, job: Job) -> JobGeneratio
     return await _create_generation(db, job, additional_description=None, status="completed")
 
 
+async def _restore_completed_job_after_regeneration_cancel(
+    db: AsyncSession,
+    job: Job,
+) -> None:
+    job.status = "completed"
+    job.current_stage = "stage_2"
+    job.error_message = None
+    await db.commit()
+
+
 async def _get_latest_filtered_kyc_asset(db: AsyncSession, job: Job) -> Asset | None:
     result = await db.execute(
         select(Asset)
@@ -412,7 +423,7 @@ async def run_pipeline_task(job_id: str) -> None:
 
         if job.status in {"cancel_requested", "cancelled"}:
             job.status = "cancelled"
-            job.error_message = job.error_message or "Job cancelled."
+            job.error_message = job.error_message or USER_CANCELLED_MESSAGE
             await db.commit()
             await emit_for_job(job, job.current_stage or "queued", "cancelled", job.error_message, db)
             return
@@ -463,7 +474,7 @@ async def run_pipeline_task(job_id: str) -> None:
             current = result.first()
             if current and current[0] in {"cancel_requested", "cancelled"}:
                 job.status = "cancelled"
-                job.error_message = "Job cancelled."
+                job.error_message = USER_CANCELLED_MESSAGE
                 await db.commit()
                 await emit_for_job(job, job.current_stage or "queued", "cancelled", job.error_message, db)
                 return
@@ -483,7 +494,7 @@ async def run_pipeline_task(job_id: str) -> None:
             current_status = result.scalar_one_or_none()
             if current_status in {"cancel_requested", "cancelled"}:
                 job.status = "cancelled"
-                job.error_message = "Job cancelled."
+                job.error_message = USER_CANCELLED_MESSAGE
                 await db.commit()
                 await emit_for_job(job, job.current_stage or "pipeline", "cancelled", job.error_message, db)
                 return
@@ -517,7 +528,7 @@ async def run_pipeline_task(job_id: str) -> None:
             except Exception:
                 pass
             job.status = "cancelled"
-            job.error_message = "Job cancelled."
+            job.error_message = USER_CANCELLED_MESSAGE
             await db.commit()
             await emit_for_job(job, job.current_stage or "pipeline", "cancelled", job.error_message, db)
         except Exception as exc:
@@ -561,12 +572,16 @@ async def run_regeneration_task(job_id: str, generation_id: str, image_model: st
         if generation is None:
             return
 
-        if job.status in {"cancel_requested", "cancelled"} or generation.status in {"cancel_requested", "cancelled"}:
+        if generation.status in {"cancel_requested", "cancelled"}:
             generation.status = "cancelled"
-            job.status = "cancelled"
-            job.error_message = job.error_message or "Job cancelled."
-            await db.commit()
-            await emit_for_job(job, job.current_stage or "stage_2", "cancelled", job.error_message, db)
+            await _restore_completed_job_after_regeneration_cancel(db, job)
+            await emit_for_job(job, job.current_stage or "stage_2", "cancelled", USER_CANCELLED_MESSAGE, db)
+            return
+
+        if job.status in {"cancel_requested", "cancelled"}:
+            generation.status = "cancelled"
+            await _restore_completed_job_after_regeneration_cancel(db, job)
+            await emit_for_job(job, job.current_stage or "stage_2", "cancelled", USER_CANCELLED_MESSAGE, db)
             return
 
         workspace: Path | None = None
@@ -618,7 +633,7 @@ async def run_regeneration_task(job_id: str, generation_id: str, image_model: st
                 .order_by(Asset.created_at.asc())
             )
             regeneration_input_assets = regeneration_input_result.scalars().all()
-            for extra_asset in regeneration_input_assets[:2]:
+            for extra_asset in regeneration_input_assets[:3]:
                 local_extra = workspace / "regeneration_inputs" / (extra_asset.original_filename or "extra_input.jpg")
                 await storage_service.download_file(extra_asset.storage_key, local_extra)
                 image_paths.append(local_extra)
@@ -637,7 +652,7 @@ async def run_regeneration_task(job_id: str, generation_id: str, image_model: st
                 social_link_2=job.social_link_2,
                 additional_info=job.additional_input_json,
                 image_model=image_model or job.image_model or "reve",
-                num_images=6,
+                num_images=2,
                 temperature=0.1,
                 additional_description=generation.additional_description,
                 workspace_root=workspace,
@@ -676,10 +691,8 @@ async def run_regeneration_task(job_id: str, generation_id: str, image_model: st
             except Exception:
                 pass
             generation.status = "cancelled"
-            job.status = "cancelled"
-            job.error_message = "Job cancelled."
-            await db.commit()
-            await emit_for_job(job, "stage_2", "cancelled", job.error_message, db)
+            await _restore_completed_job_after_regeneration_cancel(db, job)
+            await emit_for_job(job, "stage_2", "cancelled", USER_CANCELLED_MESSAGE, db)
         except Exception as exc:
             try:
                 log_stop_event.set()

@@ -24,6 +24,7 @@ import {
   downloadJobImagesArchive,
   getJobLogs,
   downloadBatchArchive,
+  cancelJob,
   regenerateJobImages,
   waitForJobCompletion,
   type JobLogEntry,
@@ -31,6 +32,21 @@ import {
 } from "@/lib/api";
 import { useNavigate, useParams } from "react-router-dom";
 import { LazyImage } from "@/components/ui/lazy-image";
+
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case "completed":
+      return "bg-green-500/10 text-green-500";
+    case "processing":
+      return "bg-yellow-500/10 text-yellow-500";
+    case "cancelled":
+      return "bg-slate-500/10 text-slate-500";
+    case "failed":
+      return "bg-red-500/10 text-red-500";
+    default:
+      return "bg-gray-500/10 text-gray-500";
+  }
+};
 
 const ImageLightbox = ({
   src,
@@ -95,9 +111,10 @@ const ProjectDetailView = ({
   const [logsError, setLogsError] = useState<string | null>(null);
   const [activeGenerationId, setActiveGenerationId] = useState<string | null>(project.detail.activeGenerationId ?? null);
   const [additionalDescription, setAdditionalDescription] = useState("");
-  const [regenerationModel, setRegenerationModel] = useState<"reve" | "flux-2-pro" | "gpt-image-1">("reve");
+  const [regenerationModel, setRegenerationModel] = useState<"reve" | "gpt-image-1">("reve");
   const [regenerationInputFiles, setRegenerationInputFiles] = useState<File[]>([]);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [isCancellingJob, setIsCancellingJob] = useState(false);
   const [regenerationError, setRegenerationError] = useState<string | null>(null);
   const [regenerationTimeline, setRegenerationTimeline] = useState<{ stage: string; status: string; message: string }[]>([]);
   const [regenerationStatus, setRegenerationStatus] = useState<string | null>(null);
@@ -131,15 +148,45 @@ const ProjectDetailView = ({
 
   const generations = detail.generations ?? [];
   const selectedGeneration =
-    generations.find((generation) => generation.id === activeGenerationId) ??
+    generations.find((generation) => generation.id === activeGenerationId && generation.images.length > 0) ??
+    [...generations].reverse().find((generation) => generation.images.length > 0) ??
     generations[generations.length - 1];
-  const displayImages = selectedGeneration?.images ?? detail.images;
+  const displayImages = selectedGeneration?.images.length ? selectedGeneration.images : detail.images;
 
   const handleDownloadImage = async (src: string, index: number) => {
     await downloadFile(src, `${localProject.name || "project-image"}-${index + 1}.png`);
   };
   const handleDownloadAll = async () => {
     await downloadJobImagesArchive(localProject.id, `${detail.brandName}_${detail.productName}`, selectedGeneration?.id ?? null);
+  };
+
+  const handleCancelJob = async () => {
+    if (isCancellingJob || localProject.status !== "processing") return;
+    setIsCancellingJob(true);
+    try {
+      await cancelJob(localProject.id);
+      if (isRegenerating) {
+        const refreshedProject = await getProjectById(localProject.id);
+        if (refreshedProject) {
+          setLocalProject(refreshedProject);
+          setActiveGenerationId(refreshedProject.detail.activeGenerationId ?? null);
+        }
+        const refreshedLogs = await getJobLogs(localProject.id);
+        setJobLogs(refreshedLogs);
+        setRegenerationStatus("User cancelled the job.");
+      } else {
+        setLocalProject((prev) => ({
+          ...prev,
+          status: "cancelled",
+        }));
+        setRegenerationStatus("User cancelled the job.");
+      }
+      setRegenerationError(null);
+    } catch (error) {
+      setRegenerationError(error instanceof Error ? error.message : "Unable to cancel job.");
+    } finally {
+      setIsCancellingJob(false);
+    }
   };
 
   const handleRegenerate = async () => {
@@ -211,7 +258,20 @@ const ProjectDetailView = ({
       setAdditionalDescription("");
       setRegenerationInputFiles([]);
     } catch (submitError) {
-      setRegenerationError(submitError instanceof Error ? submitError.message : "Unable to regenerate images.");
+      const message = submitError instanceof Error ? submitError.message : "Unable to regenerate images.";
+      if (message.toLowerCase().includes("cancelled")) {
+        const refreshedProject = await getProjectById(localProject.id);
+        if (refreshedProject) {
+          setLocalProject(refreshedProject);
+          setActiveGenerationId(refreshedProject.detail.activeGenerationId ?? null);
+        }
+        const refreshedLogs = await getJobLogs(localProject.id);
+        setJobLogs(refreshedLogs);
+        setRegenerationStatus("User cancelled the job.");
+        setRegenerationError(null);
+      } else {
+        setRegenerationError(message);
+      }
     } finally {
       setIsRegenerating(false);
     }
@@ -220,7 +280,7 @@ const ProjectDetailView = ({
   const handleRegenerationInputImages = (files: FileList | null) => {
     if (!files) return;
     const incoming = Array.from(files).filter((file) => file.type.startsWith("image/"));
-    setRegenerationInputFiles((prev) => [...prev, ...incoming].slice(0, 2));
+    setRegenerationInputFiles((prev) => [...prev, ...incoming].slice(0, 3));
   };
 
   const removeRegenerationInputImage = (index: number) => {
@@ -266,26 +326,37 @@ const ProjectDetailView = ({
               <p className="text-xs text-muted-foreground">{displayImages.length} images generated</p>
             </div>
           </div>
-          {detail.brandWebsite && (
-            <a
-              href={detail.brandWebsite.startsWith("http") ? detail.brandWebsite : `https://${detail.brandWebsite}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs text-primary hover:bg-secondary transition-colors"
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                localProject.status,
+              )}`}
             >
-              <Globe className="h-3.5 w-3.5" />
-              {detail.brandWebsite.replace(/^https?:\/\//, "").replace(/\/$/, "")}
-            </a>
-          )}
-        </div>
-
-        <div className="flex justify-end">
-          <button
-            onClick={() => void handleDownloadAll()}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-xs font-medium hover:bg-secondary transition-colors"
-          >
-            <Download className="h-3.5 w-3.5" /> Download All
-          </button>
+              {localProject.status.charAt(0).toUpperCase() + localProject.status.slice(1)}
+            </span>
+            {localProject.status === "processing" && (
+              <button
+                type="button"
+                onClick={() => void handleCancelJob()}
+                disabled={isCancellingJob}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-medium hover:bg-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isCancellingJob ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
+                Cancel
+              </button>
+            )}
+            {detail.brandWebsite && (
+              <a
+                href={detail.brandWebsite.startsWith("http") ? detail.brandWebsite : `https://${detail.brandWebsite}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs text-primary hover:bg-secondary transition-colors"
+              >
+                <Globe className="h-3.5 w-3.5" />
+                {detail.brandWebsite.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+              </a>
+            )}
+          </div>
         </div>
 
         {detail.inputImages && detail.inputImages.length > 0 && (
@@ -386,6 +457,13 @@ const ProjectDetailView = ({
           </div>
         )}
 
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-3 border-t border-border">
+          <div className="space-y-1">
+            <span className="text-muted-foreground">Model</span>
+            <p className="font-medium truncate">{detail.imageModel || "—"}</p>
+          </div>
+        </div>
+
       </div>
 
       <div className="space-y-3">
@@ -414,7 +492,15 @@ const ProjectDetailView = ({
 
       {/* Generated Images */}
       <div className="space-y-3">
-        <h3 className="font-display text-lg font-semibold">Generated Images</h3>
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="font-display text-lg font-semibold">Generated Images</h3>
+          <button
+            onClick={() => void handleDownloadAll()}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-xs font-medium hover:bg-secondary transition-colors"
+          >
+            <Download className="h-3.5 w-3.5" /> Download All
+          </button>
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {displayImages.map((src, i) => (
             <motion.div
@@ -489,7 +575,7 @@ const ProjectDetailView = ({
           className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
         />
         <div className="space-y-2">
-          <p className="text-sm font-medium">Input Images (optional, up to 2)</p>
+          <p className="text-sm font-medium">Input Images (optional, up to 3)</p>
           <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-border bg-background px-4 py-3 text-sm hover:border-primary/50 hover:bg-secondary/40 transition-colors">
             <Upload className="h-4 w-4" />
             Attach images
@@ -522,25 +608,37 @@ const ProjectDetailView = ({
           <p className="text-sm font-medium">Image Generation Model</p>
           <select
             value={regenerationModel}
-            onChange={(event) => setRegenerationModel(event.target.value as "reve" | "flux-2-pro" | "gpt-image-1")}
+            onChange={(event) => setRegenerationModel(event.target.value as "reve" | "gpt-image-1")}
             className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
           >
             <option value="reve">reve</option>
-            <option value="flux-2-pro">flux.2 pro</option>
             <option value="gpt-image-1">gpt-image-1</option>
           </select>
         </div>
         <div className="flex items-center justify-between gap-3">
           <span className="text-xs text-muted-foreground">{additionalDescription.length}/250</span>
-          <button
-            type="button"
-            disabled={!additionalDescription.trim() || isRegenerating}
-            onClick={() => void handleRegenerate()}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {isRegenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            Generate Again
-          </button>
+          <div className="flex items-center gap-2">
+            {isRegenerating && (
+              <button
+                type="button"
+                onClick={() => void handleCancelJob()}
+                disabled={isCancellingJob}
+                className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {isCancellingJob ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+                Cancel
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={!additionalDescription.trim() || isRegenerating}
+              onClick={() => void handleRegenerate()}
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {isRegenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              Generate Again
+            </button>
+          </div>
         </div>
       </div>
 
@@ -630,19 +728,6 @@ const ProjectsPage = () => {
       day: "numeric",
       year: "numeric",
     });
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "completed":
-        return "bg-green-500/10 text-green-500";
-      case "processing":
-        return "bg-yellow-500/10 text-yellow-500";
-      case "failed":
-        return "bg-red-500/10 text-red-500";
-      default:
-        return "bg-gray-500/10 text-gray-500";
-    }
   };
 
   return (
