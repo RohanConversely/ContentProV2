@@ -878,6 +878,30 @@ export async function downloadJobImagesArchive(
   window.URL.revokeObjectURL(blobUrl);
 }
 
+export async function downloadJobImage(
+  jobId: string,
+  index: number,
+  fallbackFilename: string,
+  generationId?: string | null,
+): Promise<void> {
+  const params = new URLSearchParams({
+    index: String(index),
+  });
+  if (generationId) {
+    params.set("generation_id", generationId);
+  }
+  const response = await apiFetch(`/jobs/${encodeURIComponent(jobId)}/download/image?${params.toString()}`, {}, true);
+  const blob = await response.blob();
+  const blobUrl = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = blobUrl;
+  anchor.download = fallbackFilename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.URL.revokeObjectURL(blobUrl);
+}
+
 export async function getAudioTracks(): Promise<{
   trending: AudioTrack[];
   royaltyFree: AudioTrack[];
