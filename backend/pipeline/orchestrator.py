@@ -43,6 +43,7 @@ class JobContext:
     prompt_file: str = "ImageWithKYCTesting.txt"
     additional_description: str | None = None
     regeneration_only_inputs: bool = False
+    shot_types: list[str] | None = None
     workspace_root: Path | None = None
     work_dir: Path = field(init=False)
     product_kyc_dir: Path = field(init=False)
@@ -164,6 +165,7 @@ async def _run_stage_2(ctx: JobContext, filtered_kyc_path: Path | None, logger: 
         prompt_file=prompt_file,
         additional_description=ctx.additional_description,
         regeneration_only_inputs=ctx.regeneration_only_inputs,
+        shot_types=ctx.shot_types,
         logger_obj=logger,
         log_context={"job_id": ctx.job_id, "stage": "stage_2_image_generation"},
     )

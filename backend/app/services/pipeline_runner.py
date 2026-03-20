@@ -560,7 +560,12 @@ async def run_pipeline_task(job_id: str) -> None:
             RUNNING_PIPELINE_TASKS.pop(job_id, None)
 
 
-async def run_regeneration_task(job_id: str, generation_id: str, image_model: str | None = None) -> None:
+async def run_regeneration_task(
+    job_id: str,
+    generation_id: str,
+    image_model: str | None = None,
+    shot_types: list[str] | None = None,
+) -> None:
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Job).where(Job.job_id == job_id))
         job = result.scalar_one_or_none()
@@ -588,6 +593,7 @@ async def run_regeneration_task(job_id: str, generation_id: str, image_model: st
         ctx: JobContext | None = None
         log_stop_event = asyncio.Event()
         log_monitor_task: asyncio.Task[None] | None = None
+        filtered_kyc_path: Path | None = None
         try:
             workspace = _build_job_workspace(job) / f"regeneration_round_{generation.round_number}"
             workspace.mkdir(parents=True, exist_ok=True)
@@ -618,6 +624,31 @@ async def run_regeneration_task(job_id: str, generation_id: str, image_model: st
                 await emit_for_job(job, "stage_2", "failed", job.error_message, db)
                 return
 
+            effective_shot_types = [shot.strip().lower() for shot in (shot_types or []) if shot and shot.strip()]
+            if not effective_shot_types:
+                for extra_asset in regeneration_input_assets:
+                    metadata = extra_asset.metadata_json if isinstance(extra_asset.metadata_json, dict) else {}
+                    candidate = metadata.get("shot_types")
+                    if isinstance(candidate, list):
+                        effective_shot_types = [str(shot).strip().lower() for shot in candidate if str(shot).strip()]
+                        if effective_shot_types:
+                            break
+
+            selected_model = image_model or job.image_model or "reve"
+            if selected_model == "reve":
+                filtered_kyc_asset = await _get_latest_filtered_kyc_asset(db, job)
+                if filtered_kyc_asset is None:
+                    generation.status = "failed"
+                    job.status = "failed"
+                    job.error_message = "No filtered KYC asset available for REVE regeneration."
+                    await db.commit()
+                    await emit_for_job(job, "stage_2", "failed", job.error_message, db)
+                    return
+                filtered_kyc_path = workspace / "stage_1" / (
+                    filtered_kyc_asset.original_filename or Path(filtered_kyc_asset.storage_key).name
+                )
+                await storage_service.download_file(filtered_kyc_asset.storage_key, filtered_kyc_path)
+
             ctx = JobContext(
                 job_id=job.job_id,
                 brand_name=job.brand_name,
@@ -628,11 +659,12 @@ async def run_regeneration_task(job_id: str, generation_id: str, image_model: st
                 social_link_1=None,
                 social_link_2=None,
                 additional_info=None,
-                image_model=image_model or job.image_model or "reve",
+                image_model=selected_model,
                 num_images=2,
                 temperature=0.1,
                 additional_description=generation.additional_description,
                 regeneration_only_inputs=True,
+                shot_types=effective_shot_types,
                 workspace_root=workspace,
             )
 
@@ -646,7 +678,7 @@ async def run_regeneration_task(job_id: str, generation_id: str, image_model: st
             )
             await emit_for_job(job, "stage_2", "running", f"Queued regeneration {generation.round_number}.", db)
 
-            await run_stage_2_only(ctx, None)
+            await run_stage_2_only(ctx, filtered_kyc_path)
 
             log_stop_event.set()
             await log_monitor_task
@@ -703,12 +735,17 @@ async def queue_pipeline_task(job_id: str) -> None:
     RUNNING_PIPELINE_TASKS[job_id] = task
 
 
-async def queue_regeneration_task(job_id: str, generation_id: str, image_model: str | None = None) -> None:
+async def queue_regeneration_task(
+    job_id: str,
+    generation_id: str,
+    image_model: str | None = None,
+    shot_types: list[str] | None = None,
+) -> None:
     key = (job_id, generation_id)
     existing = RUNNING_REGENERATION_TASKS.get(key)
     if existing is not None and not existing.done():
         return
-    task = asyncio.create_task(run_regeneration_task(job_id, generation_id, image_model))
+    task = asyncio.create_task(run_regeneration_task(job_id, generation_id, image_model, shot_types))
     RUNNING_REGENERATION_TASKS[key] = task
 
 

@@ -130,10 +130,12 @@ def generate_images(
     prompt_file: str = "ImageWithKYCTesting.txt",
     additional_description: str | None = None,
     regeneration_only_inputs: bool = False,
+    shot_types: list[str] | None = None,
     logger_obj: JsonLogger | None = None,
     log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     del regeneration_only_inputs
+    del shot_types
     stage_logger = logger_obj or JsonLogger()
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)

@@ -89,6 +89,15 @@ interface GenerationResultsProps {
   onCreateVideo?: (images: string[]) => void;
 }
 
+const REVE_SHOT_OPTIONS = [
+  { key: "hero", label: "Hero" },
+  { key: "lifestyle", label: "Lifestyle" },
+  { key: "wearable", label: "Wearable" },
+  { key: "wearable_ethnic", label: "Wearable ethnic" },
+  { key: "jewellery_box", label: "Jewellery Box" },
+  { key: "close_detail", label: "Close Detail" },
+] as const;
+
 const GenerationResults = ({
   productData,
   mode,
@@ -110,6 +119,7 @@ const GenerationResults = ({
   const [selectedImages, setSelectedImages] = useState<number[]>([]);
   const [additionalDescription, setAdditionalDescription] = useState("");
   const [regenerationModel, setRegenerationModel] = useState<"reve" | "gpt-image-1">("reve");
+  const [reveShotTypes, setReveShotTypes] = useState<string[]>(["hero"]);
   const [regenerationInputFiles, setRegenerationInputFiles] = useState<File[]>([]);
   const [regenerationError, setRegenerationError] = useState<string | null>(null);
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -159,7 +169,13 @@ const GenerationResults = ({
   const effectiveStatusMessage = isRegenerating ? localStatus.message : statusMessage;
   const effectiveStatusStage = isRegenerating ? localStatus.stage : statusStage;
   const effectiveStatusUpdates = isRegenerating ? localTimeline : statusUpdates;
-  const canRegenerate = Boolean(jobId && additionalDescription.trim() && regenerationInputFiles.length > 0);
+  const hasValidReveShotSelection = regenerationModel !== "reve" || (reveShotTypes.length >= 1 && reveShotTypes.length <= 2);
+  const canRegenerate = Boolean(
+    jobId &&
+      additionalDescription.trim() &&
+      regenerationInputFiles.length > 0 &&
+      hasValidReveShotSelection,
+  );
 
   const toggleImageSelection = (index: number) => {
     setSelectedImages(prev => 
@@ -247,6 +263,7 @@ const GenerationResults = ({
         additionalDescription: additionalDescription.trim(),
         imageModel: regenerationModel,
         inputImages: regenerationInputFiles,
+        shotTypes: regenerationModel === "reve" ? reveShotTypes : [],
       });
       setLocalGenerations((prev) => [
         ...prev.filter((generation) => generation.id !== queuedGeneration.id),
@@ -344,6 +361,17 @@ const GenerationResults = ({
 
   const removeRegenerationInputImage = (index: number) => {
     setRegenerationInputFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const toggleReveShotType = (shotType: string) => {
+    setReveShotTypes((prev) => {
+      if (prev.includes(shotType)) {
+        if (prev.length === 1) return prev;
+        return prev.filter((item) => item !== shotType);
+      }
+      if (prev.length >= 2) return prev;
+      return [...prev, shotType];
+    });
   };
 
   return (
@@ -584,9 +612,33 @@ const GenerationResults = ({
           <div>
             <h3 className="font-display text-lg font-semibold">Generate Again</h3>
             <p className="text-sm text-muted-foreground">
-              Add an extra direction for the next image set. Existing KYC and input images will be reused.
+              Add an extra direction for the next image set.
             </p>
           </div>
+          {regenerationModel === "reve" && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Choose the shot type to be changed (select 1 to 2)</p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {REVE_SHOT_OPTIONS.map((option) => {
+                  const selected = reveShotTypes.includes(option.key);
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => toggleReveShotType(option.key)}
+                      className={`rounded-xl border px-3 py-2 text-sm transition-colors ${
+                        selected
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border bg-background hover:bg-secondary"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <textarea
             value={additionalDescription}
             onChange={(event) => setAdditionalDescription(event.target.value.slice(0, 250))}
@@ -595,6 +647,7 @@ const GenerationResults = ({
             placeholder="Example: make the background warmer, more premium, and suitable for luxury ecommerce."
             className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
           />
+          <span className="text-xs text-muted-foreground">{additionalDescription.length}/250</span>
           <div className="space-y-2">
             <p className="text-sm font-medium">Input Images (required, 1 to 3)</p>
             <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-border bg-background px-4 py-3 text-sm hover:border-primary/50 hover:bg-secondary/40 transition-colors">
@@ -637,7 +690,6 @@ const GenerationResults = ({
             </select>
           </div>
           <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-muted-foreground">{additionalDescription.length}/250</span>
             <div className="flex items-center gap-2">
               {isRegenerating && (
                 <button

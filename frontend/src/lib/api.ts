@@ -213,6 +213,7 @@ export interface RegenerateImagesInput {
   additionalDescription: string;
   imageModel?: "reve" | "gpt-image-1";
   inputImages?: File[];
+  shotTypes?: string[];
 }
 
 function inferFilename(url: string, fallback: string): string {
@@ -635,6 +636,7 @@ export async function regenerateJobImages(jobId: string, input: RegenerateImages
   if (input.imageModel) {
     formData.append("image_model", input.imageModel);
   }
+  (input.shotTypes ?? []).forEach((shotType) => formData.append("shot_types", shotType));
   (input.inputImages ?? []).forEach((file) => formData.append("input_images", file));
 
   const response = await apiJson<BackendJobGenerationResponse>(
