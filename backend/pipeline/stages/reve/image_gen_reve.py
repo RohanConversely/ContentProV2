@@ -19,11 +19,21 @@ REVE_ENDPOINT = "https://api.reve.com/v1/image/remix"
 SHOT_REQUIREMENTS = (
     "Shot 1 - HERO: replace the entire background with a pure white seamless luxury studio background, create a premium ecommerce hero image, centered composition with the jewelry cleanly presented, soft luxury studio lighting with natural shadow under the product, do not keep any part of the original background.",
     "Shot 2 - LIFESTYLE: create a premium Indian festive gifting scene around the exact same jewelry product, show elegant gift-box styling with luxury presentation, warm lovely Indian setting with tasteful festive styling and premium editorial photography, replace the original background completely, jewelry remains the hero and fully visible.",
-    "Shot 3 - WEARABLE: create a luxury wearable jewelry editorial shot with one model only, product remains clearly visible, keep the exact same jewelry design, replace the original background completely.",
-    "Shot 4 - WEARABLE ETHNIC: create a premium Indian ethnic wearable jewelry editorial shot with one model only, model should wear elegant Indian or ethnic attire in a tasteful premium way, jewelry remains clearly visible and dominant, keep the exact same jewelry design, replace the original background completely, keep the exact same jewelry design and size.",
+    "Shot 3 - WEARABLE: create a luxury wearable jewelry editorial shot with one model only, product remains clearly visible, keep the exact same jewelry design, replace the original background completely.The complete face of the model should be visible.",
+    "Shot 4 - WEARABLE ETHNIC: create a premium Indian ethnic wearable jewelry editorial shot with one model only, model should wear elegant Indian or ethnic attire in a tasteful premium way, jewelry remains clearly visible and dominant, keep the exact same jewelry design, replace the original background completely, keep the exact same jewelry design and size. The complete face of the model should be visible.",
     "Shot 5 - JEWELRY BOX: create a premium jewelry box presentation shot, show the exact same jewelry beautifully presented with an elegant open jewelry box, luxury gifting setup with tasteful Indian festive mood and premium styled product photography, product design must remain exactly the same and fully visible, replace the original background completely, keep the exact same jewelry design and size.",
     "Shot 6 - CLOSE DETAIL: alternate tight close-up angle showing finishing, materials, and reflections without design change.",
 )
+
+SHOT_KEY_TO_REQUIREMENT = {
+    "hero": SHOT_REQUIREMENTS[0],
+    "lifestyle": SHOT_REQUIREMENTS[1],
+    "wearable": SHOT_REQUIREMENTS[2],
+    "wearable_ethnic": SHOT_REQUIREMENTS[3],
+    "jewellery_box": SHOT_REQUIREMENTS[4],
+    "close_detail": SHOT_REQUIREMENTS[5],
+}
+VALID_SHOT_KEYS = set(SHOT_KEY_TO_REQUIREMENT.keys())
 
 
 def with_context(base: dict[str, Any] | None, extra: dict[str, Any]) -> dict[str, Any]:
@@ -124,6 +134,7 @@ def generate_images(
     prompt_file: str = "imageGen.txt",
     additional_description: str | None = None,
     regeneration_only_inputs: bool = False,
+    shot_types: list[str] | None = None,
     logger_obj: JsonLogger | None = None,
     log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -138,7 +149,7 @@ def generate_images(
         raise ValueError("At least one product image is required for REVE generation.")
 
     resolved_kyc_path: Path | None = None
-    if not regeneration_only_inputs:
+    if kyc_path:
         resolved_kyc_path = Path(kyc_path).resolve()
         if not resolved_kyc_path.exists():
             raise ValueError(f"KYC JSON file not found: {resolved_kyc_path}")
@@ -147,24 +158,23 @@ def generate_images(
     if not api_key:
         raise ValueError("REVE_API_KEY missing from environment")
 
-    base_prompt = ""
-    kyc_summary = ""
-    if regeneration_only_inputs:
-        if not additional_description or not additional_description.strip():
-            raise ValueError("additional_description is required for regeneration-only REVE generation.")
-    else:
-        base_prompt = load_prompt(prompt_file)
-        compressed_kyc_file = output_path / "compressed_kyc.json"
-        kyc_summary = build_compressed_kyc(
-            resolved_kyc_path,
-            compressed_kyc_file,
-            stage_logger,
-            min_chars=400,
-            max_chars=600,
-            log_context=log_context,
-        )
-        if not kyc_summary:
-            raise ValueError("Failed to build compressed KYC summary for REVE.")
+    if regeneration_only_inputs and (not additional_description or not additional_description.strip()):
+        raise ValueError("additional_description is required for REVE regeneration.")
+    if resolved_kyc_path is None:
+        raise ValueError("KYC JSON file is required for REVE regeneration.")
+
+    base_prompt = load_prompt(prompt_file)
+    compressed_kyc_file = output_path / "compressed_kyc.json"
+    kyc_summary = build_compressed_kyc(
+        resolved_kyc_path,
+        compressed_kyc_file,
+        stage_logger,
+        min_chars=400,
+        max_chars=600,
+        log_context=log_context,
+    )
+    if not kyc_summary:
+        raise ValueError("Failed to build compressed KYC summary for REVE.")
 
     encoded_images = prepare_reference_images(
         resolved_image_paths,
@@ -181,11 +191,24 @@ def generate_images(
         "Content-Type": "application/json",
     }
 
-    shot_instructions = (
-        [additional_description.strip() for _ in range(max(1, num_images))]
-        if regeneration_only_inputs
-        else _shot_instructions_for_count(num_images)
-    )
+    if regeneration_only_inputs:
+        normalized_shot_types = [shot.strip().lower() for shot in (shot_types or []) if shot and shot.strip()]
+        invalid_shots = [shot for shot in normalized_shot_types if shot not in VALID_SHOT_KEYS]
+        if invalid_shots:
+            raise ValueError(f"Invalid shot type(s) for REVE regeneration: {', '.join(invalid_shots)}")
+        if len(normalized_shot_types) < 1 or len(normalized_shot_types) > 2:
+            raise ValueError("Select at least 1 and at most 2 shot types for REVE regeneration.")
+
+        shot_instructions = [SHOT_KEY_TO_REQUIREMENT[normalized_shot_types[0]]]
+        if len(normalized_shot_types) == 2:
+            shot_instructions.append(SHOT_KEY_TO_REQUIREMENT[normalized_shot_types[1]])
+        else:
+            shot_instructions.append(SHOT_KEY_TO_REQUIREMENT[normalized_shot_types[0]])
+        shot_instructions = shot_instructions[: max(1, num_images)]
+        while len(shot_instructions) < max(1, num_images):
+            shot_instructions.append(shot_instructions[-1])
+    else:
+        shot_instructions = _shot_instructions_for_count(num_images)
     generated_files: list[str] = []
 
     stage_logger.info(
@@ -203,18 +226,15 @@ def generate_images(
                 "output_dir": str(output_path),
                 "additional_description": additional_description.strip() if additional_description else None,
                 "regeneration_only_inputs": regeneration_only_inputs,
+                "shot_types": shot_types or [],
             },
         ),
     )
 
     for iteration, shot_instruction in enumerate(shot_instructions, start=1):
         shot_slug = _shot_slug(shot_instruction, iteration)
-        prompt = (
-            additional_description.strip()
-            if regeneration_only_inputs
-            else _build_iteration_prompt(base_prompt, kyc_summary, shot_instruction)
-        )
-        if additional_description and not regeneration_only_inputs:
+        prompt = _build_iteration_prompt(base_prompt, kyc_summary, shot_instruction)
+        if additional_description:
             merged = f"{prompt}\n\nRefinement instructions: {additional_description.strip()}"
             prompt = merged[:MAX_PROMPT_CHARS]
 

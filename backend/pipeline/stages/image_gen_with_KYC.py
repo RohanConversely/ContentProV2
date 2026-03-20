@@ -54,9 +54,11 @@ def generate_images(
     prompt_file: str = "ImageWithKYCTesting.txt",
     additional_description: str | None = None,
     regeneration_only_inputs: bool = False,
+    shot_types: list[str] | None = None,
     logger_obj: JsonLogger | None = None,
     log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    del shot_types
     stage_logger = logger_obj or JsonLogger()
 
     api_key = os.getenv("OPENAI_API_KEY")

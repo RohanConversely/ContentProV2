@@ -47,6 +47,14 @@ TERMINAL_JOB_STATUSES = {"completed", "failed", CANCELLED_STATUS}
 ALLOWED_IMAGE_MODELS = {"reve", "gpt-image-1"}
 MAX_REGEN_INPUT_IMAGES = 3
 USER_CANCELLED_MESSAGE = "User cancelled the job."
+REVE_REGEN_SHOT_TYPES = {
+    "hero",
+    "lifestyle",
+    "wearable",
+    "wearable_ethnic",
+    "jewellery_box",
+    "close_detail",
+}
 
 
 def _job_summary(job: Job) -> JobSummaryResponse:
@@ -386,6 +394,7 @@ async def regenerate_job_images(
     additional_description: str = Form(...),
     image_model: str | None = Form(default=None),
     input_images: list[UploadFile] = File(default=[]),
+    shot_types: list[str] = Form(default=[]),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> JobGenerationResponse:
@@ -429,6 +438,15 @@ async def regenerate_job_images(
     if image_model and image_model not in ALLOWED_IMAGE_MODELS:
         raise HTTPException(status_code=422, detail="Unsupported image_model for regeneration.")
 
+    selected_image_model = image_model or job.image_model or "reve"
+    normalized_shot_types = [shot.strip().lower() for shot in shot_types if shot and shot.strip()]
+    if selected_image_model == "reve":
+        if len(normalized_shot_types) < 1 or len(normalized_shot_types) > 2:
+            raise HTTPException(status_code=422, detail="Select at least 1 and at most 2 shot types for REVE regeneration.")
+        invalid_shots = [shot for shot in normalized_shot_types if shot not in REVE_REGEN_SHOT_TYPES]
+        if invalid_shots:
+            raise HTTPException(status_code=422, detail=f"Invalid shot type(s): {', '.join(invalid_shots)}")
+
     if len(input_images) < 1:
         raise HTTPException(status_code=422, detail="Attach at least 1 input image for regeneration.")
 
@@ -441,7 +459,6 @@ async def regenerate_job_images(
         additional_description=description,
         status="queued",
     )
-    selected_image_model = image_model or job.image_model or "reve"
     db.add(generation)
     await db.flush()
 
@@ -468,7 +485,11 @@ async def regenerate_job_images(
                 original_filename=filename,
                 mime_type=file.content_type,
                 size_bytes=len(contents),
-                metadata_json={"source": "regenerate_upload", "index": index},
+                metadata_json={
+                    "source": "regenerate_upload",
+                    "index": index,
+                    "shot_types": normalized_shot_types,
+                },
             )
         )
         uploaded_input_count += 1
@@ -483,7 +504,7 @@ async def regenerate_job_images(
     await db.commit()
     await db.refresh(generation)
 
-    await queue_regeneration_task(job.job_id, generation.id, selected_image_model)
+    await queue_regeneration_task(job.job_id, generation.id, selected_image_model, normalized_shot_types)
 
     return JobGenerationResponse(
         id=generation.id,

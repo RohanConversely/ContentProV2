@@ -48,6 +48,15 @@ const getStatusColor = (status: string) => {
   }
 };
 
+const REVE_SHOT_OPTIONS = [
+  { key: "hero", label: "Hero" },
+  { key: "lifestyle", label: "Lifestyle" },
+  { key: "wearable", label: "Wearable" },
+  { key: "wearable_ethnic", label: "Wearable ethnic" },
+  { key: "jewellery_box", label: "Jewellery Box" },
+  { key: "close_detail", label: "Close Detail" },
+] as const;
+
 const ImageLightbox = ({
   src,
   onClose,
@@ -112,6 +121,7 @@ const ProjectDetailView = ({
   const [activeGenerationId, setActiveGenerationId] = useState<string | null>(project.detail.activeGenerationId ?? null);
   const [additionalDescription, setAdditionalDescription] = useState("");
   const [regenerationModel, setRegenerationModel] = useState<"reve" | "gpt-image-1">("reve");
+  const [reveShotTypes, setReveShotTypes] = useState<string[]>(["hero"]);
   const [regenerationInputFiles, setRegenerationInputFiles] = useState<File[]>([]);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [isCancellingJob, setIsCancellingJob] = useState(false);
@@ -206,6 +216,7 @@ const ProjectDetailView = ({
         additionalDescription: additionalDescription.trim(),
         imageModel: regenerationModel,
         inputImages: regenerationInputFiles,
+        shotTypes: regenerationModel === "reve" ? reveShotTypes : [],
       });
       setLocalProject((prev) => ({
         ...prev,
@@ -290,6 +301,17 @@ const ProjectDetailView = ({
 
   const removeRegenerationInputImage = (index: number) => {
     setRegenerationInputFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const toggleReveShotType = (shotType: string) => {
+    setReveShotTypes((prev) => {
+      if (prev.includes(shotType)) {
+        if (prev.length === 1) return prev;
+        return prev.filter((item) => item !== shotType);
+      }
+      if (prev.length >= 2) return prev;
+      return [...prev, shotType];
+    });
   };
 
   return (
@@ -550,9 +572,34 @@ const ProjectDetailView = ({
         <div>
           <h3 className="font-display text-lg font-semibold">Generate Again</h3>
           <p className="text-sm text-muted-foreground">
-            Add an extra direction for the next image set. Existing KYC and input images will be reused.
+            Add an extra direction for the next image set.
           </p>
         </div>
+
+        {regenerationModel === "reve" && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Choose the shot type to be changed (select 1 to 2)</p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {REVE_SHOT_OPTIONS.map((option) => {
+                const selected = reveShotTypes.includes(option.key);
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => toggleReveShotType(option.key)}
+                    className={`rounded-xl border px-3 py-2 text-sm transition-colors ${
+                      selected
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border bg-background hover:bg-secondary"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {regenerationError && (
           <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
@@ -579,6 +626,7 @@ const ProjectDetailView = ({
           placeholder="Example: make the background warmer, cleaner, and more premium."
           className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
         />
+        <span className="text-xs text-muted-foreground">{additionalDescription.length}/250</span>
         <div className="space-y-2">
           <p className="text-sm font-medium">Input Images (required, 1 to 3)</p>
           <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-border bg-background px-4 py-3 text-sm hover:border-primary/50 hover:bg-secondary/40 transition-colors">
@@ -621,7 +669,6 @@ const ProjectDetailView = ({
           </select>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <span className="text-xs text-muted-foreground">{additionalDescription.length}/250</span>
           <div className="flex items-center gap-2">
             {isRegenerating && (
               <button
@@ -636,7 +683,12 @@ const ProjectDetailView = ({
             )}
             <button
               type="button"
-              disabled={!additionalDescription.trim() || regenerationInputFiles.length === 0 || isRegenerating}
+              disabled={
+                !additionalDescription.trim() ||
+                regenerationInputFiles.length === 0 ||
+                (regenerationModel === "reve" && (reveShotTypes.length < 1 || reveShotTypes.length > 2)) ||
+                isRegenerating
+              }
               onClick={() => void handleRegenerate()}
               className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
             >
