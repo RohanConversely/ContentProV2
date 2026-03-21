@@ -7,6 +7,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from PIL import Image, ImageEnhance, ImageFilter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +32,7 @@ RUNNING_REGENERATION_TASKS: dict[tuple[str, str], asyncio.Task[None]] = {}
 
 TERMINAL_JOB_STATUSES = {"completed", "failed", "cancelled"}
 USER_CANCELLED_MESSAGE = "User cancelled the job."
+FINAL_SIZE = (2048, 2048)
 
 
 async def emit(job_id: str, stage: str, status: str, message: str, db: AsyncSession | None = None) -> None:
@@ -149,17 +151,19 @@ async def _upload_stage_outputs(db: AsyncSession, job: Job, result: dict[str, An
     generation = await _ensure_initial_generation(db, job)
     for local_path_str in result["generated_images"]:
         local_path = Path(local_path_str)
-        storage_key = f"{job.storage_prefix}/stage_2/round_{generation.round_number}/{local_path.name}"
-        await storage_service.upload_file(local_path, storage_key)
-        await _create_asset(
-            db,
-            job=job,
-            generation=generation,
-            asset_type="generated_image",
-            stage="stage_2",
-            local_path=local_path,
-            storage_key=storage_key,
-        )
+        await _upload_generated_image(db, job, local_path, generation=generation)
+
+
+def create_sharpened_final(image_path: Path, final_dir: Path) -> Path:
+    final_dir.mkdir(parents=True, exist_ok=True)
+    with Image.open(image_path) as img:
+        working = img.convert("RGB")
+        final_img = working.resize(FINAL_SIZE, Image.Resampling.LANCZOS)
+        final_img = ImageEnhance.Sharpness(final_img).enhance(1.08)
+        final_img = final_img.filter(ImageFilter.UnsharpMask(radius=1.6, percent=150, threshold=2))
+        final_path = final_dir / f"{image_path.stem}_final.png"
+        final_img.save(final_path, format="PNG", optimize=True)
+        return final_path
 
 
 async def _upload_generated_image(
@@ -170,15 +174,21 @@ async def _upload_generated_image(
 ) -> None:
     if generation is None:
         generation = await _ensure_initial_generation(db, job)
-    storage_key = f"{job.storage_prefix}/stage_2/round_{generation.round_number}/{local_path.name}"
-    await storage_service.upload_file(local_path, storage_key)
+    upload_source = local_path
+    try:
+        upload_source = create_sharpened_final(local_path, local_path.parent / "final")
+    except Exception:
+        upload_source = local_path
+
+    storage_key = f"{job.storage_prefix}/stage_2/round_{generation.round_number}/{upload_source.name}"
+    await storage_service.upload_file(upload_source, storage_key)
     await _create_asset(
         db,
         job=job,
         generation=generation,
         asset_type="generated_image",
         stage="stage_2",
-        local_path=local_path,
+        local_path=upload_source,
         storage_key=storage_key,
     )
 
