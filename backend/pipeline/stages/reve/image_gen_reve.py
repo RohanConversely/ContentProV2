@@ -17,12 +17,12 @@ MAX_PROMPT_CHARS = 2560
 REVE_ENDPOINT = "https://api.reve.com/v1/image/remix"
 
 SHOT_REQUIREMENTS = (
-    "Shot 1 - HERO: replace the entire background with a pure white seamless luxury studio background, create a premium ecommerce hero image, centered composition with the jewelry cleanly presented, soft luxury studio lighting with natural shadow under the product, do not keep any part of the original background.",
-    "Shot 2 - LIFESTYLE: create a premium Indian festive gifting scene around the exact same jewelry product, show elegant gift-box styling with luxury presentation, warm lovely Indian setting with tasteful festive styling and premium editorial photography, replace the original background completely, jewelry remains the hero and fully visible.",
-    "Shot 3 - WEARABLE: create a luxury wearable jewelry editorial shot with one model only, product remains clearly visible, keep the exact same jewelry design, replace the original background completely.The complete face of the model should be visible.",
-    "Shot 4 - WEARABLE ETHNIC: create a premium Indian ethnic wearable jewelry editorial shot with one model only, model should wear elegant Indian or ethnic attire in a tasteful premium way, jewelry remains clearly visible and dominant, keep the exact same jewelry design, replace the original background completely, keep the exact same jewelry design and size. The complete face of the model should be visible.",
-    "Shot 5 - JEWELRY BOX: create a premium jewelry box presentation shot, show the exact same jewelry beautifully presented with an elegant open jewelry box, luxury gifting setup with tasteful Indian festive mood and premium styled product photography, product design must remain exactly the same and fully visible, replace the original background completely, keep the exact same jewelry design and size.",
-    "Shot 6 - CLOSE DETAIL: alternate tight close-up angle showing finishing, materials, and reflections without design change.",
+    "Shot 1 - HERO: keep a front-angle hero composition, replace the entire background with a pure white seamless luxury studio background, use soft studio lighting with a natural shadow under the product, and remove all original background elements. Ensure the exact product shape and design is preserved.",
+    "Shot 2 - LIFESTYLE: replace the entire background with a pastel-shade satin cloth backdrop, keep the exact same jewelry fully visible, and maintain premium editorial product photography quality.",
+    "Shot 3 - WEARABLE: create a luxury wearable editorial shot with one model only, keep the exact same jewelry clearly visible, and ensure the model's full face and complete head are visible without cropping. Keep the product size very small with respect to the model.",
+    "Shot 4 - WEARABLE WESTERN: create a premium wearable editorial shot with one model in elegant western attire (not ethnic), keep the exact same jewelry clearly visible and dominant, and replace the original background completely, and ensure the model's full face and complete head are visible without cropping.Keep the product size very small with respect to the model.",
+    "Shot 5 - HERO SIDE: create a premium hero image with a side-angle composition, keep the exact same jewelry fully visible, and replace the original background completely.",
+    "Shot 6 - CLOSE DETAIL: create a tight close-up detail shot of finishing and materials with no reflection or glare on the product, without any design change.",
 )
 
 SHOT_KEY_TO_REQUIREMENT = {

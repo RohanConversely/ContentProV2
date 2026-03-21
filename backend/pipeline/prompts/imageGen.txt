@@ -8,4 +8,4 @@ Do not merge gemstones, prongs, pave details, links, or fine metalwork.
 Single product only; no duplicate product, no collage, no text, no watermark.
 Remove timestamp artifacts, dust, lint, flash glare, and phone-camera look from source context.
 Maintain real materials, clean reflections, sharp focus, and realistic premium photography.
-Make the product slightly smaller than it appears.
+Keep the product smaller in proportion to the background and props.
