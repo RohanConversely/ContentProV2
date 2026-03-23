@@ -25,4 +25,5 @@ contentpro.db
 .DS_Store
 Thumbs.db
 
-/backend/contentpro.db
+backend/contentpro.db
+*.db
