@@ -17,12 +17,12 @@ MAX_PROMPT_CHARS = 2560
 REVE_ENDPOINT = "https://api.reve.com/v1/image/remix"
 
 SHOT_REQUIREMENTS = (
-    "Shot 1 - HERO: keep a front-angle hero composition, replace the entire background with a pure white seamless luxury studio background, use soft studio lighting with a natural shadow under the product, and remove all original background elements. Ensure the exact product shape and design is preserved.",
-    "Shot 2 - LIFESTYLE: replace the entire background with a pastel-shade satin cloth backdrop, keep the exact same jewelry fully visible, and maintain premium editorial product photography quality.",
-    "Shot 3 - WEARABLE: create a luxury wearable editorial shot with one model only, keep the exact same jewelry clearly visible, and ensure the model's full face and complete head are visible without cropping. Keep the product size very small with respect to the model.",
-    "Shot 4 - WEARABLE WESTERN: create a premium wearable editorial shot with one model in elegant western attire (not ethnic), keep the exact same jewelry clearly visible and dominant, and replace the original background completely, and ensure the model's full face and complete head are visible without cropping.Keep the product size very small with respect to the model.",
-    "Shot 5 - HERO SIDE: create a premium hero image with a side-angle composition, keep the exact same jewelry fully visible, and replace the original background completely.",
-    "Shot 6 - CLOSE DETAIL: create a tight close-up detail shot of finishing and materials with no reflection or glare on the product, without any design change.",
+    "Shot 1 - HERO: Perform only a minimal cleanup edit. Strictly preserve the original jewelry design, shape, and gemstone placement. Absolute geometric fidelity required. Do not redesign or reinterpret any detail. Keep a front-angle hero composition, replace the entire background with a pure white seamless luxury studio background, use soft studio lighting with a natural shadow under the product, and remove all original background elements.",
+    "Shot 2 - LIFESTYLE: Strictly preserve the original jewelry design, shape, and gemstone placement. Absolute geometric fidelity required. Replace the entire background with a pastel-shade satin cloth backdrop, keep the exact same jewelry fully visible, and maintain premium editorial product photography quality.",
+    "Shot 3 - WEARABLE: A wide portrait shot of a model from the waist up. The model's full head, hair, and entire face must be visible and uncropped. The model is wearing the jewelry, which is clearly visible but appropriately scaled to the model's neck. Do not add any other jewelry other than the one provided.",
+    "Shot 4 - WEARABLE WESTERN: A medium-wide premium editorial shot with a model in elegant western attire. Full head and face must be visible and uncropped. Wide composition showing the model from chest to head clearly. Do not add any other jewelry other than the one provided.",
+    "Shot 5 - HERO SIDE: Strictly preserve the original jewelry design, shape, and gemstone placement. Absolute geometric fidelity required. Create a premium hero image with a side-angle composition, keep the exact same jewelry fully visible, and replace the original background completely.",
+    "Shot 6 - CLOSE DETAIL: Strictly preserve the original jewelry design, shape, and gemstone placement. Absolute geometric fidelity required. Create a tight close-up detail shot of finishing and materials with no reflection or glare on the product, without any design change.",
 )
 
 SHOT_KEY_TO_REQUIREMENT = {
