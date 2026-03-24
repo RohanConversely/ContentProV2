@@ -158,6 +158,11 @@ def trim_transparent_bounds(img, alpha_threshold=8):
     return img.crop((left, top, right, bottom))
 
 
+def format_cm(value_mm):
+    value_cm = float(value_mm) / 10.0
+    return f"{value_cm:.2f}".rstrip("0").rstrip(".")
+
+
 def build_dim_text(args):
     if args.dim_text:
         return args.dim_text
@@ -167,16 +172,16 @@ def build_dim_text(args):
         if "-" in args.diameter:
             lo, hi = args.diameter.split("-")
             mid = (float(lo) + float(hi)) / 2
-            parts.append(f"Dimensions : {mid / 10:.1f} cm")
+            parts.append(f"Dimensions : {format_cm(mid)} cm")
         else:
             d = float(args.diameter)
-            parts.append(f"Dimensions : {d / 10:.1f} cm")
+            parts.append(f"Dimensions : {format_cm(d)} cm")
     elif args.width and args.height:
-        parts.append(f"Dimensions : {args.width / 10:.1f} x {args.height / 10:.1f} cm")
+        parts.append(f"Dimensions : {format_cm(args.width)} x {format_cm(args.height)} cm")
     elif args.width:
-        parts.append(f"Dimensions : {args.width / 10:.1f} cm")
+        parts.append(f"Dimensions : {format_cm(args.width)} cm")
     elif args.height:
-        parts.append(f"Dimensions : {args.height / 10:.1f} cm")
+        parts.append(f"Dimensions : {format_cm(args.height)} cm")
 
     if args.adjustable:
         parts.append("+ Adjustable")
@@ -197,6 +202,17 @@ def get_size_px(args, px_per_cm):
     w = args.width or args.height or 15
     h = args.height or args.width or 15
     return (w / 10.0) * px_per_cm, (h / 10.0) * px_per_cm
+
+
+def compute_resize_dimensions(src_w, src_h, target_w, target_h, coverage):
+    if src_w <= 0 or src_h <= 0:
+        raise ValueError("Source image dimensions must be positive.")
+
+    fit_scale = min(target_w / src_w, target_h / src_h)
+    applied_scale = fit_scale * coverage
+    img_w = max(1, int(round(src_w * applied_scale)))
+    img_h = max(1, int(round(src_h * applied_scale)))
+    return img_w, img_h
 
 
 def main():
@@ -236,9 +252,7 @@ def main():
 
     target_w, target_h = get_size_px(args, ruler["px_per_cm"])
     ow, oh = jewelry_clean.size
-    aspect = oh / ow
-    img_w = int(target_w / args.coverage)
-    img_h = int(img_w * aspect)
+    img_w, img_h = compute_resize_dimensions(ow, oh, target_w, target_h, args.coverage)
     jewelry_resized = jewelry_clean.resize((img_w, img_h), Image.LANCZOS)
 
     # Shift product by distance from horizontal-left edge to ruler intersection point
