@@ -4,6 +4,7 @@ import asyncio
 import json
 import mimetypes
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,9 @@ RUNNING_REGENERATION_TASKS: dict[tuple[str, str], asyncio.Task[None]] = {}
 TERMINAL_JOB_STATUSES = {"completed", "failed", "cancelled"}
 USER_CANCELLED_MESSAGE = "User cancelled the job."
 FINAL_SIZE = (2048, 2048)
+SOFT_DELETED_STATUS = "deleted"
+BATCH_PROGRESS_STALL_SECONDS = 180
+WATCHDOG_INTERVAL_SECONDS = 30
 
 
 async def emit(job_id: str, stage: str, status: str, message: str, db: AsyncSession | None = None) -> None:
@@ -422,6 +426,113 @@ async def _upsert_pricing_snapshot(db: AsyncSession, job: Job, pricing_report: d
     pricing.total_input_tokens = token_usage.get("input_tokens") if token_usage.get("input_tokens") is not None else pricing.total_input_tokens
     pricing.total_output_tokens = token_usage.get("output_tokens") if token_usage.get("output_tokens") is not None else pricing.total_output_tokens
     await db.commit()
+
+
+def _task_is_running(job_id: str) -> bool:
+    existing = RUNNING_PIPELINE_TASKS.get(job_id)
+    return existing is not None and not existing.done()
+
+
+async def _requeue_if_batch_progress_stalled() -> None:
+    stall_cutoff = datetime.now(timezone.utc) - timedelta(seconds=BATCH_PROGRESS_STALL_SECONDS)
+    async with AsyncSessionLocal() as db:
+        batch_result = await db.execute(
+            select(Job.batch_id)
+            .where(Job.batch_id.is_not(None), Job.status != SOFT_DELETED_STATUS)
+            .distinct()
+        )
+        batch_ids = [row[0] for row in batch_result.fetchall() if row[0]]
+        for batch_id in batch_ids:
+            jobs_result = await db.execute(
+                select(Job)
+                .where(Job.batch_id == batch_id, Job.status != SOFT_DELETED_STATUS)
+                .order_by(Job.created_at.asc())
+            )
+            batch_jobs = jobs_result.scalars().all()
+            if not batch_jobs:
+                continue
+
+            latest_completed_idx = -1
+            for idx, batch_job in enumerate(batch_jobs):
+                if batch_job.status == "completed":
+                    latest_completed_idx = idx
+
+            candidate_idx = 0 if latest_completed_idx < 0 else latest_completed_idx + 1
+            if candidate_idx >= len(batch_jobs):
+                continue
+
+            candidate = batch_jobs[candidate_idx]
+            if candidate.status not in {"queued", "pending"}:
+                continue
+            if candidate.updated_at is None or candidate.updated_at > stall_cutoff:
+                continue
+            if _task_is_running(candidate.job_id):
+                continue
+
+            has_active_upstream = False
+            for prior in batch_jobs[:candidate_idx]:
+                if prior.status in {"pending_upload", "pending", "queued", "running", "cancel_requested"}:
+                    has_active_upstream = True
+                    break
+            if has_active_upstream:
+                continue
+
+            raw_assets_result = await db.execute(
+                select(Asset.id).where(
+                    Asset.job_id == candidate.id,
+                    Asset.asset_type == "raw_image",
+                    Asset.is_deleted.is_(False),
+                )
+            )
+            raw_asset_id = raw_assets_result.scalar_one_or_none()
+            if raw_asset_id is None:
+                continue
+
+            await queue_pipeline_task(candidate.job_id)
+            await emit_for_job(
+                candidate,
+                candidate.current_stage or "queued",
+                "queued",
+                "Recovered stalled queued job and resumed processing.",
+                db,
+            )
+
+
+async def _watchdog_loop(stop_event: asyncio.Event) -> None:
+    while not stop_event.is_set():
+        try:
+            await _requeue_if_batch_progress_stalled()
+        except Exception:
+            pass
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=WATCHDOG_INTERVAL_SECONDS)
+        except asyncio.TimeoutError:
+            continue
+
+
+WATCHDOG_STOP_EVENT: asyncio.Event | None = None
+WATCHDOG_TASK: asyncio.Task[None] | None = None
+
+
+async def start_pipeline_watchdog() -> None:
+    global WATCHDOG_STOP_EVENT, WATCHDOG_TASK
+    if WATCHDOG_TASK is not None and not WATCHDOG_TASK.done():
+        return
+    WATCHDOG_STOP_EVENT = asyncio.Event()
+    WATCHDOG_TASK = asyncio.create_task(_watchdog_loop(WATCHDOG_STOP_EVENT))
+
+
+async def stop_pipeline_watchdog() -> None:
+    global WATCHDOG_STOP_EVENT, WATCHDOG_TASK
+    if WATCHDOG_STOP_EVENT is not None:
+        WATCHDOG_STOP_EVENT.set()
+    if WATCHDOG_TASK is not None:
+        try:
+            await WATCHDOG_TASK
+        except Exception:
+            pass
+    WATCHDOG_STOP_EVENT = None
+    WATCHDOG_TASK = None
 
 
 async def run_pipeline_task(job_id: str) -> None:

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import base64
 import os
+import random
+import time
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +17,7 @@ load_dotenv()
 
 MAX_PROMPT_CHARS = 2560
 REVE_ENDPOINT = "https://api.reve.com/v1/image/remix"
+REVE_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 SHOT_REQUIREMENTS = (
     "Shot 1 - HERO: Perform only a minimal cleanup edit. Strictly preserve the original jewelry design, shape, and gemstone placement. Absolute geometric fidelity required. Do not redesign or reinterpret any detail. Keep a front-angle hero composition, replace the entire background with a pure white seamless luxury studio background, use soft studio lighting with a natural shadow under the product, and remove all original background elements.",
@@ -23,6 +26,12 @@ SHOT_REQUIREMENTS = (
     "Shot 4 - WEARABLE WESTERN: A medium-wide premium editorial shot with a model in elegant western attire. Full head and face must be visible and uncropped. Wide composition showing the model from chest to head clearly. Do not add any other jewelry other than the one provided.",
     "Shot 5 - HERO SIDE: Strictly preserve the original jewelry design, shape, and gemstone placement. Absolute geometric fidelity required. Create a premium hero image with a side-angle composition, keep the exact same jewelry fully visible, and replace the original background completely.",
     "Shot 6 - CLOSE DETAIL: Strictly preserve the original jewelry design, shape, and gemstone placement. Absolute geometric fidelity required. Create a tight close-up detail shot of finishing and materials with no reflection or glare on the product, without any design change.",
+)
+DEFAULT_FOUR_SHOT_REQUIREMENTS = (
+    SHOT_REQUIREMENTS[0],
+    SHOT_REQUIREMENTS[1],
+    SHOT_REQUIREMENTS[3],
+    SHOT_REQUIREMENTS[4],
 )
 
 SHOT_KEY_TO_REQUIREMENT = {
@@ -103,13 +112,9 @@ def _build_iteration_prompt(base_prompt: str, kyc_summary: str, shot_instruction
 
 def _shot_instructions_for_count(num_images: int) -> list[str]:
     capped = max(1, num_images)
-    if capped <= len(SHOT_REQUIREMENTS):
-        return list(SHOT_REQUIREMENTS[:capped])
-
-    repeated: list[str] = []
-    while len(repeated) < capped:
-        repeated.extend(SHOT_REQUIREMENTS)
-    return repeated[:capped]
+    if capped <= len(DEFAULT_FOUR_SHOT_REQUIREMENTS):
+        return list(DEFAULT_FOUR_SHOT_REQUIREMENTS[:capped])
+    return list(DEFAULT_FOUR_SHOT_REQUIREMENTS)
 
 
 def _shot_slug(shot_instruction: str, fallback_index: int) -> str:
@@ -123,12 +128,18 @@ def _shot_slug(shot_instruction: str, fallback_index: int) -> str:
     return slug or f"shot_{fallback_index}"
 
 
+def _retry_delay_seconds(base_seconds: float, attempt: int) -> float:
+    exponential = base_seconds * (2 ** max(0, attempt - 1))
+    jitter = random.uniform(0, base_seconds)
+    return exponential + jitter
+
+
 def generate_images(
     brand_name: str,
     kyc_path: str,
     image_paths: list[str] | None = None,
     image_path: str | None = None,
-    num_images: int = 6,
+    num_images: int = 4,
     temperature: float = 0.1,
     output_dir: str = "generated_images",
     prompt_file: str = "imageGen.txt",
@@ -189,7 +200,10 @@ def generate_images(
         "Authorization": f"Bearer {api_key}",
         "Accept": "application/json",
         "Content-Type": "application/json",
+        "Connection": "close",
     }
+    max_retries = max(0, int(os.getenv("REVE_REQUEST_MAX_RETRIES", "4")))
+    base_backoff = max(0.1, float(os.getenv("REVE_RETRY_BASE_SECONDS", "1.0")))
 
     if regeneration_only_inputs:
         normalized_shot_types = [shot.strip().lower() for shot in (shot_types or []) if shot and shot.strip()]
@@ -258,19 +272,87 @@ def generate_images(
             ),
         )
 
-        try:
-            response = requests.post(REVE_ENDPOINT, headers=headers, json=payload, timeout=120)
-            response.raise_for_status()
-        except requests.RequestException as exc:
-            body = ""
-            if getattr(exc, "response", None) is not None and exc.response is not None:
-                body = exc.response.text
-            raise RuntimeError(f"REVE request failed at image {iteration}: {exc}. Response: {body}") from exc
+        response_data: dict[str, Any] | None = None
+        last_error: Exception | None = None
+        for attempt in range(1, max_retries + 2):
+            try:
+                response = requests.post(REVE_ENDPOINT, headers=headers, json=payload, timeout=(15, 180))
+                status_code = response.status_code
+                if status_code in REVE_RETRYABLE_STATUS_CODES and attempt <= max_retries:
+                    delay = _retry_delay_seconds(base_backoff, attempt)
+                    stage_logger.warning(
+                        "REVE request got retryable status.",
+                        with_context(
+                            log_context,
+                            {
+                                "operation": "reve_image_generation",
+                                "image_index": iteration,
+                                "shot": shot_slug,
+                                "attempt": attempt,
+                                "max_retries": max_retries,
+                                "status_code": status_code,
+                                "retry_after_seconds": round(delay, 2),
+                            },
+                        ),
+                    )
+                    time.sleep(delay)
+                    continue
 
-        try:
-            response_data = response.json()
-        except ValueError as exc:
-            raise RuntimeError(f"REVE returned non-JSON response at image {iteration}") from exc
+                response.raise_for_status()
+                try:
+                    response_data = response.json()
+                except ValueError as exc:
+                    if attempt <= max_retries:
+                        delay = _retry_delay_seconds(base_backoff, attempt)
+                        stage_logger.warning(
+                            "REVE returned non-JSON payload, retrying.",
+                            with_context(
+                                log_context,
+                                {
+                                    "operation": "reve_image_generation",
+                                    "image_index": iteration,
+                                    "shot": shot_slug,
+                                    "attempt": attempt,
+                                    "max_retries": max_retries,
+                                    "retry_after_seconds": round(delay, 2),
+                                },
+                            ),
+                        )
+                        time.sleep(delay)
+                        continue
+                    raise RuntimeError(f"REVE returned non-JSON response at image {iteration}") from exc
+                break
+            except requests.RequestException as exc:
+                last_error = exc
+                body = ""
+                if getattr(exc, "response", None) is not None and exc.response is not None:
+                    body = exc.response.text
+                if attempt <= max_retries:
+                    delay = _retry_delay_seconds(base_backoff, attempt)
+                    stage_logger.warning(
+                        "REVE request failed with transport/provider error, retrying.",
+                        with_context(
+                            log_context,
+                            {
+                                "operation": "reve_image_generation",
+                                "image_index": iteration,
+                                "shot": shot_slug,
+                                "attempt": attempt,
+                                "max_retries": max_retries,
+                                "error": str(exc),
+                                "response_body": body[:500] if body else "",
+                                "retry_after_seconds": round(delay, 2),
+                            },
+                        ),
+                    )
+                    time.sleep(delay)
+                    continue
+                raise RuntimeError(f"REVE request failed at image {iteration}: {exc}. Response: {body}") from exc
+
+        if response_data is None:
+            raise RuntimeError(
+                f"REVE request failed at image {iteration} after retries: {last_error or 'unknown error'}"
+            )
 
         decoded_images = _extract_base64_images(response_data)
         if not decoded_images or not decoded_images[0]:

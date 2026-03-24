@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import get_settings
 from app.database import init_db
 from app.routers import assets_router, auth_router, image_jobs_router, jobs_router, meta_router
+from app.services.pipeline_runner import start_pipeline_watchdog, stop_pipeline_watchdog
 
 settings = get_settings()
 
@@ -33,6 +34,12 @@ app.mount("/local-storage", StaticFiles(directory=str(storage_root)), name="loca
 @app.on_event("startup")
 async def on_startup() -> None:
     await init_db()
+    await start_pipeline_watchdog()
+
+
+@app.on_event("shutdown")
+async def on_shutdown() -> None:
+    await stop_pipeline_watchdog()
 
 
 @app.get("/health")
