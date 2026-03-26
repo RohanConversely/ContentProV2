@@ -178,7 +178,10 @@ def get_diameter_mm(args):
 def build_text_lines(args):
     diameter_mm = get_diameter_mm(args)
     lines = [f"Diameter: {format_cm(diameter_mm)} cm"]
-    lines.append(f"Length of Chain: {format_plain_cm(args.chain_length)} cm")
+    if args.label_mode != "bangle":
+        lines.append(f"Length of Chain: {format_plain_cm(args.chain_length)} cm")
+    if args.adjustable:
+        lines.append("+ Adjustable")
     return lines
 
 
@@ -222,6 +225,8 @@ def main():
     parser.add_argument("--input", "-i", required=True, help="New jewelry image")
     parser.add_argument("--output", "-o", help="Output file path")
     parser.add_argument("--chain-length", type=float, required=True, help="Chain length in cm")
+    parser.add_argument("--adjustable", "-a", action="store_true")
+    parser.add_argument("--label-mode", choices=["bracelet", "bangle"], default="bracelet")
     parser.add_argument("--coverage", "-c", type=float, default=1.0)
     parser.add_argument("--bg-thresh", type=int, default=242)
 

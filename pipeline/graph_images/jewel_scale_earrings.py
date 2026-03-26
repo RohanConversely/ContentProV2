@@ -46,7 +46,7 @@ def load_bold_font(size):
     return load_font(size)
 
 
-def find_ruler_geometry(gray):
+def find_ruler_geometry(gray, scale_cm):
     h, w = gray.shape
 
     best_row = 0
@@ -76,11 +76,11 @@ def find_ruler_geometry(gray):
     h_ruler_right = int(dark_xs.max()) if len(dark_xs) > 0 else w * 5 // 6
 
     h_ruler_span = h_ruler_right - h_ruler_left
-    px_per_cm = h_ruler_span / 4.0
+    px_per_cm_guess = h_ruler_span / float(scale_cm)
 
     search_left = max(0, h_ruler_left)
-    search_right = min(w - 1, h_ruler_left + max(8, int(px_per_cm * 1.1)))
-    y_top = max(0, best_row - max(10, int(px_per_cm * 4.5)))
+    search_right = min(w - 1, h_ruler_left + max(8, int(px_per_cm_guess * 1.1)))
+    y_top = max(0, best_row - max(10, int(px_per_cm_guess * 4.5)))
     y_bottom = best_row + 1
 
     col_dark_counts = []
@@ -102,6 +102,8 @@ def find_ruler_geometry(gray):
         v_intersection_x = h_ruler_left
 
     vertical_shift_dx = max(0, v_intersection_x - h_ruler_left)
+    usable_span = max(1, h_ruler_right - v_intersection_x)
+    px_per_cm = usable_span / float(scale_cm)
 
     return {
         "origin_x": h_ruler_left,
@@ -111,6 +113,30 @@ def find_ruler_geometry(gray):
         "v_intersection_x": v_intersection_x,
         "vertical_shift_dx": vertical_shift_dx,
     }
+
+
+def _input_size_hint_mm(args):
+    if args.width is not None or args.height is not None:
+        return max(args.width or 0.0, args.height or 0.0)
+    if args.diameter:
+        if "-" in args.diameter:
+            lo, hi = args.diameter.split("-")
+            return max(float(lo), float(hi))
+        return float(args.diameter)
+    return 0.0
+
+
+def choose_reference_path(args, script_dir):
+    size_hint_mm = _input_size_hint_mm(args)
+    if size_hint_mm > 90.0:
+        return os.path.join(script_dir, "ref3.png")
+    if args.ref:
+        return args.ref
+    return os.path.join(script_dir, "reference.png")
+
+
+def get_reference_scale_cm(ref_path):
+    return 11.0 if os.path.basename(ref_path).lower() == "ref3.png" else 4.0
 
 
 def find_dim_text_top(gray):
@@ -218,7 +244,7 @@ def compute_resize_dimensions(src_w, src_h, target_w, target_h, coverage):
 def main():
     parser = argparse.ArgumentParser(description="Swap jewelry in a ruler scale image")
 
-    parser.add_argument("--ref", "-r", required=True, help="Reference template image with ruler")
+    parser.add_argument("--ref", "-r", help="Reference template image with ruler")
     parser.add_argument("--input", "-i", required=True, help="New jewelry image")
     parser.add_argument("--output", "-o", help="Output file path")
     parser.add_argument("--diameter", "-d", help="Diameter in mm, e.g. 16 or 12-15")
@@ -230,8 +256,10 @@ def main():
     parser.add_argument("--bg-thresh", type=int, default=242)
 
     args = parser.parse_args()
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    ref_path = choose_reference_path(args, script_dir)
 
-    for path, label in [(args.ref, "Reference"), (args.input, "Input")]:
+    for path, label in [(ref_path, "Reference"), (args.input, "Input")]:
         if not os.path.exists(path):
             print(f"Error: {label} not found: {path}")
             sys.exit(1)
@@ -240,12 +268,12 @@ def main():
         print("Error: provide --diameter or --width/--height")
         sys.exit(1)
 
-    template = Image.open(args.ref).convert("RGBA")
+    template = Image.open(ref_path).convert("RGBA")
     tw, th = template.size
     jewelry = Image.open(args.input).convert("RGBA")
 
     gray = np.array(template.convert("L")).astype(float)
-    ruler = find_ruler_geometry(gray)
+    ruler = find_ruler_geometry(gray, get_reference_scale_cm(ref_path))
 
     jewelry_clean = remove_background(jewelry, threshold=args.bg_thresh)
     jewelry_clean = trim_transparent_bounds(jewelry_clean)

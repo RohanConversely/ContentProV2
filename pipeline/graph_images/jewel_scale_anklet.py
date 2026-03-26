@@ -92,6 +92,15 @@ def format_plain_cm(value_cm):
 
 
 def build_text_lines(args):
+    if args.label_mode == "necklace":
+        chain_line = f"Chain Length: {format_plain_cm(args.chain_length)} cm"
+        if args.adjustable:
+            chain_line += " + Adjustable"
+        return [
+            chain_line,
+            f"Pendant: {format_cm(args.overall_height)} x {format_cm(args.motif_width)} cm",
+        ]
+
     parts = [f"Charm: {format_cm(args.motif_width)} x {format_cm(args.overall_width)} cm"]
     parts.append(f"Length of Chain: {format_plain_cm(args.chain_length)} cm")
     if args.adjustable:
@@ -116,13 +125,30 @@ def main():
     parser.add_argument("--input", "-i", required=True, help="New jewelry image")
     parser.add_argument("--output", "-o", help="Output file path")
     parser.add_argument("--motif-width", type=float, required=True, help="Motif width in mm")
-    parser.add_argument("--overall-width", type=float, required=True, help="Overall width in mm")
+    parser.add_argument("--overall-width", type=float, help="Overall width in mm")
+    parser.add_argument("--overall-height", type=float, help="Overall height in mm")
     parser.add_argument("--chain-length", type=float, required=True, help="Chain length in cm")
     parser.add_argument("--adjustable", "-a", action="store_true")
-    parser.add_argument("--coverage", "-c", type=float, default=1.4)
+    parser.add_argument("--label-mode", choices=["anklet", "necklace"], default="anklet")
+    parser.add_argument("--coverage", "-c", type=float, default=0.85)
     parser.add_argument("--bg-thresh", type=int, default=242)
 
     args = parser.parse_args()
+    if args.label_mode == "necklace":
+        if args.overall_height is None:
+            print("Error: provide --overall-height for necklace label mode")
+            sys.exit(1)
+        if args.motif_width is None:
+            print("Error: provide --motif-width for necklace label mode")
+            sys.exit(1)
+    else:
+        if args.overall_width is None:
+            print("Error: provide --overall-width for anklet label mode")
+            sys.exit(1)
+        if args.motif_width is None:
+            print("Error: provide --motif-width for anklet label mode")
+            sys.exit(1)
+
     script_dir = os.path.dirname(os.path.abspath(__file__))
     ref_path = os.path.join(script_dir, "ref_anklet.png")
 
@@ -145,7 +171,7 @@ def main():
     jewelry_resized = jewelry_clean.resize((img_w, img_h), Image.LANCZOS)
 
     ring_x = (tw - img_w) // 2
-    ring_y = (th - img_h) // 2 + max(10, int(th * 0.06))
+    ring_y = (th - img_h) // 2 + max(10, int(th * 0.02))
 
     template.paste(jewelry_resized, (ring_x, ring_y), jewelry_resized)
 
