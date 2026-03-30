@@ -178,10 +178,10 @@ def get_diameter_mm(args):
 def build_text_lines(args):
     diameter_mm = get_diameter_mm(args)
     lines = [f"Diameter: {format_cm(diameter_mm)} cm"]
+    if args.adjustable:
+        lines[0] = f"{lines[0]} + Adjustable"
     if args.label_mode != "bangle":
         lines.append(f"Length of Chain: {format_plain_cm(args.chain_length)} cm")
-    if args.adjustable:
-        lines.append("+ Adjustable")
     return lines
 
 

@@ -96,16 +96,18 @@ def build_text_lines(args):
         chain_line = f"Chain Length: {format_plain_cm(args.chain_length)} cm"
         if args.adjustable:
             chain_line += " + Adjustable"
-        return [
-            chain_line,
-            f"Pendant: {format_cm(args.overall_height)} x {format_cm(args.motif_width)} cm",
-        ]
+        lines = [chain_line]
+        if args.overall_height is not None and args.motif_width is not None:
+            lines.append(f"Pendant: {format_cm(args.overall_height)} x {format_cm(args.motif_width)} cm")
+        return lines
 
-    parts = [f"Charm: {format_cm(args.motif_width)} x {format_cm(args.overall_width)} cm"]
-    parts.append(f"Length of Chain: {format_plain_cm(args.chain_length)} cm")
+    chain_line = f"Length of Chain: {format_plain_cm(args.chain_length)} cm"
     if args.adjustable:
-        parts.append("+ Adjustable")
-    return parts
+        chain_line += " + Adjustable"
+    lines = [chain_line]
+    if args.motif_width is not None and args.overall_width is not None:
+        lines.append(f"Charm: {format_cm(args.motif_width)} x {format_cm(args.overall_width)} cm")
+    return lines
 
 
 def compute_resize_dimensions(src_w, src_h, target_w, target_h, coverage):
@@ -124,7 +126,7 @@ def main():
 
     parser.add_argument("--input", "-i", required=True, help="New jewelry image")
     parser.add_argument("--output", "-o", help="Output file path")
-    parser.add_argument("--motif-width", type=float, required=True, help="Motif width in mm")
+    parser.add_argument("--motif-width", type=float, help="Motif width in mm")
     parser.add_argument("--overall-width", type=float, help="Overall width in mm")
     parser.add_argument("--overall-height", type=float, help="Overall height in mm")
     parser.add_argument("--chain-length", type=float, required=True, help="Chain length in cm")
@@ -134,20 +136,9 @@ def main():
     parser.add_argument("--bg-thresh", type=int, default=242)
 
     args = parser.parse_args()
-    if args.label_mode == "necklace":
-        if args.overall_height is None:
-            print("Error: provide --overall-height for necklace label mode")
-            sys.exit(1)
-        if args.motif_width is None:
-            print("Error: provide --motif-width for necklace label mode")
-            sys.exit(1)
-    else:
-        if args.overall_width is None:
-            print("Error: provide --overall-width for anklet label mode")
-            sys.exit(1)
-        if args.motif_width is None:
-            print("Error: provide --motif-width for anklet label mode")
-            sys.exit(1)
+    if args.label_mode not in {"anklet", "necklace"}:
+        print("Error: invalid --label-mode")
+        sys.exit(1)
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     ref_path = os.path.join(script_dir, "ref_anklet.png")

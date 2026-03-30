@@ -110,41 +110,37 @@ def _bracelet_command(
 
 
 def _anklet_command(row: RowData, image_path: Path, output_dir: Path) -> list[str] | LeftoverItem:
-    if row.motif_width_mm is None or row.overall_width_mm is None or row.chain_length_cm is None:
-        return _leftover(row, "Anklet row missing motif width, overall width, or chain length.")
+    if row.chain_length_cm is None:
+        return _leftover(row, "Anklet row missing chain length.")
 
     command = [
         sys.executable,
         str(_script_path("jewel_scale_anklet.py")),
         "--input",
         str(image_path),
-        "--motif-width",
-        str(row.motif_width_mm),
-        "--overall-width",
-        str(row.overall_width_mm),
         "--chain-length",
         str(row.chain_length_cm),
         "--output",
         str(output_dir / f"{_base_output_name(row)}.png"),
     ]
+    if row.motif_width_mm is not None:
+        command.extend(["--motif-width", str(row.motif_width_mm)])
+    if row.overall_width_mm is not None:
+        command.extend(["--overall-width", str(row.overall_width_mm)])
     if row.adjustable:
         command.append("--adjustable")
     return command
 
 
 def _necklace_command(row: RowData, image_path: Path, output_dir: Path) -> list[str] | LeftoverItem:
-    if row.motif_width_mm is None or row.overall_height_mm is None or row.chain_length_cm is None:
-        return _leftover(row, "Necklace row missing motif width, overall height, or chain length.")
+    if row.chain_length_cm is None:
+        return _leftover(row, "Necklace row missing chain length.")
 
     command = [
         sys.executable,
         str(_script_path("jewel_scale_anklet.py")),
         "--input",
         str(image_path),
-        "--motif-width",
-        str(row.motif_width_mm),
-        "--overall-height",
-        str(row.overall_height_mm),
         "--chain-length",
         str(row.chain_length_cm),
         "--label-mode",
@@ -152,6 +148,10 @@ def _necklace_command(row: RowData, image_path: Path, output_dir: Path) -> list[
         "--output",
         str(output_dir / f"{_base_output_name(row)}.png"),
     ]
+    if row.motif_width_mm is not None:
+        command.extend(["--motif-width", str(row.motif_width_mm)])
+    if row.overall_height_mm is not None:
+        command.extend(["--overall-height", str(row.overall_height_mm)])
     if row.adjustable:
         command.append("--adjustable")
     return command
