@@ -2,213 +2,403 @@
 
 ## Overview
 
-The ContentPro frontend is a React + TypeScript app that lets users:
-- sign in with email/password
-- create single image jobs
-- run batch image jobs from CSV/XLSX
-- monitor live progress
-- inspect projects, batches, assets, logs, and downloads
+ContentPro frontend is a React + TypeScript application that provides a complete user interface for:
+- User authentication (email/password)
+- Single image job creation with live progress tracking
+- Batch image job creation from CSV/XLSX files
+- Project and batch management
+- Asset viewing, logs, and downloads
 
-The current frontend is backend-integrated. It is not a mock-only UI.
+The frontend is fully integrated with the backend API. It is not a mock-only UI.
+
+---
 
 ## Tech Stack
 
 | Category | Technology |
 |----------|------------|
 | Framework | React 18 + TypeScript |
-| Build Tool | Vite |
-| Styling | Tailwind CSS + Shadcn UI |
+| Build Tool | Vite 5.x |
+| Styling | Tailwind CSS 3.x |
+| UI Components | Shadcn UI (Radix UI primitives) |
 | Routing | React Router v6 |
-| State | React Context + local storage persistence |
-| Data utilities | PapaParse, XLSX |
+| State Management | React Context + localStorage persistence |
+| Data Parsing | PapaParse (CSV), XLSX (Excel) |
 | Animation | Framer Motion |
-| Networking | browser `fetch`, SSE |
+| HTTP Client | Native fetch API |
+| Real-time Updates | Server-Sent Events (SSE) |
+| Form Handling | React Hook Form + Zod |
+| Testing | Vitest |
 
-## Key Routes
-
-- `/dashboard`
-  - main create flow
-- `/batch-run`
-  - current active batch-run page
-  - shows in-progress queued/running rows
-  - shows empty state when no batches are active
-- `/projects`
-  - projects list with batch cards and single-job cards
-- `/project/:jobId`
-  - opens a specific job detail
-- `/batch/:batchId`
-  - opens grouped batch detail
-- `/profile`
-- `/settings`
-- `/login`
-
-## Actual Navigation Behavior
-
-- Navbar includes:
-  - Create
-  - Batch Run
-  - Projects
-- Batch child job detail back navigation returns to the batch page first
-- Batch detail page back navigation returns to Projects
-
-## Current Auth Mode
-
-Supported and active:
-- email/password
-
-Important note:
-- Google OAuth code exists in parts of the app history, but the live deployment uses email/password because production is hosted on an IP:port deployment rather than a public domain
+---
 
 ## Project Structure
 
-```text
+```
 frontend/src/
+├── assets/                 # Static assets (images, fonts)
 ├── components/
-│   ├── Navbar.tsx
-│   ├── CreationWizard.tsx
-│   ├── BatchCreationWizard.tsx
-│   ├── GenerationResults.tsx
-│   ├── VideoCreation.tsx
-│   ├── RecentProjects.tsx
-│   └── ProtectedRoute.tsx
+│   ├── ui/                 # Shadcn UI components (50+ components)
+│   │   ├── button.tsx
+│   │   ├── card.tsx
+│   │   ├── dialog.tsx
+│   │   ├── dropdown-menu.tsx
+│   │   ├── input.tsx
+│   │   ├── select.tsx
+│   │   ├── tabs.tsx
+│   │   ├── toast.tsx
+│   │   ├── progress.tsx
+│   │   ├── avatar.tsx
+│   │   ├── badge.tsx
+│   │   ├── carousel.tsx
+│   │   └── ... (40+ more)
+│   ├── Navbar.tsx          # Main navigation header
+│   ├── CreationWizard.tsx  # Single image job creation flow
+│   ├── BatchCreationWizard.tsx  # Batch job creation from spreadsheet
+│   ├── GenerationResults.tsx    # Display generated images
+│   ├── VideoCreation.tsx        # Video job creation (legacy)
+│   ├── RecentProjects.tsx       # Recent projects list
+│   ├── CreationOptions.tsx      # Job type selection
+│   ├── ImageUploadZone.tsx      # Drag-and-drop image upload
+│   ├── GenreThemeSelector.tsx   # Style/theme selection
+│   ├── ClientKycStep.tsx        # KYC form step
+│   ├── NavLink.tsx              # Navigation link component
+│   └── ProtectedRoute.tsx       # Auth guard component
 ├── contexts/
-│   ├── AuthContext.tsx
-│   └── ProcessContext.tsx
+│   ├── AuthContext.tsx          # Authentication state (login/logout/user)
+│   └── ProcessContext.tsx       # Active job tracking
+├── hooks/                       # Custom React hooks
 ├── lib/
-│   ├── api.ts
-│   ├── active-runs.ts
-│   ├── mock_data.ts
-│   └── utils.ts
+│   ├── api.ts                   # Backend API client (ALL API calls)
+│   ├── active-runs.ts           # Persist active jobs in localStorage
+│   ├── mock_data.ts             # Mock data for landing page
+│   └── utils.ts                 # Utility functions (cn, formatting)
 ├── pages/
-│   ├── LandingPage.tsx
-│   ├── Index.tsx
-│   ├── BatchRunPage.tsx
-│   ├── BatchDetailPage.tsx
-│   ├── ProjectsPage.tsx
-│   ├── ProfilePage.tsx
-│   ├── SettingsPage.tsx
-│   ├── AuthPage.tsx
-│   └── NotFound.tsx
-└── App.tsx
+│   ├── LandingPage.tsx          # Public landing page
+│   ├── Index.tsx                # Home/dashboard redirect
+│   ├── Dashboard.tsx            # User dashboard
+│   ├── AuthPage.tsx             # Login/register page
+│   ├── AuthCallbackPage.tsx     # OAuth callback handler
+│   ├── BatchRunPage.tsx         # Active batch execution page
+│   ├── BatchDetailPage.tsx      # Batch results/history page
+│   ├── ProjectsPage.tsx         # All projects listing
+│   ├── ProfilePage.tsx          # User profile settings
+│   ├── SettingsPage.tsx         # App settings
+│   └── NotFound.tsx             # 404 page
+├── App.tsx                      # Main app with routing
+├── main.tsx                     # Entry point
+└── index.css                    # Global styles
 ```
 
-## Important Frontend Modules
+---
 
-### `src/lib/api.ts`
+## Key Files
 
-This is the real backend client.
+### `src/lib/api.ts` (933 lines)
 
-It handles:
-- register/login/current-user
-- create/list/get/delete jobs
-- get batch jobs
-- upload local source images
-- upload remote image URLs
-- upload public Drive folder links
-- download job ZIP and batch ZIP files
-- SSE subscription and job polling helpers
+The central API client handling all communication with the backend. Key functions:
 
-### `src/lib/active-runs.ts`
+**Authentication:**
+- `registerAccount()` - Create new user account
+- `loginAccount()` - Authenticate user
+- `getCurrentUser()` - Fetch current user profile
+- `changePassword()` - Update password
+- `getGoogleLoginUrl()` - Get Google OAuth URL
 
-This file is important for understanding current UX.
+**Jobs:**
+- `createJob()` - Create single image job
+- `getJob()` - Get job details
+- `getJobLogs()` - Get job execution logs
+- `cancelJob()` - Cancel running job
+- `waitForJobCompletion()` - Poll for job completion via SSE
+- `subscribeToJobEvents()` - Subscribe to real-time job updates
 
-It persists:
-- active single-job runs
-- active batch runs
+**Assets:**
+- `uploadJobAsset()` - Upload local images
+- `uploadRemoteJobAsset()` - Upload from URL
+- `uploadRemoteFolderAssets()` - Upload from Google Drive folder
+- `downloadJobImagesArchive()` - Download ZIP of generated images
 
-Purpose:
-- if the user leaves the page and returns, active jobs can be restored
-- completed batch runs are now cleared instead of being shown forever
+**Batches:**
+- `getBatchJobs()` - Get all jobs in a batch
+- `downloadBatchArchive()` - Download ZIP of entire batch
+- `deleteBatch()` - Delete batch
+
+**Projects:**
+- `getProjects()` - List all user projects
+- `getProjectById()` - Get single project
+- `deleteProject()` - Soft delete project
 
 ### `src/components/CreationWizard.tsx`
 
-Single-job creation flow:
-- validates required fields
-- accepts up to 5 source images
-- creates the backend job
-- uploads images
-- shows live stage/log updates
-- renders generated images progressively
+Single image job creation flow:
+1. Product information form (brand, product name, category)
+2. Image upload (drag-and-drop, up to 5 images)
+3. Additional inputs (dimensions, description, social links)
+4. Model selection (REVE, GPT-Image-1)
+5. Job submission and live progress tracking
+6. Generated image display with download options
 
 ### `src/components/BatchCreationWizard.tsx`
 
-Batch setup flow:
-- parses CSV/XLSX
-- preserves XLSX hyperlink targets
-- supports two source modes:
-  - direct image links
-  - public Google Drive folder links
-- renders the actual spreadsheet columns and rows
-- lets the user select valid rows before running
-
-### `src/pages/BatchRunPage.tsx`
-
-Batch execution page:
-- creates one backend job per selected row up front
-- shows queued/running/completed states
-- survives route changes while active
-- clears itself once all rows are finished
+Batch job creation from spreadsheet:
+1. File upload (CSV/XLSX)
+2. Column mapping (brand, product, image URL)
+3. Source mode selection (direct URLs or Google Drive folders)
+4. Row validation and selection
+5. Batch submission with progress tracking
 
 ### `src/pages/ProjectsPage.tsx`
 
-Projects page:
-- shows single jobs and grouped batch cards
-- supports soft delete
-- shows input images, generated images, metadata, and logs
-- routes batch jobs to batch detail first
+Main project listing:
+- Cards showing project thumbnail, name, status, date
+- Filter by status (all, completed, failed, in-progress)
+- Batch grouping with job counts
+- Soft delete functionality
+- Quick actions (view, download, delete)
 
-## Current Input And Output Limits
+---
 
-- Single job source images: up to 5
-- Batch Drive folder source images: first up to 5 files from the public folder
-- Generated image target: 6 images per job
+## Routes
 
-## Current Batch UX
+| Route | Description | Auth Required |
+|-------|-------------|---------------|
+| `/` | Landing page | No |
+| `/login` | Login page | No |
+| `/register` | Registration page | No |
+| `/auth/callback` | OAuth callback | No |
+| `/dashboard` | User dashboard | Yes |
+| `/batch-run` | Active batch execution | Yes |
+| `/batch/:batchId` | Batch detail/history | Yes |
+| `/projects` | All projects list | Yes |
+| `/project/:jobId` | Job detail view | Yes |
+| `/profile` | User profile | Yes |
+| `/settings` | App settings | Yes |
 
-There are two distinct batch-related pages:
+---
 
-### `/batch-run`
-- operational page for an active batch
-- shows queued and running rows
-- disappears back to empty state when no batch is active
+## API Endpoints
 
-### `/batch/:batchId`
-- historical/project view for a completed or persisted batch
-- shows the jobs in that batch
-- `View Details` is disabled for jobs that are still queued
-- batch ZIP download is available when the batch is no longer running
-
-## API Endpoints Used By Frontend
-
-### Auth
-- `POST /auth/register`
-- `POST /auth/login`
-- `GET /auth/me`
-- `POST /auth/change-password`
+### Authentication
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/auth/register` | Register new user |
+| POST | `/auth/login` | Login with email/password |
+| GET | `/auth/me` | Get current user |
+| POST | `/auth/change-password` | Change password |
+| GET | `/auth/google/login` | Get Google OAuth URL |
+| GET | `/auth/google/callback` | Google OAuth callback |
 
 ### Jobs
-- `POST /jobs`
-- `GET /jobs`
-- `GET /jobs/recent`
-- `GET /jobs/{job_id}`
-- `GET /jobs/{job_id}/events`
-- `GET /jobs/{job_id}/logs`
-- `GET /jobs/{job_id}/pricing`
-- `GET /jobs/{job_id}/download/images`
-- `DELETE /jobs/{job_id}`
-
-### Batch
-- `GET /batches/{batch_id}`
-- `GET /batches/{batch_id}/download`
-- `DELETE /batches/{batch_id}`
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/jobs` | Create new job |
+| GET | `/jobs` | List jobs (paginated) |
+| GET | `/jobs/recent` | Get recent jobs |
+| GET | `/jobs/{job_id}` | Get job details |
+| GET | `/jobs/{job_id}/events` | SSE for job progress |
+| GET | `/jobs/{job_id}/logs` | Get job logs |
+| GET | `/jobs/{job_id}/pricing` | Get pricing snapshot |
+| GET | `/jobs/{job_id}/download/images` | Download images ZIP |
+| GET | `/jobs/{job_id}/download/image` | Download single image |
+| POST | `/jobs/{job_id}/regenerate-images` | Regenerate with new prompt |
+| POST | `/jobs/{job_id}/cancel` | Cancel job |
+| DELETE | `/jobs/{job_id}` | Delete job (soft delete) |
 
 ### Assets
-- `POST /jobs/{job_id}/assets`
-- `POST /jobs/{job_id}/assets/remote`
-- `POST /jobs/{job_id}/assets/remote-folder`
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/jobs/{job_id}/assets` | Upload local files |
+| POST | `/jobs/{job_id}/assets/remote` | Upload from URL |
+| POST | `/jobs/{job_id}/assets/remote-folder` | Upload from Drive folder |
+| GET | `/jobs/{job_id}/assets` | List job assets |
 
-## Deployment Notes
+### Batches
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/batches/{batch_id}` | Get batch jobs |
+| GET | `/batches/{batch_id}/download` | Download batch ZIP |
+| DELETE | `/batches/{batch_id}` | Delete batch |
 
-- `VITE_API_URL` points the frontend to the backend
-- live deployment currently uses IP:port access, not a public domain
-- because of that, production auth is email/password rather than Google OAuth
+### Meta
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Health check |
+| GET | `/usage` | Get user usage |
+| GET | `/benefits` | Get Pro benefits |
+
+---
+
+## Design System
+
+### Shadcn UI Components
+
+The frontend uses [Shadcn UI](https://ui.shadcn.com/) which provides accessible, customizable components built on Radix UI primitives:
+
+**Form Components:**
+- Button, Input, Textarea, Select, Checkbox, Radio Group
+- Form with validation (React Hook Form + Zod)
+
+**Layout:**
+- Card, Dialog, Drawer, Sheet, Popover
+- Tabs, Accordion, Collapsible
+- Scroll Area, Resizable Panels
+
+**Feedback:**
+- Toast notifications (Sonner)
+- Alert Dialog, Confirm Dialog
+- Progress, Skeleton loaders
+- Tooltip
+
+**Navigation:**
+- Dropdown Menu, Navigation Menu
+- Breadcrumb, Pagination
+
+**Media:**
+- Carousel, Aspect Ratio
+- Avatar, Badge
+
+**Data Display:**
+- Table, Calendar
+- Chart (Recharts)
+
+### Tailwind CSS
+
+All styling uses Tailwind CSS with custom configuration:
+- Custom color palette in `tailwind.config.js`
+- Typography plugin for prose styling
+- Animation utilities
+
+### Icons
+
+Icons are provided by [Lucide React](https://lucide.dev/) - a consistent, lightweight icon set.
+
+---
+
+## State Management
+
+### AuthContext
+- Current user information
+- Authentication state (logged in/out)
+- Token management (localStorage)
+- Auto-logout on token expiration
+
+### ProcessContext
+- Active job tracking
+- Real-time status updates
+- Persisted across page reloads via localStorage
+
+### Active Runs Persistence (`lib/active-runs.ts`)
+
+Persists active jobs in localStorage to survive page reloads:
+- Single jobs: job ID, status, created time
+- Batch runs: batch ID, job IDs, progress
+
+Clears completed batch runs automatically.
+
+---
+
+## Input/Output Limits
+
+| Resource | Limit |
+|----------|-------|
+| Single job source images | Up to 5 |
+| Batch Drive folder images | First 5 files |
+| Generated images per job | 6 |
+| Batch rows per spreadsheet | Based on valid rows |
+
+---
+
+## Authentication
+
+### Current Active Mode
+- **Email/Password** - Full implementation with registration, login, change password
+
+### Available but Not Active
+- **Google OAuth** - Code exists but not deployed due to IP-based production hosting
+
+### Session Management
+- JWT tokens stored in localStorage
+- Bearer token in Authorization header
+- 401 triggers auto-logout and redirect to login
+
+---
+
+## Real-time Updates
+
+### Server-Sent Events (SSE)
+
+Jobs emit progress updates via SSE endpoint `GET /jobs/{job_id}/events`:
+
+```typescript
+subscribeToJobEvents(jobId, {
+  onStatus: (payload) => {
+    // payload: { stage, status, message }
+    // status: "pending" | "running" | "completed" | "failed" | "cancelled"
+  },
+  onError: (message) => {
+    // Connection error
+  }
+})
+```
+
+### Progress Flow
+1. Job created with `pending_upload` status
+2. After assets uploaded, status changes to `pending`
+3. Pipeline starts, status becomes `running`
+4. Stage updates via SSE (kyc, image_gen, etc.)
+5. Final status: `completed`, `failed`, or `cancelled`
+
+---
+
+## Deployment
+
+### Environment Variables
+| Variable | Description |
+|----------|-------------|
+| `VITE_API_URL` | Backend API URL (e.g., `http://127.0.0.1:8000`) |
+
+### Development
+```bash
+npm run dev    # Start dev server on localhost:5173
+npm run build  # Production build
+npm run lint   # Run ESLint
+npm test       # Run tests
+```
+
+### Production
+- Built with Vite for production
+- Served by backend or standalone static hosting
+- CORS configured for allowed origins
+
+---
+
+## Key Frontend Patterns
+
+### API Error Handling
+```typescript
+async function apiFetch(path, init = {}, auth = false) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {...});
+  if (!response.ok) {
+    if (response.status === 401 && auth) {
+      clearStoredSession(); // Auto-logout
+    }
+    throw new Error(await parseErrorResponse(response));
+  }
+  return response;
+}
+```
+
+### Job Polling with SSE
+```typescript
+await waitForJobCompletion(jobId, (payload) => {
+  // Update UI with progress
+  console.log(payload.stage, payload.status, payload.message);
+});
+```
+
+### Batch Processing
+- Creates one job per spreadsheet row
+- All jobs share same `batch_id` and `batch_name`
+- Batch page shows aggregated progress
+- ZIP download available when all complete
