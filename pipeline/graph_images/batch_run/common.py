@@ -45,6 +45,8 @@ class RowData:
     overall_width_mm: float | None
     overall_height_mm: float | None
     chain_length_cm: float | None
+    earring_width_mm: float | None
+    earring_height_mm: float | None
     adjustable: bool
     raw: dict[str, Any]
 
@@ -56,4 +58,3 @@ class LeftoverItem:
     product_name: str
     category: str
     reason: str
-

@@ -17,6 +17,8 @@ HEADER_ALIASES = {
     "overall_width": {"overall width(mm)", "overall width (mm)", "overall width mm", "overall width"},
     "overall_height": {"overall height (mm)", "overall height(mm)", "overall height mm", "overall height"},
     "chain_length": {"chain (cm)", "chain length", "chain length (cm)", "length of chain", "chain"},
+    "earring_width": {"earring width", "earring width (mm)", "earring width mm"},
+    "earring_height": {"earring height", "earring height (mm)", "earring height mm"},
     "adjustable": {"adjustable", "adjustable or not", "is adjustable"},
 }
 
@@ -85,9 +87,10 @@ def load_rows(excel_path: Path) -> list[RowData]:
                 overall_width_mm=_cell_numeric(raw.get("overall_width")),
                 overall_height_mm=_cell_numeric(raw.get("overall_height")),
                 chain_length_cm=_cell_numeric(raw.get("chain_length")),
+                earring_width_mm=_cell_numeric(raw.get("earring_width")),
+                earring_height_mm=_cell_numeric(raw.get("earring_height")),
                 adjustable=str(raw.get("adjustable", "")).strip().lower() in {"yes", "y", "true", "1", "adjustable"},
                 raw=raw,
             )
         )
     return rows
-

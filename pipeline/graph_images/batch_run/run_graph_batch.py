@@ -34,6 +34,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run graph image batch automation from Excel sheet.")
     parser.add_argument("--excel", required=True, help="Path to the Excel file")
     parser.add_argument("--output-dir", default=None, help="Optional output directory")
+    parser.add_argument("--rows", default=None, help="Optional comma-separated Excel row numbers to process")
     args = parser.parse_args()
 
     excel_path = Path(args.excel).resolve()
@@ -49,6 +50,13 @@ def main() -> None:
     outputs_dir.mkdir(parents=True, exist_ok=True)
 
     rows = load_rows(excel_path)
+    if args.rows:
+        selected_rows = {
+            int(part.strip())
+            for part in args.rows.split(",")
+            if part.strip()
+        }
+        rows = [row for row in rows if row.row_index in selected_rows]
     leftovers: list[LeftoverItem] = []
     processed = 0
 

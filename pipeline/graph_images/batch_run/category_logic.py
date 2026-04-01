@@ -157,6 +157,46 @@ def _necklace_command(row: RowData, image_path: Path, output_dir: Path) -> list[
     return command
 
 
+def _necklace_set_command(row: RowData, image_path: Path, output_dir: Path) -> list[str] | LeftoverItem:
+    if row.chain_length_cm is None:
+        return _leftover(row, "Necklace set row missing chain length.")
+    missing_dimensions: list[str] = []
+    if row.overall_width_mm is None:
+        missing_dimensions.append("overall width")
+    if row.overall_height_mm is None:
+        missing_dimensions.append("overall height")
+    if row.earring_width_mm is None:
+        missing_dimensions.append("earring width")
+    if row.earring_height_mm is None:
+        missing_dimensions.append("earring height")
+    if missing_dimensions:
+        return _leftover(row, f"Necklace set row missing {', '.join(missing_dimensions)}.")
+
+    command = [
+        sys.executable,
+        str(_script_path("jewel_scale_anklet.py")),
+        "--input",
+        str(image_path),
+        "--chain-length",
+        str(row.chain_length_cm),
+        "--overall-width",
+        str(row.overall_width_mm),
+        "--overall-height",
+        str(row.overall_height_mm),
+        "--earring-width",
+        str(row.earring_width_mm),
+        "--earring-height",
+        str(row.earring_height_mm),
+        "--label-mode",
+        "necklace_set",
+        "--output",
+        str(output_dir / f"{_base_output_name(row)}.png"),
+    ]
+    if row.adjustable:
+        command.append("--adjustable")
+    return command
+
+
 def build_command(row: RowData, image_path: Path, output_dir: Path) -> list[str] | LeftoverItem:
     category = row.category.strip().lower()
     if category in {"earring", "earrings"}:
@@ -171,6 +211,8 @@ def build_command(row: RowData, image_path: Path, output_dir: Path) -> list[str]
         return _anklet_command(row, image_path, output_dir)
     if category == "necklace":
         return _necklace_command(row, image_path, output_dir)
+    if category == "necklace set":
+        return _necklace_set_command(row, image_path, output_dir)
     return _leftover(row, f"Unsupported category: {row.category}")
 
 
