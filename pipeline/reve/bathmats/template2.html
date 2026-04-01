@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Home Furnishing Catalog</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #f3eee8;
+      --text-color: #1a1a1a;
+      --accent-color: #b89e81;
+    }
+    body {
+      box-sizing: border-box;
+      margin: 0;
+      background-color: #e5e5e5;
+    }
+    @media print {
+      @page {
+        size: A4 landscape;
+        margin: 0;
+      }
+      body {
+        background-color: white;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      #app,
+      #pages-container {
+        height: auto !important;
+        overflow: visible !important;
+        background: transparent !important;
+        padding: 0 !important;
+      }
+      .catalog-page {
+        width: 297mm !important;
+        height: 210mm !important;
+        box-shadow: none !important;
+        margin: 0 !important;
+        page-break-after: always;
+        break-after: page;
+        display: flex !important;
+        flex-direction: row !important;
+      }
+      .catalog-page.hidden { 
+        display: flex !important; 
+      }
+      .catalog-page:last-child {
+        page-break-after: auto;
+        break-after: auto;
+      }
+      .nav-controls { display: none !important; }
+    }
+    
+    #pages-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2rem;
+      padding: 2rem 1rem;
+    }
+    .catalog-page {
+      width: 297mm;
+      height: 210mm;
+      background: white;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+      flex-shrink: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: row;
+    }
+    .catalog-page.hidden {
+      display: none;
+    }
+    
+    @media screen and (max-width: 1200px) {
+      .catalog-page {
+        width: 100%;
+        height: auto;
+        min-height: 100vh;
+        flex-direction: column;
+      }
+      .catalog-page.hidden {
+        display: none;
+      }
+    }
+  </style>
+ </head>
+ <body class="h-full">
+  <div id="app" class="w-full h-full overflow-auto" style="min-height: 100%;">
+    <!-- Navigation Controls -->
+    <div class="nav-controls sticky top-0 z-20 px-6 py-4" style="background:#ffffff; border-bottom:1px solid #f0f0f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+     <div class="flex items-center justify-between max-w-7xl mx-auto">
+      <div>
+       <span id="nav-title" class="block text-lg font-bold tracking-wider uppercase" style="font-family:'Playfair Display',serif; color:#1a1a1a;">Furnishing Co.</span> 
+       <span id="nav-tagline" class="block text-xs uppercase tracking-[0.2em]" style="font-family:'Poppins',sans-serif; color:#888888; margin-top:4px;">Contemporary Design Collection</span>
+      </div>
+      <div class="flex items-center gap-4">
+       <button id="prev-btn" onclick="changePage(-1)" class="p-2 rounded-full transition-all hover:bg-gray-100" style="color:#1a1a1a; border:1px solid #e0e0e0;"> 
+         <i data-lucide="chevron-left" class="w-5 h-5"></i> 
+       </button> 
+       <span id="page-indicator" class="text-sm font-medium tracking-widest" style="font-family:'Poppins',sans-serif; color:#666666; min-width:60px; text-align:center;">1 / 4</span> 
+       <button id="next-btn" onclick="changePage(1)" class="p-2 rounded-full transition-all hover:bg-gray-100" style="color:#1a1a1a; border:1px solid #e0e0e0;"> 
+         <i data-lucide="chevron-right" class="w-5 h-5"></i> 
+       </button>
+      </div>
+     </div>
+    </div>
+
+    <!-- Catalog Pages Container -->
+    <div id="pages-container"></div>
+  </div>
+
+  <script>
+const products = [
+  {
+    name: "Meridian Lounge Chair",
+    style: "MLC-4821",
+    material: "Solid white oak frame with premium boucle upholstery, foam-core cushion with feather-down wrap",
+    dimensions: 'W 32" × D 34" × H 30" | Seat Height: 17"',
+    colors: ["#e8dcc8","#d4cfc8","#f0ebe5"],
+    description: "The Meridian Lounge Chair exudes an organic modernism, marrying a sculptural solid wood frame with deeply inviting boucle upholstery. Perfect for grounding a living space or creating a bespoke reading nook."
+  },
+  {
+    name: "Solstice Dining Table",
+    style: "SDT-7103",
+    material: "Kiln-dried American walnut top with blackened steel trestle base, hand-rubbed oil finish",
+    dimensions: 'L 84" × W 40" × H 30"',
+    colors: ["#7a5c4a","#3d3d3d","#a68b6f"],
+    description: "A masterful expression of natural materials and industrial strength. The Solstice Table features a beautifully matched walnut slab top resting upon an architecturally inspired blackened steel trestle."
+  },
+  {
+    name: "Aura Floor Lamp",
+    style: "AFL-2259",
+    material: "Hand-turned solid brass stem with linen drum shade, weighted marble base",
+    dimensions: 'Base Ø 12" × H 62" | Shade Ø 18"',
+    colors: ["#d4b896","#f8f5f0","#b8b8b8"],
+    description: "Casting a warm, ambient glow, the Aura Floor Lamp is a study in refined simplicity. Its slender brass profile and weighted marble base bring understated elegance to any corner."
+  },
+  {
+    name: "Haven Modular Sofa",
+    style: "HMS-9047",
+    material: "Engineered hardwood frame, high-resilience foam with down-blend cushions, performance linen blend",
+    dimensions: 'W 110" × D 42" × H 33" | Seat Depth: 24"',
+    colors: ["#d0c5bb","#8a7f77","#e8e3db"],
+    description: "Designed for ultimate relaxation, the Haven Modular offers expansive, deep-seated comfort. Its low profile and relaxed tailoring create a welcoming anchor for the modern living room."
+  }
+];
+
+let currentPage = 0;
+
+function renderPages() {
+  const container = document.getElementById('pages-container');
+  container.innerHTML = products.map((p, i) => `
+    <div class="catalog-page ${i !== currentPage ? 'hidden' : ''}" data-page="${i}">
+      
+      <!-- Left Column: Images -->
+      <div class="w-full lg:w-[55%] print:w-[55%] relative h-[50vh] lg:h-full print:h-[210mm] bg-gray-50 flex-shrink-0 group overflow-hidden">
+        <!-- Main Background Image Placeholder -->
+        <div class="absolute inset-0 transition-transform duration-700 group-hover:scale-105" style="background-color: ${p.colors[0]};">
+           <div class="w-full h-full flex items-center justify-center opacity-30 mix-blend-multiply bg-gradient-to-tr from-black/10 to-transparent">
+             <i data-lucide="image" class="w-32 h-32 text-gray-800 drop-shadow-lg"></i>
+           </div>
+        </div>
+        
+        <!-- Secondary Image Card -->
+        <div class="absolute bottom-10 left-10 w-2/5 aspect-[4/3] bg-white p-2 shadow-2xl rounded-sm transform group-hover:-translate-y-2 transition-transform duration-500 z-10 border border-gray-100/50">
+           <div class="w-full h-full relative overflow-hidden" style="background-color: ${p.colors[1]};">
+              <div class="w-full h-full flex items-center justify-center opacity-30 mix-blend-multiply">
+                <i data-lucide="scan-line" class="w-12 h-12 text-gray-800"></i>
+              </div>
+           </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Details -->
+      <div class="w-full lg:w-[45%] print:w-[45%] h-full print:h-[210mm] flex flex-col justify-center bg-[#faf8f5] relative overflow-hidden">
+        
+        <!-- Decorative subtle background element -->
+        <div class="absolute -top-32 -right-32 w-96 h-96 bg-gradient-to-b from-black/5 to-transparent rounded-full blur-3xl opacity-50 pointer-events-none" style="background-image: linear-gradient(to bottom, var(--accent-color, #b89e81), transparent);"></div>
+
+        <div class="px-12 py-12 lg:px-16 print:px-16 flex flex-col h-full justify-center z-10">
+          <!-- Header -->
+          <div class="mb-10">
+            <span class="text-[10px] font-bold tracking-[0.3em] uppercase block mb-4" style="font-family:'Poppins', sans-serif; color: var(--accent-color, #b89e81);">Style No. ${p.style}</span>
+            <h1 class="text-4xl md:text-5xl font-bold leading-[1.15] text-gray-900" style="font-family:'Playfair Display',serif;">${p.name}</h1>
+          </div>
+
+          <div class="w-16 h-0.5 bg-gradient-to-r from-gray-400 to-transparent mb-10" style="background-image: linear-gradient(to right, var(--accent-color, #b89e81), transparent);"></div>
+
+          <!-- Description -->
+          <div class="mb-12">
+            <p class="text-[14px] leading-[1.8] text-gray-600 font-light" style="font-family:'Poppins',sans-serif;">
+              ${p.description}
+            </p>
+          </div>
+
+          <!-- Specs -->
+          <div class="grid grid-cols-1 gap-8 mb-12">
+            <div>
+              <span class="text-[10px] font-bold tracking-[0.2em] uppercase text-gray-400 mb-2 block" style="font-family:'Poppins',sans-serif;">Materials & Build</span>
+              <p class="text-[13px] leading-relaxed font-medium text-gray-800" style="font-family:'Poppins',sans-serif;">${p.material}</p>
+            </div>
+            <div>
+              <span class="text-[10px] font-bold tracking-[0.2em] uppercase text-gray-400 mb-2 block" style="font-family:'Poppins',sans-serif;">Dimensions</span>
+              <p class="text-[13px] leading-relaxed font-medium text-gray-800" style="font-family:'Poppins',sans-serif;">${p.dimensions}</p>
+            </div>
+          </div>
+
+          <!-- Finishes -->
+          <div class="mt-auto pt-8 border-t border-gray-200/60">
+            <span class="text-[10px] font-bold tracking-[0.2em] uppercase text-gray-400 mb-4 block" style="font-family:'Poppins',sans-serif;">Available Finishes</span>
+            <div class="flex gap-5">
+              ${p.colors.map(color => `
+                <div class="group relative cursor-pointer">
+                  <div class="w-8 h-8 rounded-full shadow-md ring-1 ring-black/10 transition-transform duration-300 group-hover:scale-110 group-hover:ring-offset-2 group-hover:ring-black/20" style="background-color: ${color};"></div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  `).join('');
+  
+  lucide.createIcons();
+  updateNav();
+}
+
+function changePage(dir) {
+  const next = currentPage + dir;
+  if (next < 0 || next >= products.length) return;
+  currentPage = next;
+  document.querySelectorAll('.catalog-page').forEach((el, i) => {
+    if (i !== currentPage) {
+      el.classList.add('hidden');
+    } else {
+      el.classList.remove('hidden');
+    }
+  });
+  updateNav();
+  document.getElementById('app').scrollTop = 0;
+}
+
+function updateNav() {
+  document.getElementById('page-indicator').textContent = `${currentPage + 1} / ${products.length}`;
+  
+  const prevBtn = document.getElementById('prev-btn');
+  const nextBtn = document.getElementById('next-btn');
+
+  if (currentPage === 0) {
+    prevBtn.classList.add('opacity-30', 'cursor-not-allowed');
+    prevBtn.classList.remove('hover:bg-gray-100');
+  } else {
+    prevBtn.classList.remove('opacity-30', 'cursor-not-allowed');
+    prevBtn.classList.add('hover:bg-gray-100');
+  }
+
+  if (currentPage === products.length - 1) {
+    nextBtn.classList.add('opacity-30', 'cursor-not-allowed');
+    nextBtn.classList.remove('hover:bg-gray-100');
+  } else {
+    nextBtn.classList.remove('opacity-30', 'cursor-not-allowed');
+    nextBtn.classList.add('hover:bg-gray-100');
+  }
+}
+
+const defaultConfig = {
+  catalog_title: "Home Furnishing Catalog",
+  brand_tagline: "Contemporary Design Collection",
+  background_color: "#e5e5e5",
+  text_color: "#1a1a1a",
+  accent_color: "#b89e81",
+  muted_color: "#999999",
+  font_family: "Playfair Display",
+  font_size: 16
+};
+
+function applyConfig(config) {
+  const bg = config.background_color || defaultConfig.background_color;
+  const text = config.text_color || defaultConfig.text_color;
+  const accent = config.accent_color || defaultConfig.accent_color;
+  const font = config.font_family || defaultConfig.font_family;
+  const title = config.catalog_title || defaultConfig.catalog_title;
+  const tagline = config.brand_tagline || defaultConfig.brand_tagline;
+
+  document.body.style.backgroundColor = bg;
+  
+  if(document.getElementById('nav-title')) {
+    document.getElementById('nav-title').textContent = title;
+    document.getElementById('nav-title').style.color = text;
+  }
+  if(document.getElementById('nav-tagline')) {
+    document.getElementById('nav-tagline').textContent = tagline;
+  }
+
+  document.documentElement.style.setProperty('--accent-color', accent);
+
+  document.querySelectorAll('h1').forEach(el => {
+    el.style.color = text;
+    el.style.fontFamily = `${font}, serif`;
+  });
+}
+
+renderPages();
+applyConfig(defaultConfig);
+
+if (window.elementSdk && typeof window.elementSdk.init === 'function') {
+  window.elementSdk.init({
+    defaultConfig,
+    onConfigChange: async (config) => {
+      applyConfig(config);
+    },
+    mapToCapabilities: (config) => ({
+      recolorables: [
+        { get: () => config.background_color || defaultConfig.background_color, set: v => { config.background_color = v; window.elementSdk.setConfig({ background_color: v }); } },
+        { get: () => config.text_color || defaultConfig.text_color, set: v => { config.text_color = v; window.elementSdk.setConfig({ text_color: v }); } },
+        { get: () => config.accent_color || defaultConfig.accent_color, set: v => { config.accent_color = v; window.elementSdk.setConfig({ accent_color: v }); } }
+      ],
+      borderables: [],
+      fontEditable: { get: () => config.font_family || defaultConfig.font_family, set: v => { config.font_family = v; window.elementSdk.setConfig({ font_family: v }); } },
+      fontSizeable: { get: () => config.font_size || defaultConfig.font_size, set: v => { config.font_size = v; window.elementSdk.setConfig({ font_size: v }); } }
+    }),
+    mapToEditPanelValues: (config) => new Map([
+      ["catalog_title", config.catalog_title || defaultConfig.catalog_title],
+      ["brand_tagline", config.brand_tagline || defaultConfig.brand_tagline]
+    ])
+  });
+}
+  </script>
+ </body>
+</html>
