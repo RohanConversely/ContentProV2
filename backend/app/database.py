@@ -37,7 +37,63 @@ async def init_db() -> None:
 
 def _run_schema_patches(sync_conn) -> None:
     inspector = inspect(sync_conn)
-    if "jobs" not in inspector.get_table_names():
+    table_names = inspector.get_table_names()
+    if "users" in table_names:
+        user_columns = {column["name"] for column in inspector.get_columns("users")}
+        if "role" not in user_columns:
+            sync_conn.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(32) DEFAULT 'user'"))
+        if "industry" not in user_columns:
+            sync_conn.execute(text("ALTER TABLE users ADD COLUMN industry VARCHAR(64) DEFAULT 'jewelry'"))
+        if "default_image_model" not in user_columns:
+            sync_conn.execute(text("ALTER TABLE users ADD COLUMN default_image_model VARCHAR(50) DEFAULT 'reve'"))
+        sync_conn.execute(text("UPDATE users SET role = 'user' WHERE role IS NULL OR TRIM(role) = ''"))
+        sync_conn.execute(text("UPDATE users SET industry = 'jewelry' WHERE industry IS NULL OR TRIM(industry) = ''"))
+        sync_conn.execute(text("UPDATE users SET default_image_model = 'reve' WHERE default_image_model IS NULL OR TRIM(default_image_model) = ''"))
+        sync_conn.execute(text("UPDATE users SET default_image_model = 'gpt-image-1.5' WHERE default_image_model = 'gpt-image-1'"))
+        sync_conn.execute(text("UPDATE users SET plan = 'free' WHERE plan IS NULL OR TRIM(plan) = ''"))
+    if "industry_prompts" not in table_names:
+        sync_conn.execute(
+            text(
+                """
+                CREATE TABLE industry_prompts (
+                    industry VARCHAR(64) PRIMARY KEY,
+                    prompt_text TEXT NOT NULL,
+                    shot_prompts_json JSON,
+                    created_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL
+                )
+                """
+            )
+        )
+    else:
+        industry_prompt_columns = {column["name"] for column in inspector.get_columns("industry_prompts")}
+        if "shot_prompts_json" not in industry_prompt_columns:
+            sync_conn.execute(text("ALTER TABLE industry_prompts ADD COLUMN shot_prompts_json JSON"))
+    if "user_prompt_overrides" not in table_names:
+        sync_conn.execute(
+            text(
+                """
+                CREATE TABLE user_prompt_overrides (
+                    id VARCHAR(36) PRIMARY KEY,
+                    user_id VARCHAR(36) NOT NULL,
+                    industry VARCHAR(64) NOT NULL,
+                    prompt_text TEXT NOT NULL,
+                    shot_prompts_json JSON,
+                    created_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL,
+                    CONSTRAINT uq_user_prompt_override_user_industry UNIQUE (user_id, industry),
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+                """
+            )
+        )
+        sync_conn.execute(text("CREATE INDEX ix_user_prompt_overrides_user_id ON user_prompt_overrides (user_id)"))
+    else:
+        user_prompt_override_columns = {column["name"] for column in inspector.get_columns("user_prompt_overrides")}
+        if "shot_prompts_json" not in user_prompt_override_columns:
+            sync_conn.execute(text("ALTER TABLE user_prompt_overrides ADD COLUMN shot_prompts_json JSON"))
+
+    if "jobs" not in table_names:
         return
 
     job_columns = {column["name"] for column in inspector.get_columns("jobs")}
@@ -49,6 +105,11 @@ def _run_schema_patches(sync_conn) -> None:
         sync_conn.execute(text("ALTER TABLE jobs ADD COLUMN batch_name VARCHAR(255)"))
     if "image_model" not in job_columns:
         sync_conn.execute(text("ALTER TABLE jobs ADD COLUMN image_model VARCHAR(50) DEFAULT 'flux-2-pro'"))
+    if "requested_image_count" not in job_columns:
+        sync_conn.execute(text("ALTER TABLE jobs ADD COLUMN requested_image_count INTEGER DEFAULT 4"))
+    sync_conn.execute(text("UPDATE jobs SET image_model = 'reve' WHERE image_model IS NULL OR TRIM(image_model) = ''"))
+    sync_conn.execute(text("UPDATE jobs SET image_model = 'gpt-image-1.5' WHERE image_model = 'gpt-image-1'"))
+    sync_conn.execute(text("UPDATE jobs SET requested_image_count = 4 WHERE requested_image_count IS NULL OR requested_image_count < 1"))
 
     asset_columns = {column["name"] for column in inspector.get_columns("assets")}
     if "generation_id" not in asset_columns:

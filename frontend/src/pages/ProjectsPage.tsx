@@ -32,6 +32,7 @@ import {
 } from "@/lib/api";
 import { useNavigate, useParams } from "react-router-dom";
 import { LazyImage } from "@/components/ui/lazy-image";
+import { useAuth } from "@/contexts/AuthContext";
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -120,7 +121,6 @@ const ProjectDetailView = ({
   const [logsError, setLogsError] = useState<string | null>(null);
   const [activeGenerationId, setActiveGenerationId] = useState<string | null>(project.detail.activeGenerationId ?? null);
   const [additionalDescription, setAdditionalDescription] = useState("");
-  const [regenerationModel, setRegenerationModel] = useState<"reve" | "gpt-image-1">("reve");
   const [reveShotTypes, setReveShotTypes] = useState<string[]>(["hero"]);
   const [regenerationInputFiles, setRegenerationInputFiles] = useState<File[]>([]);
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -129,6 +129,9 @@ const ProjectDetailView = ({
   const [regenerationTimeline, setRegenerationTimeline] = useState<{ stage: string; status: string; message: string }[]>([]);
   const [regenerationStatus, setRegenerationStatus] = useState<string | null>(null);
   const { detail } = localProject;
+  const { user } = useAuth();
+  const defaultImageModel = user?.defaultImageModel ?? "reve";
+  const usesReveRegeneration = defaultImageModel === "reve";
 
   useEffect(() => {
     setLocalProject(project);
@@ -214,9 +217,8 @@ const ProjectDetailView = ({
     try {
       const queuedGeneration = await regenerateJobImages(localProject.id, {
         additionalDescription: additionalDescription.trim(),
-        imageModel: regenerationModel,
         inputImages: regenerationInputFiles,
-        shotTypes: regenerationModel === "reve" ? reveShotTypes : [],
+        shotTypes: usesReveRegeneration ? reveShotTypes : [],
       });
       setLocalProject((prev) => ({
         ...prev,
@@ -576,7 +578,7 @@ const ProjectDetailView = ({
           </p>
         </div>
 
-        {regenerationModel === "reve" && (
+        {usesReveRegeneration && (
           <div className="space-y-2">
             <p className="text-sm font-medium">Choose the shot type to be changed (select 1 to 2)</p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -657,17 +659,6 @@ const ProjectDetailView = ({
             </div>
           )}
         </div>
-        <div className="space-y-2">
-          <p className="text-sm font-medium">Image Generation Model</p>
-          <select
-            value={regenerationModel}
-            onChange={(event) => setRegenerationModel(event.target.value as "reve" | "gpt-image-1")}
-            className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
-          >
-            <option value="reve">reve</option>
-            <option value="gpt-image-1">gpt-image-1</option>
-          </select>
-        </div>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             {isRegenerating && (
@@ -686,7 +677,7 @@ const ProjectDetailView = ({
               disabled={
                 !additionalDescription.trim() ||
                 regenerationInputFiles.length === 0 ||
-                (regenerationModel === "reve" && (reveShotTypes.length < 1 || reveShotTypes.length > 2)) ||
+                (usesReveRegeneration && (reveShotTypes.length < 1 || reveShotTypes.length > 2)) ||
                 isRegenerating
               }
               onClick={() => void handleRegenerate()}

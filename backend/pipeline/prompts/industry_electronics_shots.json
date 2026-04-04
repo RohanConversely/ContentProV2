@@ -1,0 +1,8 @@
+[
+  {"key":"hero","label":"Hero","prompt":"Create a premium hero product image on a clean studio or minimal lifestyle background. Preserve exact hardware design, dimensions, ports, buttons, branding, and surface finish."},
+  {"key":"lifestyle","label":"Lifestyle","prompt":"Create a refined real-world desk or home setup with minimal props that supports the product story. Keep the full product visible and strictly unchanged."},
+  {"key":"wearable","label":"Wearable","prompt":"Create an in-use composition showing the product naturally in context when applicable. Preserve exact geometry, interface details, and material finish."},
+  {"key":"wearable_ethnic","label":"Wearable ethnic","prompt":"Create a second contextual setup with a different angle and environment variation. Keep the product fully visible and absolutely faithful to the original design."},
+  {"key":"jewellery_box","label":"Jewellery Box","prompt":"Create a premium close hero composition emphasizing product presence and industrial design with minimal supporting props. Preserve exact structure and detailing."},
+  {"key":"close_detail","label":"Close Detail","prompt":"Create a tight detail shot highlighting material finish, ports, controls, and hardware precision without changing any product details."}
+]

@@ -8,6 +8,9 @@ export interface UserProfile {
   email: string;
   avatar: string;
   plan: PlanType;
+  role: "user" | "superadmin";
+  industry: string;
+  defaultImageModel: "reve" | "gpt-image-1.5";
   memberSince: string;
 }
 
@@ -37,6 +40,7 @@ export interface ProjectDetail {
   productName: string;
   productCategory: string;
   imageModel?: string;
+  requestedImageCount?: number;
   productDescription?: string;
   brandWebsite?: string;
   dimensions?: string;
@@ -101,6 +105,9 @@ export const mockUser: UserProfile = {
   email: "alex@example.com",
   avatar: "https://api.dicebear.com/7.x/initials/svg?seed=ContentPro&backgroundType=gradientLinear",
   plan: "free",
+  role: "user",
+  industry: "jewelry",
+  defaultImageModel: "reve",
   memberSince: "January 2026",
 };
 

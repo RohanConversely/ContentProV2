@@ -17,15 +17,12 @@ DEFAULT_RESULT_PREFIX = "__RESULT__"
 
 
 def load_prompt(prompt_file: str) -> str:
-    prompts_dir = Path(__file__).parent.parent / "prompts"
-    prompt_path = prompts_dir / prompt_file
+    prompt_path = Path(prompt_file)
+    if not prompt_path.is_absolute():
+        prompts_dir = Path(__file__).parent.parent / "prompts"
+        prompt_path = prompts_dir / prompt_file
     with open(prompt_path, "r", encoding="utf-8") as f:
         return f.read()
-
-
-def load_kyc(kyc_file: str) -> dict[str, Any]:
-    with open(kyc_file, "r", encoding="utf-8") as f:
-        return json.load(f)
 
 
 def build_logger(job_log_file: str | None) -> JsonLogger:
@@ -43,6 +40,32 @@ def with_context(base: dict[str, Any] | None, extra: dict[str, Any]) -> dict[str
     return merged
 
 
+def _normalize_shot_prompts(raw_value: Any) -> list[dict[str, str]]:
+    if not isinstance(raw_value, list):
+        return []
+    normalized: list[dict[str, str]] = []
+    for index, entry in enumerate(raw_value, start=1):
+        if not isinstance(entry, dict):
+            continue
+        key = str(entry.get("key") or f"shot_{index}").strip().lower()
+        label = str(entry.get("label") or key.replace("_", " ").title()).strip()
+        prompt = str(entry.get("prompt") or "").strip()
+        if not prompt:
+            continue
+        normalized.append({"key": key, "label": label, "prompt": prompt})
+    return normalized
+
+
+def _selected_shot_prompts(shot_prompts: list[dict[str, str]] | None, num_images: int) -> list[dict[str, str]]:
+    normalized = _normalize_shot_prompts(shot_prompts)
+    if not normalized:
+        return []
+    selected = normalized[: max(1, num_images)]
+    while len(selected) < max(1, num_images):
+        selected.append(selected[-1])
+    return selected
+
+
 def generate_images(
     brand_name: str,
     kyc_path: str,
@@ -52,6 +75,8 @@ def generate_images(
     temperature: float = 0.1,
     output_dir: str = "generated_images",
     prompt_file: str = "ImageWithKYCTesting.txt",
+    prompt_text: str | None = None,
+    shot_prompts: list[dict[str, str]] | None = None,
     additional_description: str | None = None,
     regeneration_only_inputs: bool = False,
     shot_types: list[str] | None = None,
@@ -59,6 +84,7 @@ def generate_images(
     log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     del shot_types
+    del kyc_path
     stage_logger = logger_obj or JsonLogger()
 
     api_key = os.getenv("OPENAI_API_KEY")
@@ -77,12 +103,9 @@ def generate_images(
             raise ValueError("additional_description is required for regeneration-only image generation.")
         user_message = additional_description.strip()
     else:
-        prompt_template = load_prompt(prompt_file)
-        if not kyc_path or not Path(kyc_path).exists():
-            raise ValueError(f"KYC JSON file not found: {kyc_path}")
+        prompt_template = prompt_text.strip() if prompt_text else load_prompt(prompt_file)
         user_message = (
-            "Generate A+ content images based on the attached product image, the "
-            "attached KYC JSON file, and the instructions below.\n"
+            "Generate A+ content images based on the attached product image and the instructions below.\n"
             f"Brand Name: {brand_name}\n\n"
             f"{prompt_template}"
         )
@@ -108,25 +131,21 @@ def generate_images(
         image_data_url = f"data:{mime_type};base64,{image_b64}"
         content.append({"type": "input_image", "image_url": image_data_url})
 
-    kyc_data_url: str | None = None
-    if not regeneration_only_inputs:
-        with open(kyc_path, "rb") as kyc_file:
-            kyc_b64 = base64.b64encode(kyc_file.read()).decode("utf-8")
-        kyc_data_url = f"data:application/json;base64,{kyc_b64}"
+    selected_shot_prompts = _selected_shot_prompts(shot_prompts, num_images)
 
     stage_logger.info(
-        "Requesting image generation with KYC.",
+        "Requesting image generation with GPT image.",
         with_context(
             log_context,
             {
-                "model": "gpt-4.1",
+                "model": "gpt-image-1.5",
                 "image_paths": resolved_image_paths,
                 "brand_name": brand_name,
-                "kyc_path": str(Path(kyc_path).resolve()),
                 "num_images": num_images,
                 "temperature": temperature,
                 "output_dir": str(output_path.resolve()),
                 "prompt_file": prompt_file,
+                "shot_count": len(selected_shot_prompts),
                 "additional_description": additional_description.strip() if additional_description else None,
                 "regeneration_only_inputs": regeneration_only_inputs,
             },
@@ -141,44 +160,40 @@ def generate_images(
     max_attempts = max(1, num_images * 2)
     while len(generated_files) < num_images and attempts < max_attempts:
         remaining_images = num_images - len(generated_files)
+        remaining_shot_prompts = selected_shot_prompts[len(generated_files): len(generated_files) + remaining_images]
+        if regeneration_only_inputs:
+            request_text = user_message
+        else:
+            shot_prompt_lines = [
+                f"Image {index}: {shot_prompt['label']} - {shot_prompt['prompt']}"
+                for index, shot_prompt in enumerate(remaining_shot_prompts, start=len(generated_files) + 1)
+            ]
+            request_text = (
+                f"{user_message}\n\n"
+                f"Generate exactly {remaining_images} distinct image variation(s) in this single request.\n"
+                "Use the following ordered shot instructions:\n"
+                f"{chr(10).join(shot_prompt_lines)}"
+            )
         response = client.responses.create(
-            model="gpt-4.1",
+            model="gpt-image-1.5",
             input=[
                 {
                     "role": "user",
-                    "content": (
-                        [
-                            {
-                                "type": "input_text",
-                                "text": user_message,
-                            },
-                            *content[1:],
-                        ]
-                        if regeneration_only_inputs
-                        else [
-                            {
-                                "type": "input_text",
-                                "text": (
-                                    f"{user_message}\n\n"
-                                    f"Generate {remaining_images} distinct A+ content image variation(s). "
-                                    "Each variation must be visually different while staying faithful to the product and KYC."
-                                ),
-                            },
-                            *content[1:],
-                            {
-                                "type": "input_file",
-                                "filename": Path(kyc_path).name,
-                                "file_data": kyc_data_url,
-                            },
-                        ]
-                    ),
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": request_text,
+                        },
+                        *content[1:],
+                    ],
                 }
             ],
             tools=[
                 {
                     "type": "image_generation",
                     "size": "1024x1024",
-                    "quality": "high",
+                    "quality": "low",
+                    "input_fidelity": "high",
                 }
             ],
             tool_choice={"type": "image_generation"},
@@ -232,7 +247,7 @@ def generate_images(
         "generated_images": generated_files,
         "count": len(generated_files),
         "image_paths": resolved_image_paths,
-        "kyc_path": str(Path(kyc_path).resolve()) if (kyc_path and not regeneration_only_inputs) else None,
+        "kyc_path": None,
         "additional_description": additional_description.strip() if additional_description else None,
     }
 
@@ -245,7 +260,7 @@ def run_cli(args: argparse.Namespace) -> int:
         result = generate_images(
             image_paths=[str(Path(args.image_path).resolve())],
             brand_name=args.brand_name,
-            kyc_path=str(Path(args.kyc_path).resolve()),
+            kyc_path=str(Path(args.kyc_path).resolve()) if args.kyc_path else "",
             num_images=args.num_images,
             temperature=args.temperature,
             output_dir=str(Path(args.output_dir).resolve()),
@@ -276,10 +291,10 @@ def main() -> None:
     if len(sys.argv) == 1:
         raise SystemExit(run_default())
 
-    parser = argparse.ArgumentParser(description="Generate A+ images from product image + KYC.")
+    parser = argparse.ArgumentParser(description="Generate A+ images from product image.")
     parser.add_argument("--image-path", required=True, help="Path to product image")
     parser.add_argument("--brand-name", required=True, help="Brand name")
-    parser.add_argument("--kyc-path", required=True, help="Path to KYC JSON file")
+    parser.add_argument("--kyc-path", required=False, help="Path to KYC JSON file")
     parser.add_argument("--num-images", type=int, default=6, help="Number of images to generate")
     parser.add_argument(
         "--temperature",

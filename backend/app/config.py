@@ -33,6 +33,9 @@ class Settings(BaseSettings):
 
     google_client_id: str | None = None
     google_client_secret: str | None = None
+    superadmin_email: str = "admin@edxso.com"
+    superadmin_password: str = "admin@1234"
+    superadmin_display_name: str = "ContentPro Superadmin"
 
     @property
     def google_callback_url(self) -> str:

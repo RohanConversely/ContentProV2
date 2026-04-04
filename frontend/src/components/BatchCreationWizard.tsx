@@ -41,8 +41,6 @@ type BatchJobRunPayload = {
   batch_name?: string;
 };
 
-type ImageModel = "reve" | "gpt-image-1";
-
 const TEMPLATE_HEADERS = [
   "image link",
   "brand name",
@@ -275,7 +273,7 @@ export default function BatchCreationWizard({
   const [columnHeaders, setColumnHeaders] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sourceType, setSourceType] = useState<BatchSourceType>("image_link");
-  const [imageModel, setImageModel] = useState<ImageModel>("reve");
+  const [requestedImageCount, setRequestedImageCount] = useState(4);
   const isRunning = false;
 
   const validJobs = useMemo(() => jobs.filter((j) => j.errors.length === 0), [jobs]);
@@ -388,7 +386,7 @@ export default function BatchCreationWizard({
         dimensionBreadth: "",
         dimensionHeight: "",
         productDescription: j.productDescription,
-        imageModel,
+        requestedImageCount,
         productImages: [j.imageLink],
         additionalInfo: j.additionalInfo,
       };
@@ -483,14 +481,17 @@ export default function BatchCreationWizard({
             : 'Each row should contain one direct image link in the "image link" column.'}
         </p>
         <div className="mt-4 space-y-2">
-          <p className="text-sm font-medium">Image Generation Model</p>
+          <p className="text-sm font-medium">Number of Images</p>
           <select
-            value={imageModel}
-            onChange={(e) => setImageModel(e.target.value as ImageModel)}
+            value={String(requestedImageCount)}
+            onChange={(e) => setRequestedImageCount(Number(e.target.value))}
             className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
           >
-            <option value="reve">reve</option>
-            <option value="gpt-image-1">gpt-image-1</option>
+            {[1, 2, 3, 4].map((count) => (
+              <option key={count} value={count}>
+                {count}
+              </option>
+            ))}
           </select>
         </div>
       </div>

@@ -16,6 +16,7 @@ import BatchRunPage from "./pages/BatchRunPage";
 import BatchDetailPage from "./pages/BatchDetailPage";
 import AuthPage from "./pages/AuthPage";
 import AuthCallbackPage from "./pages/AuthCallbackPage";
+import AdminUsersPage from "./pages/AdminUsersPage";
 
 const queryClient = new QueryClient();
 
@@ -84,6 +85,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <SettingsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/users"
+                element={
+                  <ProtectedRoute requireRole="superadmin">
+                    <AdminUsersPage />
                   </ProtectedRoute>
                 }
               />

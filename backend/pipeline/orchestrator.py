@@ -14,7 +14,6 @@ from .logger import JsonLogger
 from .stages.image_gen_with_flux import generate_images as generate_images_flux
 from .stages.image_gen_with_KYC import generate_images
 from .stages.reve.image_gen_reve import generate_images as generate_images_reve
-from .stages.product_kyc import generate_image_kyc
 
 
 class PipelineStageError(RuntimeError):
@@ -38,9 +37,11 @@ class JobContext:
     social_link_2: str | None = None
     additional_info: dict[str, Any] | None = None
     image_model: str = "reve"
-    num_images: int = 6
+    num_images: int = 4
     temperature: float = 0.1
     prompt_file: str = "ImageWithKYCTesting.txt"
+    prompt_text: str | None = None
+    shot_prompts: list[dict[str, str]] | None = None
     additional_description: str | None = None
     regeneration_only_inputs: bool = False
     shot_types: list[str] | None = None
@@ -120,26 +121,10 @@ def filter_kyc_for_stage2(source_path: Path, target_path: Path) -> Path:
     return target_path.resolve()
 
 
-async def _run_stage_1(ctx: JobContext, logger: JsonLogger) -> dict[str, Any]:
-    return await asyncio.to_thread(
-        generate_image_kyc,
-        image_paths=[str(image_path.resolve()) for image_path in ctx.image_paths],
-        brand_name=ctx.brand_name,
-        brand_website=ctx.brand_website,
-        product_name=ctx.product_name,
-        product_category=ctx.product_category,
-        social_link_1=ctx.social_link_1,
-        social_link_2=ctx.social_link_2,
-        additional_info=ctx.additional_info,
-        output_dir=str(ctx.product_kyc_dir),
-        logger_obj=logger,
-        log_context={"job_id": ctx.job_id, "stage": "stage_1_product_kyc"},
-    )
-
-
 async def _run_stage_2(ctx: JobContext, filtered_kyc_path: Path | None, logger: JsonLogger) -> dict[str, Any]:
     stage_2_map = {
         "flux-2-pro": generate_images_flux,
+        "gpt-image-1.5": generate_images,
         "gpt-image-1": generate_images,
         "reve": generate_images_reve,
     }
@@ -147,12 +132,9 @@ async def _run_stage_2(ctx: JobContext, filtered_kyc_path: Path | None, logger: 
     if stage_2_fn is None:
         raise PipelineStageError(f"Unsupported image model: {ctx.image_model}")
 
-    prompt_file = ctx.prompt_file
-    if ctx.image_model == "reve":
-        prompt_file = "imageGen.txt"
-
-    if not ctx.regeneration_only_inputs and filtered_kyc_path is None:
-        raise PipelineStageError("KYC path is required for standard stage 2 generation.")
+    prompt_file = ctx.prompt_file or ("imageGen.txt" if ctx.image_model == "reve" else "ImageWithKYCTesting.txt")
+    if ctx.image_model == "flux-2-pro" and not ctx.regeneration_only_inputs and filtered_kyc_path is None:
+        raise PipelineStageError("KYC path is required for flux generation.")
 
     return await asyncio.to_thread(
         stage_2_fn,
@@ -163,6 +145,8 @@ async def _run_stage_2(ctx: JobContext, filtered_kyc_path: Path | None, logger: 
         temperature=ctx.temperature,
         output_dir=str(ctx.generated_images_dir),
         prompt_file=prompt_file,
+        prompt_text=ctx.prompt_text,
+        shot_prompts=ctx.shot_prompts,
         additional_description=ctx.additional_description,
         regeneration_only_inputs=ctx.regeneration_only_inputs,
         shot_types=ctx.shot_types,
@@ -225,24 +209,7 @@ async def run_image_pipeline(ctx: JobContext) -> ImagePipelineResult:
         },
     )
 
-    stage_1_result = await _run_stage_1(ctx, logger)
-    if not stage_1_result.get("ok"):
-        raise PipelineStageError("Stage 1 failed to generate KYC.")
-
-    kyc_json_path = Path(stage_1_result["kyc_json_path"]).resolve()
-    if not kyc_json_path.exists():
-        raise PipelineStageError(f"Stage 1 output missing: {kyc_json_path}")
-
-    filtered_kyc_path = filter_kyc_for_stage2(
-        kyc_json_path,
-        ctx.product_kyc_dir / f"{kyc_json_path.stem}_filtered.json",
-    )
-    logger.info(
-        "Filtered KYC prepared for image generation.",
-        {"job_id": ctx.job_id, "kyc_json_path": str(filtered_kyc_path)},
-    )
-
-    stage_2_result = await _run_stage_2(ctx, filtered_kyc_path, logger)
+    stage_2_result = await _run_stage_2(ctx, None, logger)
     if not stage_2_result.get("ok"):
         raise PipelineStageError("Stage 2 failed to generate images.")
 
@@ -261,8 +228,6 @@ async def run_image_pipeline(ctx: JobContext) -> ImagePipelineResult:
     )
 
     artifacts = [
-        StageArtifact(stage="stage_1", type="kyc_json", path=str(kyc_json_path)),
-        StageArtifact(stage="stage_1", type="filtered_kyc_json", path=str(filtered_kyc_path)),
         *[
             StageArtifact(stage="stage_2", type="generated_image", path=path)
             for path in image_paths
@@ -272,8 +237,8 @@ async def run_image_pipeline(ctx: JobContext) -> ImagePipelineResult:
     return ImagePipelineResult(
         job_id=ctx.job_id,
         status="completed",
-        kyc_json_path=str(kyc_json_path),
-        filtered_kyc_json_path=str(filtered_kyc_path),
+        kyc_json_path="",
+        filtered_kyc_json_path="",
         generated_images=image_paths,
         artifacts=artifacts,
         workspace=str(ctx.work_dir),

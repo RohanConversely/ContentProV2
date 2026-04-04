@@ -48,7 +48,7 @@ export interface ProductFormData {
   dimensionBreadth: string;
   dimensionHeight: string;
   productDescription: string;
-  imageModel: "reve" | "gpt-image-1";
+  requestedImageCount: number;
   productImages: string[];
   additionalInfo?: Record<string, string>;
 }
@@ -72,7 +72,7 @@ const emptyFormData: ProductFormData = {
   dimensionBreadth: "",
   dimensionHeight: "",
   productDescription: "",
-  imageModel: "reve",
+  requestedImageCount: 4,
   productImages: [],
 };
 
@@ -84,8 +84,6 @@ const dimensionUnits = [
 ];
 
 const MAX_SOURCE_IMAGES = 5;
-const DEFAULT_IMAGE_MODEL: "reve" | "gpt-image-1" = "reve";
-
 const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
   const [formData, setFormData] = useState<ProductFormData>(emptyFormData);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
@@ -99,7 +97,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
   const [jobTimeline, setJobTimeline] = useState<JobEventPayload[]>([]);
   const resumedJobRef = useRef<string | null>(null);
 
-  const updateField = (field: keyof ProductFormData, value: string | string[]) => {
+  const updateField = (field: keyof ProductFormData, value: string | string[] | number) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -161,14 +159,16 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
   useEffect(() => {
     const persisted = readActiveSingleRun();
     if (!persisted || persisted.mode !== mode || !persisted.jobId) return;
-    const persistedImageModel =
-      persisted.formData.imageModel === "reve" || persisted.formData.imageModel === "gpt-image-1"
-        ? persisted.formData.imageModel
-        : DEFAULT_IMAGE_MODEL;
+    const persistedRequestedImageCount =
+      typeof persisted.formData.requestedImageCount === "number" &&
+      persisted.formData.requestedImageCount >= 1 &&
+      persisted.formData.requestedImageCount <= 4
+        ? persisted.formData.requestedImageCount
+        : 4;
 
     setFormData({
       ...persisted.formData,
-      imageModel: persistedImageModel,
+      requestedImageCount: persistedRequestedImageCount,
     });
     setShowResults(true);
     setIsGenerating(persisted.isGenerating);
@@ -304,7 +304,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
         brandWebsite: formData.brandWebsite,
         productName: formData.productName,
         productCategory: formData.productCategory,
-        imageModel: formData.imageModel,
+        requestedImageCount: formData.requestedImageCount,
         socialLink1: formData.socialLinkInstagram || undefined,
         socialLink2: formData.socialLinkFacebook || undefined,
         socialLink3: formData.socialLinkLinkedin || undefined,
@@ -475,7 +475,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
                 type="text"
                 value={formData.brandName}
                 onChange={(e) => updateField("brandName", e.target.value)}
-                placeholder="e.g., Tatsya"
+                placeholder=""
                 className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
               />
             </div>
@@ -488,7 +488,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
                 type="url"
                 value={formData.brandWebsite}
                 onChange={(e) => updateField("brandWebsite", e.target.value)}
-                placeholder="https://example.com"
+                placeholder=""
                 className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
               />
             </div>
@@ -511,7 +511,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
                 type="text"
                 value={formData.productName}
                 onChange={(e) => updateField("productName", e.target.value)}
-                placeholder="e.g., Marble Jewelry Stand"
+                placeholder=""
                 className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
               />
             </div>
@@ -524,7 +524,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
                 type="text"
                 value={formData.productCategory}
                 onChange={(e) => updateField("productCategory", e.target.value)}
-                placeholder="e.g., Home & Kitchen > Decor"
+                placeholder=""
                 className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
               />
             </div>
@@ -532,15 +532,18 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium">Image Generation Model</label>
-            <select
-              value={formData.imageModel}
-              onChange={(e) => updateField("imageModel", e.target.value as "reve" | "gpt-image-1")}
-              className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
-            >
-              <option value="reve">reve</option>
-              <option value="gpt-image-1">gpt-image-1</option>
-            </select>
+          <label className="text-sm font-medium">Number of Images</label>
+          <select
+            value={String(formData.requestedImageCount)}
+            onChange={(e) => updateField("requestedImageCount", Number(e.target.value))}
+            className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+          >
+            {[1, 2, 3, 4].map((count) => (
+              <option key={count} value={count}>
+                {count}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Product Dimensions */}
@@ -705,7 +708,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
                 type="url"
                 value={formData.socialLinkInstagram}
                 onChange={(e) => updateField("socialLinkInstagram", e.target.value)}
-                placeholder="https://instagram.com/brand"
+                placeholder=""
                 className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
               />
             </div>
@@ -718,7 +721,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
                 type="url"
                 value={formData.socialLinkFacebook}
                 onChange={(e) => updateField("socialLinkFacebook", e.target.value)}
-                placeholder="https://facebook.com/brand"
+                placeholder=""
                 className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
               />
             </div>
@@ -731,7 +734,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
                 type="url"
                 value={formData.socialLinkLinkedin}
                 onChange={(e) => updateField("socialLinkLinkedin", e.target.value)}
-                placeholder="https://linkedin.com/company/brand"
+                placeholder=""
                 className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
               />
             </div>
@@ -744,7 +747,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
                 type="url"
                 value={formData.socialLinkX}
                 onChange={(e) => updateField("socialLinkX", e.target.value)}
-                placeholder="https://x.com/brand"
+                placeholder=""
                 className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
               />
             </div>

@@ -41,14 +41,37 @@ interface BackendTokenResponse {
   user_id: string;
   email: string;
   display_name: string;
+  role: string;
+  industry: string;
+  default_image_model: "reve" | "gpt-image-1.5" | "gpt-image-1";
 }
 
 interface BackendMeResponse {
   user_id: string;
   email: string;
   display_name: string;
+  role: "user" | "superadmin";
+  industry: string;
+  default_image_model: "reve" | "gpt-image-1.5" | "gpt-image-1";
   plan: "free" | "pro";
   member_since: string;
+}
+
+interface BackendAdminUserResponse {
+  id: string;
+  email: string;
+  display_name: string;
+  role: "user" | "superadmin";
+  industry: string;
+  default_image_model: "reve" | "gpt-image-1.5" | "gpt-image-1";
+  plan: "free" | "pro" | string;
+  created_at: string;
+}
+
+interface BackendPromptResponse {
+  industry: string;
+  prompt_text: string;
+  shot_prompts: { key: string; label: string; prompt: string }[];
 }
 
 interface BackendUsageResponse {
@@ -93,7 +116,8 @@ export interface BackendJobSummaryResponse {
   brand_name: string;
   product_name: string;
   job_type: string;
-  image_model: "reve" | "flux-2-pro" | "gpt-image-1";
+  image_model: "reve" | "flux-2-pro" | "gpt-image-1.5" | "gpt-image-1";
+  requested_image_count: number;
   batch_id?: string;
   batch_name?: string;
   total_jobs?: number;
@@ -150,6 +174,12 @@ export interface AuthPayload {
 
 export interface RegisterPayload extends AuthPayload {
   displayName: string;
+  industry: string;
+}
+
+export interface UpdateProfilePayload {
+  displayName?: string;
+  industry?: string;
 }
 
 export interface ChangePasswordPayload {
@@ -169,7 +199,7 @@ export interface GenerateImagesInput {
   socialLink3?: string;
   socialLink4?: string;
   additionalInput?: Record<string, unknown>;
-  imageModel?: "reve" | "gpt-image-1";
+  requestedImageCount?: number;
 }
 
 export interface JobEventPayload {
@@ -211,9 +241,39 @@ export interface JobGenerationSummary {
 
 export interface RegenerateImagesInput {
   additionalDescription: string;
-  imageModel?: "reve" | "gpt-image-1";
   inputImages?: File[];
   shotTypes?: string[];
+}
+
+export interface AdminUserRecord {
+  id: string;
+  email: string;
+  displayName: string;
+  role: "user" | "superadmin";
+  industry: string;
+  defaultImageModel: "reve" | "gpt-image-1.5";
+  plan: string;
+  createdAt: string;
+}
+
+export interface AdminCreateUserPayload {
+  email: string;
+  password: string;
+  displayName: string;
+  role: "user" | "superadmin";
+  industry: string;
+  defaultImageModel: "reve" | "gpt-image-1.5";
+  plan: string;
+}
+
+export interface AdminUpdateUserPayload {
+  email?: string;
+  password?: string;
+  displayName?: string;
+  role?: "user" | "superadmin";
+  industry?: string;
+  defaultImageModel?: "reve" | "gpt-image-1.5";
+  plan?: string;
 }
 
 function inferFilename(url: string, fallback: string): string {
@@ -277,13 +337,33 @@ function formatDate(value: string): string {
 }
 
 function mapUserProfile(payload: BackendMeResponse): UserProfile {
+  const normalizedModel =
+    payload.default_image_model === "gpt-image-1" ? "gpt-image-1.5" : payload.default_image_model;
   return {
     id: payload.user_id,
     name: payload.display_name,
     email: payload.email,
     avatar: buildAvatarUrl(payload.display_name || payload.email),
     plan: payload.plan,
+    role: payload.role,
+    industry: payload.industry,
+    defaultImageModel: normalizedModel,
     memberSince: formatDate(payload.member_since),
+  };
+}
+
+function mapAdminUser(payload: BackendAdminUserResponse): AdminUserRecord {
+  const normalizedModel =
+    payload.default_image_model === "gpt-image-1" ? "gpt-image-1.5" : payload.default_image_model;
+  return {
+    id: payload.id,
+    email: payload.email,
+    displayName: payload.display_name,
+    role: payload.role,
+    industry: payload.industry,
+    defaultImageModel: normalizedModel,
+    plan: payload.plan,
+    createdAt: payload.created_at,
   };
 }
 
@@ -411,6 +491,7 @@ function mapProject(job: BackendJobResponse, summary?: BackendJobSummaryResponse
       activeGenerationId: activeGeneration?.id ?? null,
       generations,
       imageModel: summary?.image_model ?? job.image_model,
+      requestedImageCount: summary?.requested_image_count ?? job.requested_image_count,
     },
   };
 }
@@ -469,6 +550,7 @@ export async function registerAccount(payload: RegisterPayload): Promise<UserPro
         email: payload.email,
         password: payload.password,
         display_name: payload.displayName,
+        industry: payload.industry,
       }),
     },
     false,
@@ -493,6 +575,24 @@ export async function loginAccount(payload: AuthPayload): Promise<UserProfile> {
 
 export async function getCurrentUser(): Promise<UserProfile> {
   const response = await apiJson<BackendMeResponse>("/auth/me", {}, true);
+  return mapUserProfile(response);
+}
+
+export async function updateCurrentUser(payload: UpdateProfilePayload): Promise<UserProfile> {
+  const response = await apiJson<BackendMeResponse>(
+    "/auth/me",
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        display_name: payload.displayName,
+        industry: payload.industry,
+      }),
+    },
+    true,
+  );
   return mapUserProfile(response);
 }
 
@@ -546,7 +646,7 @@ export async function createJob(
       },
       body: JSON.stringify({
         job_type: "image",
-        image_model: input.imageModel ?? "reve",
+        requested_image_count: input.requestedImageCount ?? 4,
         brand_name: input.brandName,
         brand_website: input.brandWebsite,
         product_name: input.productName,
@@ -633,9 +733,6 @@ export async function getJob(jobId: string): Promise<BackendJobResponse> {
 export async function regenerateJobImages(jobId: string, input: RegenerateImagesInput): Promise<JobGenerationSummary> {
   const formData = new FormData();
   formData.append("additional_description", input.additionalDescription);
-  if (input.imageModel) {
-    formData.append("image_model", input.imageModel);
-  }
   (input.shotTypes ?? []).forEach((shotType) => formData.append("shot_types", shotType));
   (input.inputImages ?? []).forEach((file) => formData.append("input_images", file));
 
@@ -663,6 +760,110 @@ export async function cancelJob(jobId: string): Promise<{ ok: boolean; status: s
     {
       method: "POST",
     },
+    true,
+  );
+}
+
+export async function adminListUsers(): Promise<AdminUserRecord[]> {
+  const response = await apiJson<BackendAdminUserResponse[]>("/admin/users", {}, true);
+  return response.map(mapAdminUser);
+}
+
+export async function adminCreateUser(payload: AdminCreateUserPayload): Promise<AdminUserRecord> {
+  const response = await apiJson<BackendAdminUserResponse>(
+    "/admin/users",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: payload.email,
+        password: payload.password,
+        display_name: payload.displayName,
+        role: payload.role,
+        industry: payload.industry,
+        default_image_model: payload.defaultImageModel,
+        plan: payload.plan,
+      }),
+    },
+    true,
+  );
+  return mapAdminUser(response);
+}
+
+export async function adminUpdateUser(userId: string, payload: AdminUpdateUserPayload): Promise<AdminUserRecord> {
+  const response = await apiJson<BackendAdminUserResponse>(
+    `/admin/users/${encodeURIComponent(userId)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: payload.email,
+        password: payload.password,
+        display_name: payload.displayName,
+        role: payload.role,
+        industry: payload.industry,
+        default_image_model: payload.defaultImageModel,
+        plan: payload.plan,
+      }),
+    },
+    true,
+  );
+  return mapAdminUser(response);
+}
+
+export async function adminDeleteUser(userId: string): Promise<void> {
+  await apiJson<{ ok: boolean }>(`/admin/users/${encodeURIComponent(userId)}`, { method: "DELETE" }, true);
+}
+
+export async function adminListDefaultPrompts(): Promise<BackendPromptResponse[]> {
+  return apiJson<BackendPromptResponse[]>("/admin/prompts/defaults", {}, true);
+}
+
+export async function adminUpdateDefaultPrompt(industry: string, promptText: string): Promise<BackendPromptResponse> {
+  return apiJson<BackendPromptResponse>(
+    `/admin/prompts/defaults/${encodeURIComponent(industry)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt_text: promptText }),
+    },
+    true,
+  );
+}
+
+export async function adminGetUserPromptOverride(userId: string, industry: string): Promise<BackendPromptResponse | null> {
+  try {
+    return await apiJson<BackendPromptResponse>(
+      `/admin/users/${encodeURIComponent(userId)}/prompts/${encodeURIComponent(industry)}`,
+      {},
+      true,
+    );
+  } catch {
+    return null;
+  }
+}
+
+export async function adminSetUserPromptOverride(
+  userId: string,
+  industry: string,
+  promptText: string,
+  shotPrompts?: { key: string; label: string; prompt: string }[],
+): Promise<BackendPromptResponse> {
+  return apiJson<BackendPromptResponse>(
+    `/admin/users/${encodeURIComponent(userId)}/prompts/${encodeURIComponent(industry)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt_text: promptText, shot_prompts: shotPrompts }),
+    },
+    true,
+  );
+}
+
+export async function adminDeleteUserPromptOverride(userId: string, industry: string): Promise<void> {
+  await apiJson<{ ok: boolean }>(
+    `/admin/users/${encodeURIComponent(userId)}/prompts/${encodeURIComponent(industry)}`,
+    { method: "DELETE" },
     true,
   );
 }

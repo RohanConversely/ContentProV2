@@ -18,6 +18,8 @@ from app.models.asset import Asset
 from app.models.job_generation import JobGeneration
 from app.models.job import Job
 from app.models.pricing import PipelineLog, PricingSnapshot
+from app.models.user import User
+from app.services.prompt_management import PromptBundle, get_effective_prompt_bundle
 from app.services.storage import storage_service
 from app.utils.presigned_urls import generate_url
 from pipeline.orchestrator import JobContext, PipelineStageError, run_image_pipeline, run_stage_2_only
@@ -37,6 +39,19 @@ FINAL_SIZE = (2048, 2048)
 SOFT_DELETED_STATUS = "deleted"
 BATCH_PROGRESS_STALL_SECONDS = 180
 WATCHDOG_INTERVAL_SECONDS = 30
+
+
+async def _resolve_effective_prompt_bundle(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    workspace: Path,
+) -> PromptBundle:
+    del workspace
+    user = await db.get(User, user_id)
+    if user is None:
+        raise RuntimeError("User not found for prompt resolution.")
+    return await get_effective_prompt_bundle(db, user, user.industry)
 
 
 async def emit(job_id: str, stage: str, status: str, message: str, db: AsyncSession | None = None) -> None:
@@ -143,10 +158,13 @@ async def _create_asset(
 
 
 async def _upload_stage_outputs(db: AsyncSession, job: Job, result: dict[str, Any]) -> None:
-    stage_1_paths = [
-        ("kyc_json", Path(result["kyc_json_path"])),
-        ("kyc_json", Path(result["filtered_kyc_json_path"])),
-    ]
+    stage_1_paths: list[tuple[str, Path]] = []
+    kyc_json_path = result.get("kyc_json_path")
+    filtered_kyc_json_path = result.get("filtered_kyc_json_path")
+    if isinstance(kyc_json_path, str) and kyc_json_path.strip():
+        stage_1_paths.append(("kyc_json", Path(kyc_json_path)))
+    if isinstance(filtered_kyc_json_path, str) and filtered_kyc_json_path.strip():
+        stage_1_paths.append(("kyc_json", Path(filtered_kyc_json_path)))
     for asset_type, local_path in stage_1_paths:
         storage_key = f"{job.storage_prefix}/stage_1/{local_path.name}"
         await storage_service.upload_file(local_path, storage_key)
@@ -298,24 +316,6 @@ async def _restore_completed_job_after_regeneration_cancel(
     await db.commit()
 
 
-async def _get_latest_filtered_kyc_asset(db: AsyncSession, job: Job) -> Asset | None:
-    result = await db.execute(
-        select(Asset)
-        .where(
-            Asset.job_id == job.id,
-            Asset.asset_type == "kyc_json",
-            Asset.is_deleted.is_(False),
-        )
-        .order_by(Asset.created_at.desc())
-    )
-    for asset in result.scalars().all():
-        filename = (asset.original_filename or "").lower()
-        storage_key = asset.storage_key.lower()
-        if "_filtered" in filename or "_filtered" in storage_key:
-            return asset
-    return None
-
-
 def _parse_log_line(line: str) -> dict[str, Any] | None:
     try:
         payload = json.loads(line)
@@ -361,7 +361,11 @@ async def _monitor_job_log(
             elif stage_1_enabled and message == "KYC saved.":
                 async with AsyncSessionLocal() as db:
                     await emit_for_job(job, "stage_1", "running", "Product KYC complete", db)
-            elif message == "Requesting image generation with KYC.":
+            elif message in {
+                "Requesting image generation with GPT image.",
+                "Requesting image generation with REVE.",
+                "Requesting image generation with KYC.",
+            }:
                 async with AsyncSessionLocal() as db:
                     if generation is not None:
                         generation_result = await db.execute(select(JobGeneration).where(JobGeneration.id == generation.id))
@@ -568,6 +572,7 @@ async def run_pipeline_task(job_id: str) -> None:
         log_monitor_task: asyncio.Task[None] | None = None
         try:
             workspace = _build_job_workspace(job)
+            prompt_bundle = await _resolve_effective_prompt_bundle(db, user_id=job.user_id, workspace=workspace)
             ctx = JobContext(
                 job_id=job.job_id,
                 brand_name=job.brand_name,
@@ -579,8 +584,10 @@ async def run_pipeline_task(job_id: str) -> None:
                 social_link_2=job.social_link_2,
                 additional_info=job.additional_input_json,
                 image_model=job.image_model or "reve",
-                num_images=6,
+                num_images=max(1, min(job.requested_image_count or 4, 4)),
                 temperature=0.1,
+                prompt_text=prompt_bundle.prompt_text,
+                shot_prompts=prompt_bundle.shot_prompts,
                 workspace_root=workspace,
             )
 
@@ -600,11 +607,12 @@ async def run_pipeline_task(job_id: str) -> None:
                 await emit_for_job(job, job.current_stage or "queued", "cancelled", job.error_message, db)
                 return
 
-            log_monitor_task = asyncio.create_task(_monitor_job_log(job, ctx.job_log_file, log_stop_event))
+            log_monitor_task = asyncio.create_task(
+                _monitor_job_log(job, ctx.job_log_file, log_stop_event, stage_1_enabled=False)
+            )
             job.status = "running"
-            job.current_stage = "stage_1"
+            job.current_stage = "stage_2"
             await db.commit()
-            await emit_for_job(job, "stage_1", "running", "Generating product KYC.", db)
 
             result_payload = (await run_image_pipeline(ctx)).to_dict()
 
@@ -714,10 +722,10 @@ async def run_regeneration_task(
         ctx: JobContext | None = None
         log_stop_event = asyncio.Event()
         log_monitor_task: asyncio.Task[None] | None = None
-        filtered_kyc_path: Path | None = None
         try:
             workspace = _build_job_workspace(job) / f"regeneration_round_{generation.round_number}"
             workspace.mkdir(parents=True, exist_ok=True)
+            prompt_bundle = await _resolve_effective_prompt_bundle(db, user_id=job.user_id, workspace=workspace)
 
             image_paths: list[Path] = []
 
@@ -756,20 +764,6 @@ async def run_regeneration_task(
                             break
 
             selected_model = image_model or job.image_model or "reve"
-            if selected_model == "reve":
-                filtered_kyc_asset = await _get_latest_filtered_kyc_asset(db, job)
-                if filtered_kyc_asset is None:
-                    generation.status = "failed"
-                    job.status = "failed"
-                    job.error_message = "No filtered KYC asset available for REVE regeneration."
-                    await db.commit()
-                    await emit_for_job(job, "stage_2", "failed", job.error_message, db)
-                    return
-                filtered_kyc_path = workspace / "stage_1" / (
-                    filtered_kyc_asset.original_filename or Path(filtered_kyc_asset.storage_key).name
-                )
-                await storage_service.download_file(filtered_kyc_asset.storage_key, filtered_kyc_path)
-
             ctx = JobContext(
                 job_id=job.job_id,
                 brand_name=job.brand_name,
@@ -783,6 +777,8 @@ async def run_regeneration_task(
                 image_model=selected_model,
                 num_images=2,
                 temperature=0.1,
+                prompt_text=prompt_bundle.prompt_text,
+                shot_prompts=prompt_bundle.shot_prompts,
                 additional_description=generation.additional_description,
                 regeneration_only_inputs=True,
                 shot_types=effective_shot_types,
@@ -799,7 +795,7 @@ async def run_regeneration_task(
             )
             await emit_for_job(job, "stage_2", "running", f"Queued regeneration {generation.round_number}.", db)
 
-            await run_stage_2_only(ctx, filtered_kyc_path)
+            await run_stage_2_only(ctx, None)
 
             log_stop_event.set()
             await log_monitor_task

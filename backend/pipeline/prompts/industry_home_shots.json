@@ -1,0 +1,8 @@
+[
+  {"key":"hero","label":"Hero","prompt":"Create a premium hero image with the complete product fully visible in a clean, well-styled interior context. Preserve the exact design, color, material, and proportions of the product."},
+  {"key":"lifestyle","label":"Lifestyle","prompt":"Create a warm lifestyle composition in a realistic home environment with tasteful props. Keep the product fully visible, horizontally aligned when applicable, and unchanged in design."},
+  {"key":"wearable","label":"Wearable","prompt":"Create a high-angle styled composition showing the product in use within a realistic home setting. Preserve exact product design, color, pattern, and proportions."},
+  {"key":"wearable_ethnic","label":"Wearable ethnic","prompt":"Create a premium overhead or angled composition with a distinct home styling variation and alternate props. Keep the full product visible and strictly faithful to the reference."},
+  {"key":"jewellery_box","label":"Jewellery Box","prompt":"Create a premium product-focused composition in a refined room setting with minimal props and strong product emphasis. Preserve the complete product and exact design."},
+  {"key":"close_detail","label":"Close Detail","prompt":"Create a clean detail-focused close composition that emphasizes texture, craftsmanship, and material quality without changing the product design or colors."}
+]

@@ -5,8 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
-from app.database import init_db
-from app.routers import assets_router, auth_router, image_jobs_router, jobs_router, meta_router
+from app.database import AsyncSessionLocal, init_db
+from app.routers import admin_router, assets_router, auth_router, image_jobs_router, jobs_router, meta_router
+from app.services.bootstrap import ensure_bootstrap_data
 from app.services.pipeline_runner import start_pipeline_watchdog, stop_pipeline_watchdog
 
 settings = get_settings()
@@ -21,6 +22,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(auth_router)
+app.include_router(admin_router)
 app.include_router(jobs_router)
 app.include_router(assets_router)
 app.include_router(meta_router)
@@ -34,6 +36,8 @@ app.mount("/local-storage", StaticFiles(directory=str(storage_root)), name="loca
 @app.on_event("startup")
 async def on_startup() -> None:
     await init_db()
+    async with AsyncSessionLocal() as session:
+        await ensure_bootstrap_data(session)
     await start_pipeline_watchdog()
 
 
