@@ -1,16 +1,6 @@
 import { motion } from "framer-motion";
 import { Building2, Globe, Instagram, Facebook, Linkedin, Twitter, Hash, Tags } from "lucide-react";
-
-export const industries = [
-  { id: "fashion", label: "Fashion & Apparel", emoji: "👗" },
-  { id: "electronics", label: "Electronics & Tech", emoji: "💻" },
-  { id: "beauty", label: "Beauty & Skincare", emoji: "💄" },
-  { id: "food", label: "Food & Beverage", emoji: "🍽️" },
-  { id: "home", label: "Home & Living", emoji: "🏡" },
-  { id: "sports", label: "Sports & Fitness", emoji: "🏋️" },
-  { id: "jewelry", label: "Jewelry & Accessories", emoji: "💎" },
-  { id: "health", label: "Health & Wellness", emoji: "🌿" },
-];
+import { industries } from "@/lib/industries";
 
 export interface ClientKycData {
   companyName: string;

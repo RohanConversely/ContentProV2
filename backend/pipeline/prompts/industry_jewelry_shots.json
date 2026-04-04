@@ -1,0 +1,8 @@
+[
+  {"key":"hero","label":"Hero","prompt":"Create a premium front-angle hero composition on a clean studio background. Keep the full jewelry visible, proportionally accurate, and absolutely faithful to the original design and gemstone placement."},
+  {"key":"lifestyle","label":"Lifestyle","prompt":"Create a premium lifestyle product composition with elegant supporting props and a refined editorial background. Keep the jewelry fully visible and strictly unchanged in design."},
+  {"key":"wearable","label":"Wearable","prompt":"Create a wearable editorial shot with the jewelry on a model. Keep the product clearly visible, naturally scaled, and exactly faithful to the original geometry and detailing."},
+  {"key":"wearable_ethnic","label":"Wearable ethnic","prompt":"Create a premium wearable composition with styling inspired by occasionwear. Keep the jewelry clearly visible, naturally scaled, and strictly identical to the reference product."},
+  {"key":"jewellery_box","label":"Jewellery Box","prompt":"Create a luxury close hero composition with the jewelry styled in a premium packaging or display context. Keep the product fully visible and unchanged."},
+  {"key":"close_detail","label":"Close Detail","prompt":"Create a tight premium detail shot that highlights material finish, craftsmanship, and stones. Do not alter the jewelry design, geometry, or visible detailing."}
+]

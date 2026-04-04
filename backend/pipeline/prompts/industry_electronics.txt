@@ -1,0 +1,9 @@
+You are a professional Amazon A+ content image specialist for India marketplace listings.
+Create a photorealistic premium product photo of the exact same electronics or tech product shown in the reference images.
+Preserve the exact industrial design, dimensions, button layout, ports, screen proportions, finish, labels, and hardware placement. Absolute design fidelity required.
+Do not change shape, materials, bezels, camera modules, vents, connector layout, markings, or indicator elements.
+Do not merge, blur, or reinterpret fine seams, perforations, logos, or interface details.
+Single product only; no duplicate product, no collage, no text overlay, no watermark.
+Remove dust, fingerprints, glare hotspots, and phone-camera artifacts while preserving realistic reflections and material finish.
+Maintain sharp edges, accurate proportions, true color, crisp focus, and premium product photography quality.
+Keep the complete product fully visible in frame with no cropped corners or edges.

@@ -44,7 +44,7 @@ SOFT_DELETED_STATUS = "deleted"
 CANCELLED_STATUS = "cancelled"
 CANCEL_REQUESTED_STATUS = "cancel_requested"
 TERMINAL_JOB_STATUSES = {"completed", "failed", CANCELLED_STATUS}
-ALLOWED_IMAGE_MODELS = {"reve", "gpt-image-1"}
+ALLOWED_IMAGE_MODELS = {"reve", "gpt-image-1.5", "gpt-image-1"}
 MAX_REGEN_INPUT_IMAGES = 3
 USER_CANCELLED_MESSAGE = "User cancelled the job."
 REVE_REGEN_SHOT_TYPES = {
@@ -65,6 +65,7 @@ def _job_summary(job: Job) -> JobSummaryResponse:
         product_name=job.product_name,
         job_type=job.job_type,
         image_model=job.image_model,
+        requested_image_count=job.requested_image_count,
         batch_id=job.batch_id,
         batch_name=job.batch_name,
         status=job.status,
@@ -168,7 +169,8 @@ async def create_job(
         product_name=payload.product_name,
         product_category=payload.product_category,
         job_type=payload.job_type,
-        image_model=payload.image_model,
+        image_model=current_user.default_image_model or "reve",
+        requested_image_count=payload.requested_image_count,
         social_link_1=payload.social_link_1,
         social_link_2=payload.social_link_2,
         social_link_3=payload.social_link_3,
@@ -370,6 +372,7 @@ async def get_job(
         product_category=job.product_category,
         job_type=job.job_type,
         image_model=job.image_model,
+        requested_image_count=job.requested_image_count,
         social_link_1=job.social_link_1,
         social_link_2=job.social_link_2,
         social_link_3=job.social_link_3,
@@ -438,7 +441,7 @@ async def regenerate_job_images(
     if image_model and image_model not in ALLOWED_IMAGE_MODELS:
         raise HTTPException(status_code=422, detail="Unsupported image_model for regeneration.")
 
-    selected_image_model = image_model or job.image_model or "reve"
+    selected_image_model = current_user.default_image_model or job.image_model or "reve"
     normalized_shot_types = [shot.strip().lower() for shot in shot_types if shot and shot.strip()]
     if selected_image_model == "reve":
         if len(normalized_shot_types) < 1 or len(normalized_shot_types) > 2:

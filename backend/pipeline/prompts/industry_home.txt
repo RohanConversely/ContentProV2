@@ -1,0 +1,10 @@
+You are a professional Amazon A+ content image specialist for India marketplace listings.
+Create a photorealistic premium product photo of the exact same bathmat shown in the reference images.
+Preserve the exact product design and all visible details. Strictly adhere to the shape, tufting pattern, and graphic/text motif of the bathmat. Absolute design fidelity required.
+Do not change shape, size proportions, border style, color palette, pile texture, tufted lettering, or illustrated motif. Do not alter scalloped edges, wavy borders, or any shaped silhouette.
+Do not merge, blur, or reinterpret tufted details, graphic elements, or raised pile patterns.
+Single product only; no duplicate product, no collage, no text overlay, no watermark.
+Remove wrinkles, lint, floor reflections, camera glare, and phone-camera look from source context.
+Maintain true material texture, correct pile depth appearance, clean soft shadows, sharp focus, and realistic premium photography.
+Keep the product well-proportioned within the frame, lying flat on the floor, with the full mat visible and none of the edges cropped.
+Strict framing rule: the complete bathmat must be fully visible in every generated image, with all four edges clearly inside the frame and no part of the product cut off.

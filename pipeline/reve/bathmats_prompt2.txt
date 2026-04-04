@@ -1,0 +1,46 @@
+You are a professional Amazon A+ content image specialist for India marketplace listings.
+Create a photorealistic premium product photo of the exact same bathmat shown in the reference images.
+Preserve the exact product design and all visible details. Strictly adhere to the shape, tufting pattern, and graphic/text motif of the bathmat. Absolute design fidelity required.
+Do not change shape, size proportions, border style, color palette, pile texture, tufted lettering, or illustrated motif. Do not alter scalloped edges, wavy borders, or any shaped silhouette.
+Do not merge, blur, or reinterpret tufted details, graphic elements, or raised pile patterns.
+Single product only; no duplicate product, no collage, no text overlay, no watermark.
+Remove wrinkles, lint, floor reflections, camera glare, and phone-camera look from source context.
+Maintain true material texture, correct pile depth appearance, clean soft shadows, sharp focus, and realistic premium photography.
+Keep the product well-proportioned within the frame, lying flat on the floor, with the full mat visible and none of the edges cropped.
+=== STRICT CAMERA + FRAMING ENFORCEMENT ===
+
+CAMERA LOCK (MANDATORY):
+- Fixed 3/4 oblique view
+- Camera pitch: exactly 45° downward
+- Camera yaw: aligned with bathmat length (no rotation)
+- Camera roll: 0°
+- Camera distance and height must remain identical across all outputs
+- No variation in perspective allowed
+
+FRAMING LOCK (MANDATORY):
+- All 4 corners must be fully visible
+- Exact 10% empty margin on all sides
+- Bathmat centered in frame
+- Product coverage ~70% of frame
+- No edge touching or cropping under any condition
+
+FAIL-SAFE PRIORITY:
+If any conflict occurs, prioritize:
+1. Full visibility of all edges
+2. Equal margin on all sides
+3. Fixed camera angle
+
+NEGATIVE CONSTRAINTS:
+- No zoom-in framing
+- No cropped edges
+- No angle variation
+- No perspective drift
+
+SAFE ZONE GUIDANCE
+Composition rule: keep one image corner or bottom edge visually calm with low texture, minimal detail, and no object overlap, suitable for a small style-number label.
+
+COLOR FIDELITY GUIDANCE
+Strict requirement: preserve the exact original product color tones and hues with no recoloring, no tint shift, and no saturation change.
+
+SHOT REQUIREMENT 
+MINIMAL SPA SETTING: Strictly preserve the original bathmat design, shape, tufting texture, color, and motif. Absolute design fidelity required. Place the mat in a serene, spa-like bathroom setting with a very clean, minimal composition. Use neutral tones (warm whites, beige, soft stone textures). Include 1-2 refined props such as rolled white towels, a candle, or a small ceramic vase—placed far from the mat with no overlap. Emphasize negative space and calm composition. Use soft diffused lighting with almost no harsh shadows. Ensure the color of the product stays same as in the reference image, and is not affected by the lighting. Compose the shot from a 3/4 oblique angle (~45°), showing both length and width with natural depth perspective while keeping the full bathmat clearly visible. The overall mood should feel premium, airy, and high-end.

@@ -17,8 +17,10 @@ BFL_BASE_URL = "https://api.bfl.ai/v1"
 
 
 def load_prompt(prompt_file: str) -> str:
-    prompts_dir = Path(__file__).parent.parent / "prompts"
-    prompt_path = prompts_dir / prompt_file
+    prompt_path = Path(prompt_file)
+    if not prompt_path.is_absolute():
+        prompts_dir = Path(__file__).parent.parent / "prompts"
+        prompt_path = prompts_dir / prompt_file
     with open(prompt_path, "r", encoding="utf-8") as f:
         return f.read()
 
@@ -128,12 +130,16 @@ def generate_images(
     temperature: float = 0.1,
     output_dir: str = "generated_images",
     prompt_file: str = "ImageWithKYCTesting.txt",
+    prompt_text: str | None = None,
+    shot_prompts: list[dict[str, str]] | None = None,
     additional_description: str | None = None,
     regeneration_only_inputs: bool = False,
     shot_types: list[str] | None = None,
     logger_obj: JsonLogger | None = None,
     log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    del prompt_text
+    del shot_prompts
     del regeneration_only_inputs
     del shot_types
     stage_logger = logger_obj or JsonLogger()

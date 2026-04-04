@@ -3,8 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Eye, EyeOff, LogOut, Mail, Shield, Settings, User } from "lucide-react";
 import Navbar from "@/components/Navbar";
-import { changePassword, getCurrentUser, type UserProfile } from "@/lib/api";
+import { changePassword, getCurrentUser, updateCurrentUser, type UserProfile } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { industries, industryLabel } from "@/lib/industries";
 
 const ProfilePage = () => {
   const navigate = useNavigate();
@@ -19,13 +20,32 @@ const ProfilePage = () => {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [industry, setIndustry] = useState("");
+  const [profileMessage, setProfileMessage] = useState<string | null>(null);
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 
   useEffect(() => {
     void (async () => {
       const data = await getCurrentUser();
       setUser(data);
+      setIndustry(data.industry);
     })();
   }, []);
+
+  const handleIndustryUpdate = async () => {
+    if (!industry) return;
+    setProfileMessage(null);
+    setIsUpdatingProfile(true);
+    try {
+      const nextUser = await updateCurrentUser({ industry });
+      setUser(nextUser);
+      setProfileMessage("Industry updated successfully.");
+    } catch (error) {
+      setProfileMessage(error instanceof Error ? error.message : "Unable to update industry.");
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
 
   const handlePasswordChange = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -130,10 +150,50 @@ const ProfilePage = () => {
             <div className="px-6 py-4 flex items-center gap-3">
               <Settings className="h-4 w-4 text-muted-foreground shrink-0" />
               <div>
+                <p className="text-xs text-muted-foreground">Industry</p>
+                <p className="text-sm font-medium">{industryLabel(user.industry)}</p>
+              </div>
+            </div>
+            <div className="px-6 py-4 flex items-center gap-3">
+              <Settings className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div>
                 <p className="text-xs text-muted-foreground">Member Since</p>
                 <p className="text-sm font-medium">{user.memberSince}</p>
               </div>
             </div>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card/60 backdrop-blur p-6 space-y-4">
+            <div>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground font-semibold mb-1">Preferences</p>
+              <h2 className="font-display text-xl font-semibold">Industry</h2>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {industries.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setIndustry(option.id)}
+                  className={`rounded-2xl border px-3 py-3 text-left transition-colors ${
+                    industry === option.id
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "border-border bg-background text-muted-foreground hover:border-primary/40"
+                  }`}
+                >
+                  <span className="mr-2">{option.emoji}</span>
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            {profileMessage ? <p className="text-sm text-muted-foreground">{profileMessage}</p> : null}
+            <button
+              type="button"
+              onClick={handleIndustryUpdate}
+              disabled={isUpdatingProfile}
+              className="inline-flex items-center justify-center rounded-xl border border-border px-5 py-2.5 text-sm font-medium hover:bg-secondary transition-colors disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {isUpdatingProfile ? "Updating..." : "Update Industry"}
+            </button>
           </div>
 
           <div className="rounded-xl border border-border bg-card/60 backdrop-blur p-6 space-y-4">

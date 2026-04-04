@@ -6,9 +6,17 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.constants import DEFAULT_INDUSTRY, USER_ROLE
 from app.database import get_db
 from app.models.user import User
-from app.schemas.auth import ChangePasswordRequest, LoginRequest, MeResponse, RegisterRequest, TokenResponse
+from app.schemas.auth import (
+    ChangePasswordRequest,
+    LoginRequest,
+    MeResponse,
+    RegisterRequest,
+    TokenResponse,
+    UpdateMeRequest,
+)
 from app.services.auth import (
     create_access_token,
     decode_access_token,
@@ -20,6 +28,37 @@ from app.services.auth import (
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
+
+
+def _normalized_default_image_model(value: str | None) -> str:
+    if value == "gpt-image-1":
+        return "gpt-image-1.5"
+    return value or "reve"
+
+
+def build_token_response(user: User, token: str) -> TokenResponse:
+    return TokenResponse(
+        access_token=token,
+        user_id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        role=user.role or USER_ROLE,
+        industry=user.industry or DEFAULT_INDUSTRY,
+        default_image_model=_normalized_default_image_model(user.default_image_model),
+    )
+
+
+def build_me_response(user: User) -> MeResponse:
+    return MeResponse(
+        user_id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        role=user.role or USER_ROLE,
+        industry=user.industry or DEFAULT_INDUSTRY,
+        default_image_model=_normalized_default_image_model(user.default_image_model),
+        plan=user.plan or "free",
+        member_since=user.created_at,
+    )
 
 
 async def get_current_user(
@@ -74,17 +113,13 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
         email=payload.email,
         hashed_password=hash_password(payload.password),
         display_name=payload.display_name,
+        industry=payload.industry,
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
     token = create_access_token(user)
-    return TokenResponse(
-        access_token=token,
-        user_id=user.id,
-        email=user.email,
-        display_name=user.display_name,
-    )
+    return build_token_response(user, token)
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -93,23 +128,27 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> To
     if user is None or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials.")
     token = create_access_token(user)
-    return TokenResponse(
-        access_token=token,
-        user_id=user.id,
-        email=user.email,
-        display_name=user.display_name,
-    )
+    return build_token_response(user, token)
 
 
 @router.get("/me", response_model=MeResponse)
 async def me(current_user: User = Depends(get_current_user)) -> MeResponse:
-    return MeResponse(
-        user_id=current_user.id,
-        email=current_user.email,
-        display_name=current_user.display_name,
-        plan=current_user.plan,
-        member_since=current_user.created_at,
-    )
+    return build_me_response(current_user)
+
+
+@router.put("/me", response_model=MeResponse)
+async def update_me(
+    payload: UpdateMeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MeResponse:
+    if payload.display_name is not None:
+        current_user.display_name = payload.display_name
+    if payload.industry is not None:
+        current_user.industry = payload.industry
+    await db.commit()
+    await db.refresh(current_user)
+    return build_me_response(current_user)
 
 
 @router.post("/change-password")
@@ -205,6 +244,8 @@ async def google_callback(
                 email=email,
                 hashed_password=hash_password(access_token),
                 display_name=display_name,
+                industry=DEFAULT_INDUSTRY,
+                default_image_model="reve",
             )
             db.add(user)
             await db.commit()

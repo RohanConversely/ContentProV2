@@ -27,6 +27,7 @@ import {
   type GeneratedImageResult,
   type JobGenerationSummary,
 } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 const ImageLightbox = ({
   src,
@@ -118,7 +119,6 @@ const GenerationResults = ({
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [selectedImages, setSelectedImages] = useState<number[]>([]);
   const [additionalDescription, setAdditionalDescription] = useState("");
-  const [regenerationModel, setRegenerationModel] = useState<"reve" | "gpt-image-1">("reve");
   const [reveShotTypes, setReveShotTypes] = useState<string[]>(["hero"]);
   const [regenerationInputFiles, setRegenerationInputFiles] = useState<File[]>([]);
   const [regenerationError, setRegenerationError] = useState<string | null>(null);
@@ -135,6 +135,7 @@ const GenerationResults = ({
     if (localGenerations.length === 0) return null;
     return [...localGenerations].sort((a, b) => b.roundNumber - a.roundNumber)[0]?.id ?? null;
   }, [localGenerations]);
+  const { user } = useAuth();
 
   useEffect(() => {
     setLocalGenerations(generations);
@@ -169,7 +170,15 @@ const GenerationResults = ({
   const effectiveStatusMessage = isRegenerating ? localStatus.message : statusMessage;
   const effectiveStatusStage = isRegenerating ? localStatus.stage : statusStage;
   const effectiveStatusUpdates = isRegenerating ? localTimeline : statusUpdates;
-  const hasValidReveShotSelection = regenerationModel !== "reve" || (reveShotTypes.length >= 1 && reveShotTypes.length <= 2);
+  const defaultImageModel = user?.defaultImageModel ?? "reve";
+  const usesReveRegeneration = defaultImageModel === "reve";
+  const hasValidReveShotSelection = !usesReveRegeneration || (reveShotTypes.length >= 1 && reveShotTypes.length <= 2);
+  const requestedImageCount =
+    typeof productData.requestedImageCount === "number" &&
+    productData.requestedImageCount >= 1 &&
+    productData.requestedImageCount <= 4
+      ? productData.requestedImageCount
+      : 4;
   const canRegenerate = Boolean(
     jobId &&
       additionalDescription.trim() &&
@@ -261,9 +270,8 @@ const GenerationResults = ({
     try {
       const queuedGeneration = await regenerateJobImages(jobId, {
         additionalDescription: additionalDescription.trim(),
-        imageModel: regenerationModel,
         inputImages: regenerationInputFiles,
-        shotTypes: regenerationModel === "reve" ? reveShotTypes : [],
+        shotTypes: usesReveRegeneration ? reveShotTypes : [],
       });
       setLocalGenerations((prev) => [
         ...prev.filter((generation) => generation.id !== queuedGeneration.id),
@@ -514,7 +522,7 @@ const GenerationResults = ({
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {Array.from({ length: Math.max(displayImages.length, effectiveLoading ? 6 : displayImages.length) }).map((_, i) => {
+        {Array.from({ length: Math.max(displayImages.length, effectiveLoading ? requestedImageCount : displayImages.length) }).map((_, i) => {
           const src = displayImages[i];
           const isSelected = selectedImages.includes(i);
           if (!src) {
@@ -615,7 +623,7 @@ const GenerationResults = ({
               Add an extra direction for the next image set.
             </p>
           </div>
-          {regenerationModel === "reve" && (
+          {usesReveRegeneration && (
             <div className="space-y-2">
               <p className="text-sm font-medium">Choose the shot type to be changed (select 1 to 2)</p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -677,17 +685,6 @@ const GenerationResults = ({
                 ))}
               </div>
             )}
-          </div>
-          <div className="space-y-2">
-            <p className="text-sm font-medium">Image Generation Model</p>
-            <select
-              value={regenerationModel}
-              onChange={(event) => setRegenerationModel(event.target.value as "reve" | "gpt-image-1")}
-              className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
-            >
-              <option value="reve">reve</option>
-              <option value="gpt-image-1">gpt-image-1</option>
-            </select>
           </div>
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">

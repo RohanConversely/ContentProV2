@@ -11,38 +11,12 @@ from dotenv import load_dotenv
 
 from ...logger import JsonLogger
 from .image_rescaler import prepare_reference_images
-from .kyc_compressor import build_compressed_kyc
 
 load_dotenv()
 
 MAX_PROMPT_CHARS = 2560
 REVE_ENDPOINT = "https://api.reve.com/v1/image/remix"
 REVE_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
-
-SHOT_REQUIREMENTS = (
-    "Shot 1 - HERO: Perform only a minimal cleanup edit. Strictly preserve the original jewelry design, shape, and gemstone placement. Absolute geometric fidelity required. Do not redesign or reinterpret any detail. Keep a front-angle hero composition, replace the entire background with a pure white seamless luxury studio background, use soft studio lighting with a natural shadow under the product, and remove all original background elements.",
-    "Shot 2 - LIFESTYLE: Strictly preserve the original jewelry design, shape, and gemstone placement. Absolute geometric fidelity required. Replace the entire background with a pastel-shade satin cloth backdrop, keep the exact same jewelry fully visible, and maintain premium editorial product photography quality.",
-    "Shot 3 - WEARABLE: A wide portrait shot of a model from the waist up. The model's full head, hair, and entire face must be visible and uncropped. The model is wearing the jewelry, which is clearly visible but appropriately scaled to the model's neck. Do not add any other jewelry other than the one provided.",
-    "Shot 4 - WEARABLE WESTERN: A medium-wide premium editorial shot with a model in elegant western attire. Full head and face must be visible and uncropped. Wide composition showing the model from chest to head clearly. Do not add any other jewelry other than the one provided.",
-    "Shot 5 - HERO SIDE: Strictly preserve the original jewelry design, shape, and gemstone placement. Absolute geometric fidelity required. Create a premium hero image with a side-angle composition, keep the exact same jewelry fully visible, and replace the original background completely.",
-    "Shot 6 - CLOSE DETAIL: Strictly preserve the original jewelry design, shape, and gemstone placement. Absolute geometric fidelity required. Create a tight close-up detail shot of finishing and materials with no reflection or glare on the product, without any design change.",
-)
-DEFAULT_FOUR_SHOT_REQUIREMENTS = (
-    SHOT_REQUIREMENTS[0],
-    SHOT_REQUIREMENTS[1],
-    SHOT_REQUIREMENTS[3],
-    SHOT_REQUIREMENTS[4],
-)
-
-SHOT_KEY_TO_REQUIREMENT = {
-    "hero": SHOT_REQUIREMENTS[0],
-    "lifestyle": SHOT_REQUIREMENTS[1],
-    "wearable": SHOT_REQUIREMENTS[2],
-    "wearable_ethnic": SHOT_REQUIREMENTS[3],
-    "jewellery_box": SHOT_REQUIREMENTS[4],
-    "close_detail": SHOT_REQUIREMENTS[5],
-}
-VALID_SHOT_KEYS = set(SHOT_KEY_TO_REQUIREMENT.keys())
 
 
 def with_context(base: dict[str, Any] | None, extra: dict[str, Any]) -> dict[str, Any]:
@@ -52,6 +26,10 @@ def with_context(base: dict[str, Any] | None, extra: dict[str, Any]) -> dict[str
 
 
 def load_prompt(prompt_file: str) -> str:
+    direct_path = Path(prompt_file)
+    if direct_path.is_absolute() and direct_path.exists():
+        return direct_path.read_text(encoding="utf-8").strip()
+
     prompts_dir = Path(__file__).resolve().parents[2] / "prompts"
     direct = prompts_dir / prompt_file
     if direct.exists():
@@ -62,9 +40,7 @@ def load_prompt(prompt_file: str) -> str:
         if prompt_path.is_file() and prompt_path.name.lower() == target_lower:
             return prompt_path.read_text(encoding="utf-8").strip()
 
-    raise FileNotFoundError(
-        f"Prompt file not found: {prompt_file}. Looked in {prompts_dir}."
-    )
+    raise FileNotFoundError(f"Prompt file not found: {prompt_file}. Looked in {prompts_dir}.")
 
 
 def _extract_base64_images(response_data: dict) -> list[str]:
@@ -85,7 +61,6 @@ def _extract_base64_images(response_data: dict) -> list[str]:
         if isinstance(entry, (str, bytes)):
             decoded_images.append(entry.decode("utf-8") if isinstance(entry, bytes) else entry)
             continue
-
         if not isinstance(entry, dict):
             continue
 
@@ -101,30 +76,67 @@ def _extract_base64_images(response_data: dict) -> list[str]:
     return decoded_images
 
 
-def _build_iteration_prompt(base_prompt: str, kyc_summary: str, shot_instruction: str) -> str:
-    prompt = (
-        f"{base_prompt}\n\n"
-        f"Product KYC Summary (strict guidance): {kyc_summary}\n\n"
-        f"{shot_instruction}"
-    ).strip()
+def _normalize_shot_prompts(raw_value: Any) -> list[dict[str, str]]:
+    if not isinstance(raw_value, list):
+        return []
+
+    normalized: list[dict[str, str]] = []
+    for index, entry in enumerate(raw_value, start=1):
+        if not isinstance(entry, dict):
+            continue
+        key = str(entry.get("key") or f"shot_{index}").strip().lower()
+        label = str(entry.get("label") or key.replace("_", " ").title()).strip()
+        prompt = str(entry.get("prompt") or "").strip()
+        normalized.append({"key": key, "label": label, "prompt": prompt})
+    return normalized
+
+
+def _selected_shot_prompts(shot_prompts: list[dict[str, str]] | None, num_images: int) -> list[dict[str, str]]:
+    capped = max(1, num_images)
+    normalized = _normalize_shot_prompts(shot_prompts)
+    if not normalized:
+        return [{"key": f"shot_{index}", "label": f"Shot {index}", "prompt": ""} for index in range(1, capped + 1)]
+    selected = normalized[:capped]
+    while len(selected) < capped:
+        selected.append(selected[-1])
+    return selected
+
+
+def _selected_regeneration_shot_prompts(
+    shot_prompts: list[dict[str, str]] | None,
+    shot_types: list[str] | None,
+    num_images: int,
+) -> list[dict[str, str]]:
+    normalized = _normalize_shot_prompts(shot_prompts)
+    shot_prompt_map = {entry["key"]: entry for entry in normalized}
+    normalized_shot_types = [shot.strip().lower() for shot in (shot_types or []) if shot and shot.strip()]
+    invalid_shots = [shot for shot in normalized_shot_types if shot not in shot_prompt_map]
+    if invalid_shots:
+        raise ValueError(f"Invalid shot type(s) for REVE regeneration: {', '.join(invalid_shots)}")
+    if len(normalized_shot_types) < 1 or len(normalized_shot_types) > 2:
+        raise ValueError("Select at least 1 and at most 2 shot types for REVE regeneration.")
+
+    selected = [shot_prompt_map[normalized_shot_types[0]]]
+    if len(normalized_shot_types) == 2:
+        selected.append(shot_prompt_map[normalized_shot_types[1]])
+    else:
+        selected.append(shot_prompt_map[normalized_shot_types[0]])
+
+    capped = max(1, num_images)
+    selected = selected[:capped]
+    while len(selected) < capped:
+        selected.append(selected[-1])
+    return selected
+
+
+def _build_iteration_prompt(base_prompt: str, shot_instruction: str) -> str:
+    prompt = f"{base_prompt}\n\n{shot_instruction}".strip() if shot_instruction else base_prompt.strip()
     return prompt[:MAX_PROMPT_CHARS]
 
 
-def _shot_instructions_for_count(num_images: int) -> list[str]:
-    capped = max(1, num_images)
-    if capped <= len(DEFAULT_FOUR_SHOT_REQUIREMENTS):
-        return list(DEFAULT_FOUR_SHOT_REQUIREMENTS[:capped])
-    return list(DEFAULT_FOUR_SHOT_REQUIREMENTS)
-
-
-def _shot_slug(shot_instruction: str, fallback_index: int) -> str:
-    prefix = shot_instruction.split(":", maxsplit=1)[0]
-    if "-" in prefix:
-        name = prefix.split("-", maxsplit=1)[1].strip()
-    else:
-        name = f"shot_{fallback_index}"
-
-    slug = "_".join(name.lower().replace("/", " ").replace("-", " ").split())
+def _shot_slug(shot_prompt: dict[str, str], fallback_index: int) -> str:
+    key = str(shot_prompt.get("key") or f"shot_{fallback_index}").strip().lower()
+    slug = "_".join(key.replace("/", " ").replace("-", " ").split())
     return slug or f"shot_{fallback_index}"
 
 
@@ -143,6 +155,8 @@ def generate_images(
     temperature: float = 0.1,
     output_dir: str = "generated_images",
     prompt_file: str = "imageGen.txt",
+    prompt_text: str | None = None,
+    shot_prompts: list[dict[str, str]] | None = None,
     additional_description: str | None = None,
     regeneration_only_inputs: bool = False,
     shot_types: list[str] | None = None,
@@ -150,6 +164,7 @@ def generate_images(
     log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     del temperature
+    del kyc_path
 
     stage_logger = logger_obj or JsonLogger()
     output_path = Path(output_dir).resolve()
@@ -159,34 +174,13 @@ def generate_images(
     if not resolved_image_paths:
         raise ValueError("At least one product image is required for REVE generation.")
 
-    resolved_kyc_path: Path | None = None
-    if kyc_path:
-        resolved_kyc_path = Path(kyc_path).resolve()
-        if not resolved_kyc_path.exists():
-            raise ValueError(f"KYC JSON file not found: {resolved_kyc_path}")
-
     api_key = os.getenv("REVE_API_KEY")
     if not api_key:
         raise ValueError("REVE_API_KEY missing from environment")
-
     if regeneration_only_inputs and (not additional_description or not additional_description.strip()):
         raise ValueError("additional_description is required for REVE regeneration.")
-    if resolved_kyc_path is None:
-        raise ValueError("KYC JSON file is required for REVE regeneration.")
 
-    base_prompt = load_prompt(prompt_file)
-    compressed_kyc_file = output_path / "compressed_kyc.json"
-    kyc_summary = build_compressed_kyc(
-        resolved_kyc_path,
-        compressed_kyc_file,
-        stage_logger,
-        min_chars=400,
-        max_chars=600,
-        log_context=log_context,
-    )
-    if not kyc_summary:
-        raise ValueError("Failed to build compressed KYC summary for REVE.")
-
+    base_prompt = prompt_text.strip() if prompt_text else load_prompt(prompt_file)
     encoded_images = prepare_reference_images(
         resolved_image_paths,
         stage_logger,
@@ -206,25 +200,11 @@ def generate_images(
     base_backoff = max(0.1, float(os.getenv("REVE_RETRY_BASE_SECONDS", "1.0")))
 
     if regeneration_only_inputs:
-        normalized_shot_types = [shot.strip().lower() for shot in (shot_types or []) if shot and shot.strip()]
-        invalid_shots = [shot for shot in normalized_shot_types if shot not in VALID_SHOT_KEYS]
-        if invalid_shots:
-            raise ValueError(f"Invalid shot type(s) for REVE regeneration: {', '.join(invalid_shots)}")
-        if len(normalized_shot_types) < 1 or len(normalized_shot_types) > 2:
-            raise ValueError("Select at least 1 and at most 2 shot types for REVE regeneration.")
-
-        shot_instructions = [SHOT_KEY_TO_REQUIREMENT[normalized_shot_types[0]]]
-        if len(normalized_shot_types) == 2:
-            shot_instructions.append(SHOT_KEY_TO_REQUIREMENT[normalized_shot_types[1]])
-        else:
-            shot_instructions.append(SHOT_KEY_TO_REQUIREMENT[normalized_shot_types[0]])
-        shot_instructions = shot_instructions[: max(1, num_images)]
-        while len(shot_instructions) < max(1, num_images):
-            shot_instructions.append(shot_instructions[-1])
+        selected_prompts = _selected_regeneration_shot_prompts(shot_prompts, shot_types, num_images)
     else:
-        shot_instructions = _shot_instructions_for_count(num_images)
-    generated_files: list[str] = []
+        selected_prompts = _selected_shot_prompts(shot_prompts, num_images)
 
+    generated_files: list[str] = []
     stage_logger.info(
         "Requesting image generation with REVE.",
         with_context(
@@ -233,9 +213,8 @@ def generate_images(
                 "provider": "reve",
                 "brand_name": brand_name,
                 "num_images_requested": num_images,
-                "shot_count": len(shot_instructions),
+                "shot_count": len(selected_prompts),
                 "image_paths": resolved_image_paths,
-                "kyc_path": str(resolved_kyc_path) if resolved_kyc_path is not None else None,
                 "prompt_file": prompt_file,
                 "output_dir": str(output_path),
                 "additional_description": additional_description.strip() if additional_description else None,
@@ -245,12 +224,12 @@ def generate_images(
         ),
     )
 
-    for iteration, shot_instruction in enumerate(shot_instructions, start=1):
-        shot_slug = _shot_slug(shot_instruction, iteration)
-        prompt = _build_iteration_prompt(base_prompt, kyc_summary, shot_instruction)
+    for iteration, shot_prompt in enumerate(selected_prompts, start=1):
+        shot_instruction = str(shot_prompt.get("prompt") or "").strip()
+        shot_slug = _shot_slug(shot_prompt, iteration)
+        prompt = _build_iteration_prompt(base_prompt, shot_instruction)
         if additional_description:
-            merged = f"{prompt}\n\nRefinement instructions: {additional_description.strip()}"
-            prompt = merged[:MAX_PROMPT_CHARS]
+            prompt = f"{prompt}\n\nRefinement instructions: {additional_description.strip()}".strip()[:MAX_PROMPT_CHARS]
 
         payload = {
             "prompt": prompt,
@@ -350,9 +329,7 @@ def generate_images(
                 raise RuntimeError(f"REVE request failed at image {iteration}: {exc}. Response: {body}") from exc
 
         if response_data is None:
-            raise RuntimeError(
-                f"REVE request failed at image {iteration} after retries: {last_error or 'unknown error'}"
-            )
+            raise RuntimeError(f"REVE request failed at image {iteration} after retries: {last_error or 'unknown error'}")
 
         decoded_images = _extract_base64_images(response_data)
         if not decoded_images or not decoded_images[0]:
@@ -381,7 +358,7 @@ def generate_images(
         "generated_images": generated_files,
         "count": len(generated_files),
         "image_paths": resolved_image_paths,
-        "kyc_path": str(resolved_kyc_path) if resolved_kyc_path is not None else None,
+        "kyc_path": None,
         "provider": "reve",
         "additional_description": additional_description.strip() if additional_description else None,
     }
