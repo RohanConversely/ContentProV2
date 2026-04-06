@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import INDUSTRY_IDS, SUPERADMIN_ROLE
@@ -11,7 +13,6 @@ from app.models.job_generation import JobGeneration
 from app.models.job import Job
 from app.models.pricing import PipelineLog, PricingSnapshot
 from app.models.user import User
-from app.models.user_prompt_override import UserPromptOverride
 from app.routers.auth import get_current_user
 from app.schemas.admin import (
     AdminCreateUserRequest,
@@ -123,7 +124,7 @@ async def list_users(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ) -> list[AdminUserResponse]:
-    result = await db.execute(select(User).order_by(User.created_at.asc()))
+    result = await db.execute(select(User).where(User.is_deleted.is_(False)).order_by(User.created_at.asc()))
     return [_user_response(user) for user in result.scalars().all()]
 
 
@@ -158,7 +159,8 @@ async def update_user(
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(require_superadmin),
 ) -> AdminUserResponse:
-    user = await db.get(User, user_id)
+    result = await db.execute(select(User).where(User.id == user_id, User.is_deleted.is_(False)))
+    user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found.")
     if payload.email and payload.email != user.email:
@@ -191,18 +193,26 @@ async def delete_user(
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(require_superadmin),
 ) -> dict[str, bool]:
-    user = await db.get(User, user_id)
+    result = await db.execute(select(User).where(User.id == user_id, User.is_deleted.is_(False)))
+    user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found.")
     if user.id == current_admin.id:
         raise HTTPException(status_code=400, detail="You cannot delete your own account.")
-    job_count = await db.scalar(select(func.count()).select_from(Job).where(Job.user_id == user.id))
-    if job_count:
-        raise HTTPException(status_code=400, detail="Cannot delete a user who already has jobs.")
-    override_result = await db.execute(select(UserPromptOverride).where(UserPromptOverride.user_id == user.id))
-    for override in override_result.scalars().all():
-        await db.delete(override)
-    await db.delete(user)
+
+    deleted_at = datetime.now(timezone.utc)
+    user.is_deleted = True
+    user.deleted_at = deleted_at
+    user.email = f"deleted+{user.id}@deleted.local"
+
+    jobs_result = await db.execute(select(Job).where(Job.user_id == user.id, Job.status != SOFT_DELETED_STATUS))
+    user_jobs = jobs_result.scalars().all()
+    for job in user_jobs:
+        job.status = SOFT_DELETED_STATUS
+        asset_result = await db.execute(select(Asset).where(Asset.job_id == job.id, Asset.is_deleted.is_(False)))
+        for asset in asset_result.scalars().all():
+            asset.is_deleted = True
+
     await db.commit()
     return {"ok": True}
 
@@ -216,7 +226,8 @@ async def list_user_jobs(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ) -> JobListResponse:
-    user = await db.get(User, user_id)
+    user_result = await db.execute(select(User).where(User.id == user_id, User.is_deleted.is_(False)))
+    user = user_result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found.")
 
@@ -279,7 +290,8 @@ async def get_user_job(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ) -> JobResponse:
-    user = await db.get(User, user_id)
+    user_result = await db.execute(select(User).where(User.id == user_id, User.is_deleted.is_(False)))
+    user = user_result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found.")
 
@@ -348,7 +360,8 @@ async def get_user_job_logs(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ) -> list[JobLogEntryResponse]:
-    user = await db.get(User, user_id)
+    user_result = await db.execute(select(User).where(User.id == user_id, User.is_deleted.is_(False)))
+    user = user_result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found.")
 
@@ -437,7 +450,8 @@ async def update_prompt_override(
 ) -> PromptResponse:
     if industry not in INDUSTRY_IDS:
         raise HTTPException(status_code=404, detail="Industry not found.")
-    user = await db.get(User, user_id)
+    result = await db.execute(select(User).where(User.id == user_id, User.is_deleted.is_(False)))
+    user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found.")
     override = await set_user_override(db, user_id, industry, payload.prompt_text, payload.shot_prompts)

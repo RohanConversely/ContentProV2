@@ -502,12 +502,14 @@ const ProjectDetailView = ({
           </div>
         )}
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-3 border-t border-border">
-          <div className="space-y-1">
-            <span className="text-muted-foreground">Model</span>
-            <p className="font-medium truncate">{detail.imageModel || "—"}</p>
+        {user?.role === "superadmin" ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-3 border-t border-border">
+            <div className="space-y-1">
+              <span className="text-muted-foreground">Model</span>
+              <p className="font-medium truncate">{detail.imageModel || "—"}</p>
+            </div>
           </div>
-        </div>
+        ) : null}
 
       </div>
 

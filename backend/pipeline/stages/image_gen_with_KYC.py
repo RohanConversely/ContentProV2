@@ -2,7 +2,6 @@
 import argparse
 import base64
 import json
-import mimetypes
 import os
 import sys
 from pathlib import Path
@@ -119,17 +118,7 @@ def generate_images(
     if not resolved_image_paths:
         raise ValueError("At least one product image is required for image generation.")
 
-    content = [{"type": "input_text", "text": user_message}]
-    for resolved_image_path in resolved_image_paths:
-        mime_type, _ = mimetypes.guess_type(resolved_image_path)
-        if not mime_type:
-            mime_type = "image/jpeg"
-
-        with open(resolved_image_path, "rb") as image_file:
-            image_bytes = image_file.read()
-        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
-        image_data_url = f"data:{mime_type};base64,{image_b64}"
-        content.append({"type": "input_image", "image_url": image_data_url})
+    reference_images = [Path(path) for path in resolved_image_paths]
 
     selected_shot_prompts = _selected_shot_prompts(shot_prompts, num_images)
 
@@ -174,50 +163,34 @@ def generate_images(
                 "Use the following ordered shot instructions:\n"
                 f"{chr(10).join(shot_prompt_lines)}"
             )
-        response = client.responses.create(
+
+        response = client.images.edit(
+            image=reference_images,
             model="gpt-image-1.5",
-            input=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": request_text,
-                        },
-                        *content[1:],
-                    ],
-                }
-            ],
-            tools=[
-                {
-                    "type": "image_generation",
-                    "size": "1024x1024",
-                    "quality": "low",
-                    "input_fidelity": "high",
-                }
-            ],
-            tool_choice={"type": "image_generation"},
-            temperature=temperature,
+            prompt=request_text,
+            n=remaining_images,
+            size="1024x1024",
+            quality="low",
+            input_fidelity="high",
         )
 
-        log_usage(
-            stage_logger,
-            response,
-            with_context(
-                log_context,
-                {
-                    "operation": "image_gen_with_kyc",
-                    "attempt": attempts + 1,
-                    "remaining_images": remaining_images,
-                },
-            ),
-        )
+        try:
+            log_usage(
+                stage_logger,
+                response,
+                with_context(
+                    log_context,
+                    {
+                        "operation": "image_gen_with_kyc",
+                        "attempt": attempts + 1,
+                        "remaining_images": remaining_images,
+                    },
+                ),
+            )
+        except Exception:
+            pass
 
-        image_results = [
-            output.result
-            for output in response.output
-            if output.type == "image_generation_call"
-        ]
+        image_results = [item.b64_json for item in response.data if getattr(item, "b64_json", None)]
         if not image_results:
             break
 
