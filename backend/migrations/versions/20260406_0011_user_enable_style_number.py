@@ -29,7 +29,7 @@ def upgrade() -> None:
                 "enable_style_number",
                 sa.Boolean(),
                 nullable=False,
-                server_default=sa.text("0"),
+                server_default=sa.false(),
             ),
         )
 
