@@ -33,6 +33,7 @@ import {
   readActiveSingleRun,
   writeActiveSingleRun,
 } from "@/lib/active-runs";
+import { useAuth } from "@/contexts/AuthContext";
 
 export interface ProductFormData {
   brandName: string;
@@ -49,6 +50,8 @@ export interface ProductFormData {
   dimensionHeight: string;
   productDescription: string;
   requestedImageCount: number;
+  addStyleNumber: boolean;
+  styleNumber: string;
   productImages: string[];
   additionalInfo?: Record<string, string>;
 }
@@ -73,6 +76,8 @@ const emptyFormData: ProductFormData = {
   dimensionHeight: "",
   productDescription: "",
   requestedImageCount: 4,
+  addStyleNumber: false,
+  styleNumber: "",
   productImages: [],
 };
 
@@ -85,6 +90,7 @@ const dimensionUnits = [
 
 const MAX_SOURCE_IMAGES = 5;
 const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
+  const { user } = useAuth();
   const [formData, setFormData] = useState<ProductFormData>(emptyFormData);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -97,7 +103,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
   const [jobTimeline, setJobTimeline] = useState<JobEventPayload[]>([]);
   const resumedJobRef = useRef<string | null>(null);
 
-  const updateField = (field: keyof ProductFormData, value: string | string[] | number) => {
+  const updateField = (field: keyof ProductFormData, value: string | string[] | number | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -145,13 +151,18 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
     formData.productName.trim().length > 0 &&
     formData.productCategory.trim().length > 0 &&
     formData.productImages.length > 0 &&
-    (!hasAnyDimension || hasAllDimensions);
+    (!hasAnyDimension || hasAllDimensions) &&
+    (!formData.addStyleNumber || formData.styleNumber.trim().length > 0);
 
   const buildAdditionalInfo = () => {
     const additionalInfo: Record<string, string> = {};
     if (formData.productDescription.trim()) additionalInfo.product_description = formData.productDescription.trim();
     if (formData.dimensionLength && formData.dimensionBreadth && formData.dimensionHeight) {
       additionalInfo.dimensions = `${formData.dimensionLength} x ${formData.dimensionBreadth} x ${formData.dimensionHeight} ${formData.dimensionUnit}`;
+    }
+    if (formData.addStyleNumber && formData.styleNumber.trim()) {
+      additionalInfo["add_style_number"] = "true";
+      additionalInfo["style no."] = formData.styleNumber.trim();
     }
     return Object.keys(additionalInfo).length > 0 ? additionalInfo : undefined;
   };
@@ -545,6 +556,34 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
             ))}
           </select>
         </div>
+
+        {user?.enableStyleNumber ? (
+          <div className="space-y-3 rounded-xl border border-border bg-card/60 p-4">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={formData.addStyleNumber}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  updateField("addStyleNumber", checked);
+                  if (!checked) {
+                    updateField("styleNumber", "");
+                  }
+                }}
+              />
+              Add style number
+            </label>
+            {formData.addStyleNumber ? (
+              <input
+                type="text"
+                value={formData.styleNumber}
+                onChange={(e) => updateField("styleNumber", e.target.value)}
+                placeholder="Enter style number"
+                className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+              />
+            ) : null}
+          </div>
+        ) : null}
 
         {/* Product Dimensions */}
         <div className="space-y-4">

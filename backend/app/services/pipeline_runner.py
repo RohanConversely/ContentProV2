@@ -24,6 +24,7 @@ from app.services.storage import storage_service
 from app.utils.presigned_urls import generate_url
 from pipeline.orchestrator import JobContext, PipelineStageError, run_image_pipeline, run_stage_2_only
 from pipeline.pricing import compute_price_report
+from pipeline.stages.style_number_overlay import apply_style_number_overlay
 
 EVENT_QUEUES: dict[str, list[asyncio.Queue[dict[str, Any]]]] = defaultdict(list)
 settings = get_settings()
@@ -39,6 +40,7 @@ FINAL_SIZE = (2048, 2048)
 SOFT_DELETED_STATUS = "deleted"
 BATCH_PROGRESS_STALL_SECONDS = 180
 WATCHDOG_INTERVAL_SECONDS = 30
+STYLE_NUMBER_KEYS = ("style no.", "style no", "style_number", "stylenumber")
 
 
 async def _resolve_effective_prompt_bundle(
@@ -202,6 +204,13 @@ async def _upload_generated_image(
     except Exception:
         upload_source = local_path
 
+    style_number = _resolve_style_number(job.additional_input_json)
+    if style_number:
+        try:
+            apply_style_number_overlay(upload_source, style_number)
+        except Exception:
+            pass
+
     storage_key = f"{job.storage_prefix}/stage_2/round_{generation.round_number}/{upload_source.name}"
     await storage_service.upload_file(upload_source, storage_key)
     await _create_asset(
@@ -213,6 +222,28 @@ async def _upload_generated_image(
         local_path=upload_source,
         storage_key=storage_key,
     )
+
+
+def _is_truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return False
+
+
+def _resolve_style_number(additional_input: dict[str, Any] | None) -> str | None:
+    if not isinstance(additional_input, dict):
+        return None
+    if not _is_truthy(additional_input.get("add_style_number")):
+        return None
+    for key in STYLE_NUMBER_KEYS:
+        value = additional_input.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
 
 
 async def _upload_job_support_files(
@@ -694,6 +725,7 @@ async def run_regeneration_task(
     generation_id: str,
     image_model: str | None = None,
     shot_types: list[str] | None = None,
+    requested_image_count: int | None = None,
 ) -> None:
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Job).where(Job.job_id == job_id))
@@ -764,6 +796,7 @@ async def run_regeneration_task(
                             break
 
             selected_model = image_model or job.image_model or "reve"
+            effective_image_count = max(1, min(requested_image_count or 2, 2))
             ctx = JobContext(
                 job_id=job.job_id,
                 brand_name=job.brand_name,
@@ -775,7 +808,7 @@ async def run_regeneration_task(
                 social_link_2=None,
                 additional_info=None,
                 image_model=selected_model,
-                num_images=2,
+                num_images=effective_image_count,
                 temperature=0.1,
                 prompt_text=prompt_bundle.prompt_text,
                 shot_prompts=prompt_bundle.shot_prompts,
@@ -857,12 +890,15 @@ async def queue_regeneration_task(
     generation_id: str,
     image_model: str | None = None,
     shot_types: list[str] | None = None,
+    requested_image_count: int | None = None,
 ) -> None:
     key = (job_id, generation_id)
     existing = RUNNING_REGENERATION_TASKS.get(key)
     if existing is not None and not existing.done():
         return
-    task = asyncio.create_task(run_regeneration_task(job_id, generation_id, image_model, shot_types))
+    task = asyncio.create_task(
+        run_regeneration_task(job_id, generation_id, image_model, shot_types, requested_image_count)
+    )
     RUNNING_REGENERATION_TASKS[key] = task
 
 

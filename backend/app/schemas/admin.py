@@ -13,6 +13,7 @@ class AdminUserResponse(BaseModel):
     industry: str
     default_image_model: str
     default_batch_image_model: str
+    enable_style_number: bool
     plan: str
     created_at: datetime
 
@@ -25,6 +26,7 @@ class AdminCreateUserRequest(BaseModel):
     industry: str = Field(pattern="^(fashion|electronics|beauty|food|home|sports|jewelry|health)$")
     default_image_model: str = Field(default="gpt-image-1.5", pattern="^(reve|gpt-image-1.5|gpt-image-1|gpt-batch-api)$")
     default_batch_image_model: str = Field(default="gpt-batch-api", pattern="^(reve|gpt-image-1.5|gpt-image-1|gpt-batch-api)$")
+    enable_style_number: bool = Field(default=False)
     plan: str = Field(default="free")
 
 
@@ -35,6 +37,7 @@ class AdminUpdateUserRequest(BaseModel):
     industry: str | None = Field(default=None, pattern="^(fashion|electronics|beauty|food|home|sports|jewelry|health)$")
     default_image_model: str | None = Field(default=None, pattern="^(reve|gpt-image-1.5|gpt-image-1|gpt-batch-api)$")
     default_batch_image_model: str | None = Field(default=None, pattern="^(reve|gpt-image-1.5|gpt-image-1|gpt-batch-api)$")
+    enable_style_number: bool | None = None
     plan: str | None = None
     password: str | None = Field(default=None, min_length=8)
 

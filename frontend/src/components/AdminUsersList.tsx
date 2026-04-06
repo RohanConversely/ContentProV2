@@ -160,9 +160,21 @@ const AdminUsersList = ({
                         <option value="gpt-batch-api">gpt batch api</option>
                       </select>
                     </label>
+                    <label className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 md:col-span-2">
+                      <input
+                        type="checkbox"
+                        checked={user.enableStyleNumber}
+                        onChange={(event) =>
+                          updateUser(user.id, {
+                            enableStyleNumber: event.target.checked,
+                          })
+                        }
+                      />
+                      <span className="text-sm">Style Number</span>
+                    </label>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Plan: {user.plan} · Industry: {industryLabel(user.industry)} · Single: {user.defaultImageModel} · Batch: {user.defaultBatchImageModel}
+                    Plan: {user.plan} · Industry: {industryLabel(user.industry)} · Single: {user.defaultImageModel} · Batch: {user.defaultBatchImageModel} · Style Number: {user.enableStyleNumber ? "Enabled" : "Disabled"}
                   </p>
                   <div className="flex flex-wrap gap-3">
                     <button
