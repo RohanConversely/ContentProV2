@@ -191,7 +191,7 @@ const AdminUsersList = ({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete user?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete {pendingDeleteUser?.displayName} if they have no jobs.
+              This will permanently delete {pendingDeleteUser?.displayName} and their associated data.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
