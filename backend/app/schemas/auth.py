@@ -30,6 +30,7 @@ class TokenResponse(BaseModel):
     role: str
     industry: str
     default_image_model: str
+    default_batch_image_model: str
 
 
 class MeResponse(BaseModel):
@@ -39,6 +40,7 @@ class MeResponse(BaseModel):
     role: str
     industry: str
     default_image_model: str
+    default_batch_image_model: str
     plan: str
     member_since: datetime
 

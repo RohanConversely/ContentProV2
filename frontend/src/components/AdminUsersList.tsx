@@ -128,21 +128,41 @@ const AdminUsersList = ({
                         </option>
                       ))}
                     </select>
-                    <select
-                      className="rounded-xl border border-border bg-card px-3 py-2"
-                      value={user.defaultImageModel}
-                      onChange={(event) =>
-                        updateUser(user.id, {
-                          defaultImageModel: event.target.value as "reve" | "gpt-image-1.5",
-                        })
-                      }
-                    >
-                      <option value="reve">reve</option>
-                      <option value="gpt-image-1.5">gpt-image-1.5</option>
-                    </select>
+                    <label className="space-y-2">
+                      <span className="text-xs font-medium text-muted-foreground">Model for single product</span>
+                      <select
+                        className="w-full rounded-xl border border-border bg-card px-3 py-2"
+                        value={user.defaultImageModel}
+                        onChange={(event) =>
+                          updateUser(user.id, {
+                            defaultImageModel: event.target.value as "reve" | "gpt-image-1.5" | "gpt-batch-api",
+                          })
+                        }
+                      >
+                        <option value="gpt-image-1.5">gpt-image-1.5</option>
+                        <option value="reve">reve</option>
+                        <option value="gpt-batch-api">gpt batch api</option>
+                      </select>
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-xs font-medium text-muted-foreground">Model for batch processing</span>
+                      <select
+                        className="w-full rounded-xl border border-border bg-card px-3 py-2"
+                        value={user.defaultBatchImageModel}
+                        onChange={(event) =>
+                          updateUser(user.id, {
+                            defaultBatchImageModel: event.target.value as "reve" | "gpt-image-1.5" | "gpt-batch-api",
+                          })
+                        }
+                      >
+                        <option value="gpt-image-1.5">gpt-image-1.5</option>
+                        <option value="reve">reve</option>
+                        <option value="gpt-batch-api">gpt batch api</option>
+                      </select>
+                    </label>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Plan: {user.plan} · Industry: {industryLabel(user.industry)} · Model: {user.defaultImageModel}
+                    Plan: {user.plan} · Industry: {industryLabel(user.industry)} · Single: {user.defaultImageModel} · Batch: {user.defaultBatchImageModel}
                   </p>
                   <div className="flex flex-wrap gap-3">
                     <button
