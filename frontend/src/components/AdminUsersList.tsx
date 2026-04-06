@@ -1,12 +1,23 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { type AdminUserRecord } from "@/lib/api";
 import { industries, industryLabel } from "@/lib/industries";
 
 interface AdminUsersListProps {
   onDeleteUser: (userId: string) => void;
   onOpenOverride: (user: AdminUserRecord) => void;
+  onViewProjects: (user: AdminUserRecord) => void;
   onSaveUser: (user: AdminUserRecord) => void;
   users: AdminUserRecord[];
   onUsersChange: (users: AdminUserRecord[]) => void;
@@ -15,12 +26,14 @@ interface AdminUsersListProps {
 const AdminUsersList = ({
   onDeleteUser,
   onOpenOverride,
+  onViewProjects,
   onSaveUser,
   users,
   onUsersChange,
 }: AdminUsersListProps) => {
   const [query, setQuery] = useState("");
   const [expandedUserIds, setExpandedUserIds] = useState<string[]>([]);
+  const [pendingDeleteUser, setPendingDeleteUser] = useState<AdminUserRecord | null>(null);
 
   const filteredUsers = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -142,7 +155,7 @@ const AdminUsersList = ({
                     <button
                       type="button"
                       className="rounded-xl border border-destructive/40 px-4 py-2 text-sm text-destructive"
-                      onClick={() => onDeleteUser(user.id)}
+                      onClick={() => setPendingDeleteUser(user)}
                     >
                       Delete
                     </button>
@@ -152,6 +165,13 @@ const AdminUsersList = ({
                       onClick={() => onOpenOverride(user)}
                     >
                       Prompt Override
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-xl border border-border px-4 py-2 text-sm"
+                      onClick={() => onViewProjects(user)}
+                    >
+                      View Projects
                     </button>
                   </div>
                 </div>
@@ -165,6 +185,30 @@ const AdminUsersList = ({
           </div>
         ) : null}
       </div>
+
+      <AlertDialog open={Boolean(pendingDeleteUser)} onOpenChange={(open) => !open && setPendingDeleteUser(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete user?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete {pendingDeleteUser?.displayName} if they have no jobs.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (!pendingDeleteUser) return;
+                onDeleteUser(pendingDeleteUser.id);
+                setPendingDeleteUser(null);
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 };

@@ -16,6 +16,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  adminGetUserJobLogs,
+  adminGetUserProjectById,
+  adminGetUserProjects,
   getProjects,
   getProjectById,
   deleteProject,
@@ -30,7 +33,7 @@ import {
   type JobLogEntry,
   type Project,
 } from "@/lib/api";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { LazyImage } from "@/components/ui/lazy-image";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -111,9 +114,15 @@ const ImageLightbox = ({
 const ProjectDetailView = ({
   project,
   onBack,
+  adminUserId,
+  readOnly = false,
+  showJobLogs = false,
 }: {
   project: Project;
   onBack: () => void;
+  adminUserId?: string | null;
+  readOnly?: boolean;
+  showJobLogs?: boolean;
 }) => {
   const [localProject, setLocalProject] = useState(project);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -139,10 +148,17 @@ const ProjectDetailView = ({
   }, [project]);
 
   useEffect(() => {
+    if (!showJobLogs) {
+      setJobLogs([]);
+      setLogsError(null);
+      return;
+    }
     let cancelled = false;
     void (async () => {
       try {
-        const logs = await getJobLogs(localProject.id);
+        const logs = adminUserId
+          ? await adminGetUserJobLogs(adminUserId, localProject.id)
+          : await getJobLogs(localProject.id);
         if (!cancelled) {
           setJobLogs(logs);
           setLogsError(null);
@@ -157,7 +173,7 @@ const ProjectDetailView = ({
     return () => {
       cancelled = true;
     };
-  }, [localProject.id]);
+  }, [adminUserId, localProject.id, showJobLogs]);
 
   const generations = detail.generations ?? [];
   const selectedGeneration =
@@ -495,6 +511,7 @@ const ProjectDetailView = ({
 
       </div>
 
+      {showJobLogs ? (
       <div className="space-y-3">
         <h3 className="font-display text-lg font-semibold">Job Logs</h3>
         <div className="rounded-xl border border-border bg-card/60 p-4">
@@ -518,17 +535,20 @@ const ProjectDetailView = ({
           )}
         </div>
       </div>
+      ) : null}
 
       {/* Generated Images */}
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <h3 className="font-display text-lg font-semibold">Generated Images</h3>
-          <button
-            onClick={() => void handleDownloadAll()}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-xs font-medium hover:bg-secondary transition-colors"
-          >
-            <Download className="h-3.5 w-3.5" /> Download All
-          </button>
+          {!readOnly ? (
+            <button
+              onClick={() => void handleDownloadAll()}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-xs font-medium hover:bg-secondary transition-colors"
+            >
+              <Download className="h-3.5 w-3.5" /> Download All
+            </button>
+          ) : null}
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {displayImages.map((src, i) => (
@@ -557,12 +577,14 @@ const ProjectDetailView = ({
                   >
                     <Maximize2 className="h-3.5 w-3.5" />
                   </button>
-                  <button
-                    onClick={() => void handleDownloadImage(src, i)}
-                    className="h-8 w-8 rounded-lg bg-card/80 backdrop-blur border border-border flex items-center justify-center hover:bg-secondary transition-colors"
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                  </button>
+                  {!readOnly ? (
+                    <button
+                      onClick={() => void handleDownloadImage(src, i)}
+                      className="h-8 w-8 rounded-lg bg-card/80 backdrop-blur border border-border flex items-center justify-center hover:bg-secondary transition-colors"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </motion.div>
@@ -570,6 +592,7 @@ const ProjectDetailView = ({
         </div>
       </div>
 
+      {!readOnly ? (
       <div className="rounded-xl border border-border bg-card/60 p-4 space-y-4">
         <div>
           <h3 className="font-display text-lg font-semibold">Generate Again</h3>
@@ -689,6 +712,7 @@ const ProjectDetailView = ({
           </div>
         </div>
       </div>
+      ) : null}
 
       {/* Video section (video projects only) */}
       {localProject.type === "video" && (
@@ -738,6 +762,11 @@ const ProjectDetailView = ({
 const ProjectsPage = () => {
   const navigate = useNavigate();
   const { jobId } = useParams<{ jobId: string }>();
+  const [searchParams] = useSearchParams();
+  const { user } = useAuth();
+  const adminUserId = searchParams.get("admin_user_id");
+  const adminUserName = searchParams.get("admin_user_name");
+  const isAdminViewingAnotherUser = Boolean(adminUserId) && user?.role === "superadmin";
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
@@ -750,7 +779,9 @@ const ProjectsPage = () => {
     }
 
     void (async () => {
-      const data = await getProjects();
+      const data = isAdminViewingAnotherUser && adminUserId
+        ? await adminGetUserProjects(adminUserId)
+        : await getProjects();
       setProjects(data);
       if (jobId) {
         setIsLoadingProject(true);
@@ -760,14 +791,16 @@ const ProjectsPage = () => {
           setIsLoadingProject(false);
           return;
         }
-        const fetched = await getProjectById(jobId);
+        const fetched = isAdminViewingAnotherUser && adminUserId
+          ? await adminGetUserProjectById(adminUserId, jobId)
+          : await getProjectById(jobId);
         if (fetched) {
           setSelectedProject(fetched);
         }
         setIsLoadingProject(false);
       }
     })();
-  }, [jobId]);
+  }, [adminUserId, isAdminViewingAnotherUser, jobId]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -786,15 +819,26 @@ const ProjectsPage = () => {
         {selectedProject && !isLoadingProject ? (
           <ProjectDetailView
             project={selectedProject}
+            adminUserId={isAdminViewingAnotherUser ? adminUserId : null}
+            readOnly={isAdminViewingAnotherUser}
+            showJobLogs={user?.role === "superadmin"}
             onBack={() => {
               // Explicitly clear selected project to ensure UI resets correctly
               const batchId = selectedProject.batch_id;
               setSelectedProject(null);
               
               if (batchId) {
-                navigate(`/batch/${batchId}`);
+                if (!isAdminViewingAnotherUser) {
+                  navigate(`/batch/${batchId}`);
+                } else {
+                  navigate(
+                    `/projects?admin_user_id=${encodeURIComponent(adminUserId ?? "")}${adminUserName ? `&admin_user_name=${encodeURIComponent(adminUserName)}` : ""}`,
+                  );
+                }
               } else {
-                navigate("/projects");
+                navigate(isAdminViewingAnotherUser && adminUserId
+                  ? `/projects?admin_user_id=${encodeURIComponent(adminUserId)}${adminUserName ? `&admin_user_name=${encodeURIComponent(adminUserName)}` : ""}`
+                  : "/projects");
               }
             }}
           />
@@ -802,9 +846,13 @@ const ProjectsPage = () => {
           <>
             <div className="flex items-center justify-between mb-8">
               <div>
-                <h1 className="font-display text-3xl font-bold">Your Projects</h1>
+                <h1 className="font-display text-3xl font-bold">
+                  {isAdminViewingAnotherUser ? `${adminUserName || "User"} Projects` : "Your Projects"}
+                </h1>
                 <p className="text-muted-foreground mt-1">
-                  Manage and view all your generated content
+                  {isAdminViewingAnotherUser
+                    ? "Admin view of this user's generated content"
+                    : "Manage and view all your generated content"}
                 </p>
               </div>
             </div>
@@ -820,14 +868,18 @@ const ProjectsPage = () => {
                 </div>
                 <h2 className="text-xl font-semibold mb-2">No projects yet</h2>
                 <p className="text-muted-foreground mb-6">
-                  Create your first project to get started
+                  {isAdminViewingAnotherUser
+                    ? "This user has not created any projects yet."
+                    : "Create your first project to get started"}
                 </p>
-                <a
-                  href="/"
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-primary text-primary-foreground rounded-lg font-semibold shadow-glow hover:opacity-90 transition-opacity"
-                >
-                  Create New Project
-                </a>
+                {!isAdminViewingAnotherUser ? (
+                  <a
+                    href="/"
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-primary text-primary-foreground rounded-lg font-semibold shadow-glow hover:opacity-90 transition-opacity"
+                  >
+                    Create New Project
+                  </a>
+                ) : null}
               </motion.div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -892,7 +944,7 @@ const ProjectsPage = () => {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => {
-                            if (project.batch_id) {
+                            if (project.batch_id && !isAdminViewingAnotherUser) {
                               navigate(`/batch/${project.batch_id}`);
                             } else {
                               setSelectedProject(project);
@@ -903,24 +955,28 @@ const ProjectsPage = () => {
                           <ExternalLink className="h-4 w-4" />
                           View
                         </button>
-                        <button
-                          className="p-2 rounded-lg hover:bg-secondary transition-colors"
-                          onClick={() => {
-                            if (project.batch_id) {
-                              void downloadBatchArchive(project.batch_id, project.name);
-                            } else {
-                              void downloadJobImagesArchive(project.id, `${project.detail.brandName}_${project.detail.productName}`);
-                            }
-                          }}
-                        >
-                          <Download className="h-4 w-4" />
-                        </button>
-                        <button
-                          className="p-2 rounded-lg hover:bg-secondary transition-colors text-destructive"
-                          onClick={() => setProjectToDelete(project)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {!isAdminViewingAnotherUser ? (
+                          <button
+                            className="p-2 rounded-lg hover:bg-secondary transition-colors"
+                            onClick={() => {
+                              if (project.batch_id) {
+                                void downloadBatchArchive(project.batch_id, project.name);
+                              } else {
+                                void downloadJobImagesArchive(project.id, `${project.detail.brandName}_${project.detail.productName}`);
+                              }
+                            }}
+                          >
+                            <Download className="h-4 w-4" />
+                          </button>
+                        ) : null}
+                        {!isAdminViewingAnotherUser ? (
+                          <button
+                            className="p-2 rounded-lg hover:bg-secondary transition-colors text-destructive"
+                            onClick={() => setProjectToDelete(project)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                   </motion.div>

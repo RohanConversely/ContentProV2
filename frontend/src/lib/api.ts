@@ -883,6 +883,21 @@ export async function getJobLogs(jobId: string): Promise<JobLogEntry[]> {
   }));
 }
 
+export async function adminGetUserJobLogs(userId: string, jobId: string): Promise<JobLogEntry[]> {
+  const response = await apiJson<BackendJobLogEntryResponse[]>(
+    `/admin/users/${encodeURIComponent(userId)}/jobs/${encodeURIComponent(jobId)}/logs`,
+    {},
+    true,
+  );
+  return response.map((entry) => ({
+    level: entry.level,
+    stage: entry.stage,
+    message: entry.message,
+    context: entry.context,
+    loggedAt: entry.logged_at,
+  }));
+}
+
 export function subscribeToJobEvents(
   jobId: string,
   handlers: {
@@ -1013,9 +1028,46 @@ export async function getProjects(): Promise<Project[]> {
     .map((result) => mapProject(result.value.job, result.value.summary));
 }
 
+export async function adminGetUserProjects(userId: string): Promise<Project[]> {
+  const response = await apiJson<BackendJobListResponse>(
+    `/admin/users/${encodeURIComponent(userId)}/jobs?page=1&page_size=50`,
+    {},
+    true,
+  );
+  const jobs = await Promise.allSettled(
+    response.items.map(async (item) => ({
+      summary: item,
+      job: await apiJson<BackendJobResponse>(
+        `/admin/users/${encodeURIComponent(userId)}/jobs/${encodeURIComponent(item.job_id)}`,
+        {},
+        true,
+      ),
+    })),
+  );
+  return jobs
+    .filter(
+      (result): result is PromiseFulfilledResult<{ summary: BackendJobSummaryResponse; job: BackendJobResponse }> =>
+        result.status === "fulfilled",
+    )
+    .map((result) => mapProject(result.value.job, result.value.summary));
+}
+
 export async function getProjectById(id: string): Promise<Project | null> {
   try {
     const job = await getJob(id);
+    return mapProject(job);
+  } catch {
+    return null;
+  }
+}
+
+export async function adminGetUserProjectById(userId: string, jobId: string): Promise<Project | null> {
+  try {
+    const job = await apiJson<BackendJobResponse>(
+      `/admin/users/${encodeURIComponent(userId)}/jobs/${encodeURIComponent(jobId)}`,
+      {},
+      true,
+    );
     return mapProject(job);
   } catch {
     return null;

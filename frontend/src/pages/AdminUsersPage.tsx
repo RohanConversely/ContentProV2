@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import AdminDefaultPromptPanel from "@/components/AdminDefaultPromptPanel";
 import AdminPromptOverrideModal from "@/components/AdminPromptOverrideModal";
@@ -15,6 +16,7 @@ import {
   type AdminUserRecord,
 } from "@/lib/api";
 import { industries } from "@/lib/industries";
+import { toast } from "@/components/ui/sonner";
 
 const defaultCreateState: AdminCreateUserPayload = {
   email: "",
@@ -27,6 +29,7 @@ const defaultCreateState: AdminCreateUserPayload = {
 };
 
 const AdminUsersPage = () => {
+  const navigate = useNavigate();
   const [users, setUsers] = useState<AdminUserRecord[]>([]);
   const [defaultPrompts, setDefaultPrompts] = useState<Record<string, string>>({});
   const [defaultShotPrompts, setDefaultShotPrompts] = useState<
@@ -65,7 +68,8 @@ const AdminUsersPage = () => {
       defaultImageModel: user.defaultImageModel,
       plan: user.plan,
     });
-    setMessage("User updated.");
+    setMessage(`Changes saved successfully for ${user.displayName}.`);
+    toast.success(`Changes saved for ${user.displayName}.`);
     await loadAll();
   };
 
@@ -188,6 +192,11 @@ const AdminUsersPage = () => {
           onSaveUser={(user) => void handleSaveUser(user)}
           onDeleteUser={(userId) => void handleDeleteUser(userId)}
           onOpenOverride={setModalUser}
+          onViewProjects={(user) =>
+            navigate(
+              `/projects?admin_user_id=${encodeURIComponent(user.id)}&admin_user_name=${encodeURIComponent(user.displayName)}`,
+            )
+          }
         />
       </div>
 
@@ -199,6 +208,7 @@ const AdminUsersPage = () => {
           onClose={() => setModalUser(null)}
           onSaved={(nextMessage) => {
             setMessage(nextMessage);
+            toast.success(nextMessage);
             void loadAll();
           }}
         />
