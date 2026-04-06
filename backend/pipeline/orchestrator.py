@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .logger import JsonLogger
+from .stages.image_gen_with_openai_batch import generate_images as generate_images_batch_openai
 from .stages.image_gen_with_flux import generate_images as generate_images_flux
 from .stages.image_gen_with_KYC import generate_images
 from .stages.reve.image_gen_reve import generate_images as generate_images_reve
@@ -126,6 +127,7 @@ async def _run_stage_2(ctx: JobContext, filtered_kyc_path: Path | None, logger: 
         "flux-2-pro": generate_images_flux,
         "gpt-image-1.5": generate_images,
         "gpt-image-1": generate_images,
+        "gpt-batch-api": generate_images_batch_openai,
         "reve": generate_images_reve,
     }
     stage_2_fn = stage_2_map.get(ctx.image_model)

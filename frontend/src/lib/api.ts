@@ -43,7 +43,8 @@ interface BackendTokenResponse {
   display_name: string;
   role: string;
   industry: string;
-  default_image_model: "reve" | "gpt-image-1.5" | "gpt-image-1";
+  default_image_model: "reve" | "gpt-image-1.5" | "gpt-image-1" | "gpt-batch-api";
+  default_batch_image_model: "reve" | "gpt-image-1.5" | "gpt-image-1" | "gpt-batch-api";
 }
 
 interface BackendMeResponse {
@@ -52,7 +53,8 @@ interface BackendMeResponse {
   display_name: string;
   role: "user" | "superadmin";
   industry: string;
-  default_image_model: "reve" | "gpt-image-1.5" | "gpt-image-1";
+  default_image_model: "reve" | "gpt-image-1.5" | "gpt-image-1" | "gpt-batch-api";
+  default_batch_image_model: "reve" | "gpt-image-1.5" | "gpt-image-1" | "gpt-batch-api";
   plan: "free" | "pro";
   member_since: string;
 }
@@ -63,7 +65,8 @@ interface BackendAdminUserResponse {
   display_name: string;
   role: "user" | "superadmin";
   industry: string;
-  default_image_model: "reve" | "gpt-image-1.5" | "gpt-image-1";
+  default_image_model: "reve" | "gpt-image-1.5" | "gpt-image-1" | "gpt-batch-api";
+  default_batch_image_model: "reve" | "gpt-image-1.5" | "gpt-image-1" | "gpt-batch-api";
   plan: "free" | "pro" | string;
   created_at: string;
 }
@@ -116,7 +119,7 @@ export interface BackendJobSummaryResponse {
   brand_name: string;
   product_name: string;
   job_type: string;
-  image_model: "reve" | "flux-2-pro" | "gpt-image-1.5" | "gpt-image-1";
+  image_model: "reve" | "flux-2-pro" | "gpt-image-1.5" | "gpt-image-1" | "gpt-batch-api";
   requested_image_count: number;
   batch_id?: string;
   batch_name?: string;
@@ -251,7 +254,8 @@ export interface AdminUserRecord {
   displayName: string;
   role: "user" | "superadmin";
   industry: string;
-  defaultImageModel: "reve" | "gpt-image-1.5";
+  defaultImageModel: "reve" | "gpt-image-1.5" | "gpt-batch-api";
+  defaultBatchImageModel: "reve" | "gpt-image-1.5" | "gpt-batch-api";
   plan: string;
   createdAt: string;
 }
@@ -262,7 +266,8 @@ export interface AdminCreateUserPayload {
   displayName: string;
   role: "user" | "superadmin";
   industry: string;
-  defaultImageModel: "reve" | "gpt-image-1.5";
+  defaultImageModel: "reve" | "gpt-image-1.5" | "gpt-batch-api";
+  defaultBatchImageModel: "reve" | "gpt-image-1.5" | "gpt-batch-api";
   plan: string;
 }
 
@@ -272,7 +277,8 @@ export interface AdminUpdateUserPayload {
   displayName?: string;
   role?: "user" | "superadmin";
   industry?: string;
-  defaultImageModel?: "reve" | "gpt-image-1.5";
+  defaultImageModel?: "reve" | "gpt-image-1.5" | "gpt-batch-api";
+  defaultBatchImageModel?: "reve" | "gpt-image-1.5" | "gpt-batch-api";
   plan?: string;
 }
 
@@ -339,6 +345,8 @@ function formatDate(value: string): string {
 function mapUserProfile(payload: BackendMeResponse): UserProfile {
   const normalizedModel =
     payload.default_image_model === "gpt-image-1" ? "gpt-image-1.5" : payload.default_image_model;
+  const normalizedBatchModel =
+    payload.default_batch_image_model === "gpt-image-1" ? "gpt-image-1.5" : payload.default_batch_image_model;
   return {
     id: payload.user_id,
     name: payload.display_name,
@@ -348,6 +356,7 @@ function mapUserProfile(payload: BackendMeResponse): UserProfile {
     role: payload.role,
     industry: payload.industry,
     defaultImageModel: normalizedModel,
+    defaultBatchModel: normalizedBatchModel,
     memberSince: formatDate(payload.member_since),
   };
 }
@@ -355,6 +364,8 @@ function mapUserProfile(payload: BackendMeResponse): UserProfile {
 function mapAdminUser(payload: BackendAdminUserResponse): AdminUserRecord {
   const normalizedModel =
     payload.default_image_model === "gpt-image-1" ? "gpt-image-1.5" : payload.default_image_model;
+  const normalizedBatchModel =
+    payload.default_batch_image_model === "gpt-image-1" ? "gpt-image-1.5" : payload.default_batch_image_model;
   return {
     id: payload.id,
     email: payload.email,
@@ -362,6 +373,7 @@ function mapAdminUser(payload: BackendAdminUserResponse): AdminUserRecord {
     role: payload.role,
     industry: payload.industry,
     defaultImageModel: normalizedModel,
+    defaultBatchImageModel: normalizedBatchModel,
     plan: payload.plan,
     createdAt: payload.created_at,
   };
@@ -782,6 +794,7 @@ export async function adminCreateUser(payload: AdminCreateUserPayload): Promise<
         role: payload.role,
         industry: payload.industry,
         default_image_model: payload.defaultImageModel,
+        default_batch_image_model: payload.defaultBatchImageModel,
         plan: payload.plan,
       }),
     },
@@ -803,6 +816,7 @@ export async function adminUpdateUser(userId: string, payload: AdminUpdateUserPa
         role: payload.role,
         industry: payload.industry,
         default_image_model: payload.defaultImageModel,
+        default_batch_image_model: payload.defaultBatchImageModel,
         plan: payload.plan,
       }),
     },

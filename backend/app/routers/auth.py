@@ -33,7 +33,11 @@ settings = get_settings()
 def _normalized_default_image_model(value: str | None) -> str:
     if value == "gpt-image-1":
         return "gpt-image-1.5"
-    return value or "reve"
+    return value or "gpt-image-1.5"
+
+
+def _normalized_default_batch_image_model(value: str | None) -> str:
+    return value or "gpt-batch-api"
 
 
 def build_token_response(user: User, token: str) -> TokenResponse:
@@ -45,6 +49,7 @@ def build_token_response(user: User, token: str) -> TokenResponse:
         role=user.role or USER_ROLE,
         industry=user.industry or DEFAULT_INDUSTRY,
         default_image_model=_normalized_default_image_model(user.default_image_model),
+        default_batch_image_model=_normalized_default_batch_image_model(user.default_batch_image_model),
     )
 
 
@@ -56,6 +61,7 @@ def build_me_response(user: User) -> MeResponse:
         role=user.role or USER_ROLE,
         industry=user.industry or DEFAULT_INDUSTRY,
         default_image_model=_normalized_default_image_model(user.default_image_model),
+        default_batch_image_model=_normalized_default_batch_image_model(user.default_batch_image_model),
         plan=user.plan or "free",
         member_since=user.created_at,
     )
@@ -245,7 +251,8 @@ async def google_callback(
                 hashed_password=hash_password(access_token),
                 display_name=display_name,
                 industry=DEFAULT_INDUSTRY,
-                default_image_model="reve",
+                default_image_model="gpt-image-1.5",
+                default_batch_image_model="gpt-batch-api",
             )
             db.add(user)
             await db.commit()

@@ -10,7 +10,8 @@ export interface UserProfile {
   plan: PlanType;
   role: "user" | "superadmin";
   industry: string;
-  defaultImageModel: "reve" | "gpt-image-1.5";
+  defaultImageModel: "reve" | "gpt-image-1.5" | "gpt-batch-api";
+  defaultBatchModel: "reve" | "gpt-image-1.5" | "gpt-batch-api";
   memberSince: string;
 }
 
@@ -107,7 +108,8 @@ export const mockUser: UserProfile = {
   plan: "free",
   role: "user",
   industry: "jewelry",
-  defaultImageModel: "reve",
+  defaultImageModel: "gpt-image-1.5",
+  defaultBatchModel: "gpt-batch-api",
   memberSince: "January 2026",
 };
 

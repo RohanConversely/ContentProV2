@@ -161,6 +161,11 @@ async def create_job(
     from pipeline.orchestrator import build_job_id
 
     generated_job_id = build_job_id()
+    resolved_image_model = (
+        current_user.default_batch_image_model
+        if payload.batch_id
+        else current_user.default_image_model
+    ) or "gpt-image-1.5"
     job = Job(
         job_id=generated_job_id,
         user_id=current_user.id,
@@ -169,7 +174,7 @@ async def create_job(
         product_name=payload.product_name,
         product_category=payload.product_category,
         job_type=payload.job_type,
-        image_model=current_user.default_image_model or "reve",
+        image_model=resolved_image_model,
         requested_image_count=payload.requested_image_count,
         social_link_1=payload.social_link_1,
         social_link_2=payload.social_link_2,

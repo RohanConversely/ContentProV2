@@ -24,7 +24,8 @@ const defaultCreateState: AdminCreateUserPayload = {
   displayName: "",
   role: "user",
   industry: "jewelry",
-  defaultImageModel: "reve",
+  defaultImageModel: "gpt-image-1.5",
+  defaultBatchImageModel: "gpt-batch-api",
   plan: "free",
 };
 
@@ -66,6 +67,7 @@ const AdminUsersPage = () => {
       role: user.role,
       industry: user.industry,
       defaultImageModel: user.defaultImageModel,
+      defaultBatchImageModel: user.defaultBatchImageModel,
       plan: user.plan,
     });
     setMessage(`Changes saved successfully for ${user.displayName}.`);
@@ -145,19 +147,40 @@ const AdminUsersPage = () => {
                   </option>
                 ))}
               </select>
-              <select
-                className="rounded-2xl border border-border bg-background px-4 py-3"
-                value={createState.defaultImageModel}
-                onChange={(event) =>
-                  setCreateState((prev) => ({
-                    ...prev,
-                    defaultImageModel: event.target.value as "reve" | "gpt-image-1.5",
-                  }))
-                }
-              >
-                <option value="reve">reve</option>
-                <option value="gpt-image-1.5">gpt-image-1.5</option>
-              </select>
+              <label className="space-y-2">
+                <span className="text-xs font-medium text-muted-foreground">Model for single product</span>
+                <select
+                  className="w-full rounded-2xl border border-border bg-background px-4 py-3"
+                  value={createState.defaultImageModel}
+                  onChange={(event) =>
+                    setCreateState((prev) => ({
+                      ...prev,
+                      defaultImageModel: event.target.value as "reve" | "gpt-image-1.5" | "gpt-batch-api",
+                    }))
+                  }
+                >
+                  <option value="gpt-image-1.5">gpt-image-1.5</option>
+                  <option value="reve">reve</option>
+                  <option value="gpt-batch-api">gpt batch api</option>
+                </select>
+              </label>
+              <label className="space-y-2">
+                <span className="text-xs font-medium text-muted-foreground">Model for batch processing</span>
+                <select
+                  className="w-full rounded-2xl border border-border bg-background px-4 py-3"
+                  value={createState.defaultBatchImageModel}
+                  onChange={(event) =>
+                    setCreateState((prev) => ({
+                      ...prev,
+                      defaultBatchImageModel: event.target.value as "reve" | "gpt-image-1.5" | "gpt-batch-api",
+                    }))
+                  }
+                >
+                  <option value="gpt-image-1.5">gpt-image-1.5</option>
+                  <option value="reve">reve</option>
+                  <option value="gpt-batch-api">gpt batch api</option>
+                </select>
+              </label>
               <select
                 className="rounded-2xl border border-border bg-background px-4 py-3"
                 value={createState.plan}
