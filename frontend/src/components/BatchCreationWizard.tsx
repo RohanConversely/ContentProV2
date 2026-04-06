@@ -7,6 +7,7 @@ import { ArrowLeft, Download, FileSpreadsheet, Play, RefreshCw, Upload, X } from
 import { Checkbox } from "@/components/ui/checkbox";
 import type { ProductFormData } from "./CreationWizard";
 import { writeActiveBatchRun } from "@/lib/active-runs";
+import { useAuth } from "@/contexts/AuthContext";
 
 type BatchMode = "images" | "video";
 type BatchSourceType = "image_link" | "drive_folder";
@@ -21,6 +22,7 @@ type BatchRowInput = {
   socialLinkFacebook: string;
   socialLinkLinkedin: string;
   socialLinkX: string;
+  styleNumber: string;
   imageLink: string;
   additionalInfo: Record<string, string>;
 };
@@ -52,6 +54,7 @@ const TEMPLATE_HEADERS = [
   "facebook",
   "linkedin",
   "x",
+  "style no.",
 ] as const;
 
 const CORE_FIELDS = [
@@ -64,8 +67,11 @@ const CORE_FIELDS = [
   "socialLinkFacebook",
   "socialLinkLinkedin",
   "socialLinkX",
+  "styleNumber",
   "imageLink",
 ];
+
+const STYLE_NO_NORMALIZED_HEADERS = new Set(["styleno", "stylenumber"]);
 
 function normalizeHeaderKey(input: string) {
   return input
@@ -167,7 +173,7 @@ async function parseXlsx(file: File): Promise<Record<string, unknown>[]> {
   return records;
 }
 
-function parseRecordsToJobs(records: Record<string, unknown>[]): BatchJob[] {
+function parseRecordsToJobs(records: Record<string, unknown>[], requireStyleNumber: boolean): BatchJob[] {
   const keyMap: Record<string, keyof Omit<BatchRowInput, "additionalInfo">> = {
     brandname: "brandName",
     brand: "brandName",
@@ -188,6 +194,8 @@ function parseRecordsToJobs(records: Record<string, unknown>[]): BatchJob[] {
     x: "socialLinkX",
     twitter: "socialLinkX",
     sociallinkx: "socialLinkX",
+    styleno: "styleNumber",
+    stylenumber: "styleNumber",
     imagelink: "imageLink",
     image: "imageLink",
   };
@@ -207,6 +215,7 @@ function parseRecordsToJobs(records: Record<string, unknown>[]): BatchJob[] {
       socialLinkFacebook: "",
       socialLinkLinkedin: "",
       socialLinkX: "",
+      styleNumber: "",
       imageLink: "",
       additionalInfo: {},
     };
@@ -230,6 +239,7 @@ function parseRecordsToJobs(records: Record<string, unknown>[]): BatchJob[] {
     if (!initial.productName) errors.push("Missing product name");
     if (!initial.productCategory) errors.push("Missing product category");
     if (!initial.imageLink) errors.push("Missing image link");
+    if (requireStyleNumber && !initial.styleNumber) errors.push("Missing style no.");
 
     const isAllBlank =
       !initial.brandName &&
@@ -241,6 +251,7 @@ function parseRecordsToJobs(records: Record<string, unknown>[]): BatchJob[] {
       !initial.socialLinkFacebook &&
       !initial.socialLinkLinkedin &&
       !initial.socialLinkX &&
+      !initial.styleNumber &&
       !initial.imageLink &&
       Object.keys(initial.additionalInfo).length === 0;
 
@@ -265,6 +276,7 @@ export default function BatchCreationWizard({
   mode: BatchMode;
   onBack: () => void;
 }) {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -274,6 +286,7 @@ export default function BatchCreationWizard({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sourceType, setSourceType] = useState<BatchSourceType>("image_link");
   const [requestedImageCount, setRequestedImageCount] = useState(4);
+  const [addStyleNumber, setAddStyleNumber] = useState(false);
   const isRunning = false;
 
   const validJobs = useMemo(() => jobs.filter((j) => j.errors.length === 0), [jobs]);
@@ -339,7 +352,6 @@ export default function BatchCreationWizard({
         throw new Error("Unsupported file type. Please upload a .csv or .xlsx file.");
       }
 
-      const parsedJobs = parseRecordsToJobs(records);
       const headers = Array.from(
         records.reduce((acc, record) => {
           Object.keys(record).forEach((key) => {
@@ -348,6 +360,14 @@ export default function BatchCreationWizard({
           return acc;
         }, new Set<string>()),
       );
+      if (addStyleNumber) {
+        const hasStyleHeader = headers.some((header) => STYLE_NO_NORMALIZED_HEADERS.has(normalizeHeaderKey(header)));
+        if (!hasStyleHeader) {
+          throw new Error('Style number is enabled. Uploaded file must include a "style no." column.');
+        }
+      }
+
+      const parsedJobs = parseRecordsToJobs(records, addStyleNumber);
       if (parsedJobs.length === 0) {
         throw new Error("No valid rows found. Make sure the first sheet has headers and at least one row.");
       }
@@ -368,6 +388,20 @@ export default function BatchCreationWizard({
   const runBatch = async () => {
     if (selectedJobs.length === 0) return;
 
+    if (addStyleNumber) {
+      const hasStyleHeader = columnHeaders.some((header) => STYLE_NO_NORMALIZED_HEADERS.has(normalizeHeaderKey(header)));
+      if (!hasStyleHeader) {
+        setParseError('Style number is enabled. Uploaded file must include a "style no." column.');
+        return;
+      }
+
+      const missingStyleRows = selectedJobs.filter((job) => !job.styleNumber.trim());
+      if (missingStyleRows.length > 0) {
+        setParseError(`Style number is enabled. Missing style no. in ${missingStyleRows.length} selected row(s).`);
+        return;
+      }
+    }
+
     const batch_id = `batch_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     const batch_name = fileName || "Batch Generation";
 
@@ -387,8 +421,16 @@ export default function BatchCreationWizard({
         dimensionHeight: "",
         productDescription: j.productDescription,
         requestedImageCount,
+        addStyleNumber,
+        styleNumber: addStyleNumber ? j.styleNumber : "",
         productImages: [j.imageLink],
-        additionalInfo: j.additionalInfo,
+        additionalInfo: addStyleNumber
+          ? {
+              ...j.additionalInfo,
+              "add_style_number": "true",
+              "style no.": j.styleNumber,
+            }
+          : j.additionalInfo,
       };
 
       return {
@@ -494,6 +536,27 @@ export default function BatchCreationWizard({
             ))}
           </select>
         </div>
+        {user?.enableStyleNumber ? (
+          <div className="mt-4 space-y-2">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={addStyleNumber}
+                onChange={(event) => {
+                  const checked = event.target.checked;
+                  setAddStyleNumber(checked);
+                  setParseError(null);
+                }}
+              />
+              Add style number
+            </label>
+            {addStyleNumber ? (
+              <p className="text-xs text-muted-foreground">
+                When enabled, uploaded file must include a <span className="font-medium">style no.</span> column.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {/* Upload box */}

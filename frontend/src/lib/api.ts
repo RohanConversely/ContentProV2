@@ -45,6 +45,7 @@ interface BackendTokenResponse {
   industry: string;
   default_image_model: "reve" | "gpt-image-1.5" | "gpt-image-1" | "gpt-batch-api";
   default_batch_image_model: "reve" | "gpt-image-1.5" | "gpt-image-1" | "gpt-batch-api";
+  enable_style_number: boolean;
 }
 
 interface BackendMeResponse {
@@ -55,6 +56,7 @@ interface BackendMeResponse {
   industry: string;
   default_image_model: "reve" | "gpt-image-1.5" | "gpt-image-1" | "gpt-batch-api";
   default_batch_image_model: "reve" | "gpt-image-1.5" | "gpt-image-1" | "gpt-batch-api";
+  enable_style_number: boolean;
   plan: "free" | "pro";
   member_since: string;
 }
@@ -67,6 +69,7 @@ interface BackendAdminUserResponse {
   industry: string;
   default_image_model: "reve" | "gpt-image-1.5" | "gpt-image-1" | "gpt-batch-api";
   default_batch_image_model: "reve" | "gpt-image-1.5" | "gpt-image-1" | "gpt-batch-api";
+  enable_style_number: boolean;
   plan: "free" | "pro" | string;
   created_at: string;
 }
@@ -244,6 +247,7 @@ export interface JobGenerationSummary {
 
 export interface RegenerateImagesInput {
   additionalDescription: string;
+  requestedImageCount?: 1 | 2;
   inputImages?: File[];
   shotTypes?: string[];
 }
@@ -256,6 +260,7 @@ export interface AdminUserRecord {
   industry: string;
   defaultImageModel: "reve" | "gpt-image-1.5" | "gpt-batch-api";
   defaultBatchImageModel: "reve" | "gpt-image-1.5" | "gpt-batch-api";
+  enableStyleNumber: boolean;
   plan: string;
   createdAt: string;
 }
@@ -268,6 +273,7 @@ export interface AdminCreateUserPayload {
   industry: string;
   defaultImageModel: "reve" | "gpt-image-1.5" | "gpt-batch-api";
   defaultBatchImageModel: "reve" | "gpt-image-1.5" | "gpt-batch-api";
+  enableStyleNumber: boolean;
   plan: string;
 }
 
@@ -279,6 +285,7 @@ export interface AdminUpdateUserPayload {
   industry?: string;
   defaultImageModel?: "reve" | "gpt-image-1.5" | "gpt-batch-api";
   defaultBatchImageModel?: "reve" | "gpt-image-1.5" | "gpt-batch-api";
+  enableStyleNumber?: boolean;
   plan?: string;
 }
 
@@ -357,6 +364,7 @@ function mapUserProfile(payload: BackendMeResponse): UserProfile {
     industry: payload.industry,
     defaultImageModel: normalizedModel,
     defaultBatchModel: normalizedBatchModel,
+    enableStyleNumber: payload.enable_style_number,
     memberSince: formatDate(payload.member_since),
   };
 }
@@ -374,6 +382,7 @@ function mapAdminUser(payload: BackendAdminUserResponse): AdminUserRecord {
     industry: payload.industry,
     defaultImageModel: normalizedModel,
     defaultBatchImageModel: normalizedBatchModel,
+    enableStyleNumber: payload.enable_style_number,
     plan: payload.plan,
     createdAt: payload.created_at,
   };
@@ -436,6 +445,7 @@ function mapProject(job: BackendJobResponse, summary?: BackendJobSummaryResponse
       ([key, value]) =>
         key !== "dimensions" &&
         key !== "product_description" &&
+        key !== "add_style_number" &&
         value !== null &&
         value !== undefined &&
         String(value).trim().length > 0,
@@ -745,6 +755,7 @@ export async function getJob(jobId: string): Promise<BackendJobResponse> {
 export async function regenerateJobImages(jobId: string, input: RegenerateImagesInput): Promise<JobGenerationSummary> {
   const formData = new FormData();
   formData.append("additional_description", input.additionalDescription);
+  formData.append("requested_image_count", String(input.requestedImageCount ?? 2));
   (input.shotTypes ?? []).forEach((shotType) => formData.append("shot_types", shotType));
   (input.inputImages ?? []).forEach((file) => formData.append("input_images", file));
 
@@ -795,6 +806,7 @@ export async function adminCreateUser(payload: AdminCreateUserPayload): Promise<
         industry: payload.industry,
         default_image_model: payload.defaultImageModel,
         default_batch_image_model: payload.defaultBatchImageModel,
+        enable_style_number: payload.enableStyleNumber,
         plan: payload.plan,
       }),
     },
@@ -817,6 +829,7 @@ export async function adminUpdateUser(userId: string, payload: AdminUpdateUserPa
         industry: payload.industry,
         default_image_model: payload.defaultImageModel,
         default_batch_image_model: payload.defaultBatchImageModel,
+        enable_style_number: payload.enableStyleNumber,
         plan: payload.plan,
       }),
     },

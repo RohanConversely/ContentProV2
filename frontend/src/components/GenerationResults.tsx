@@ -119,6 +119,7 @@ const GenerationResults = ({
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [selectedImages, setSelectedImages] = useState<number[]>([]);
   const [additionalDescription, setAdditionalDescription] = useState("");
+  const [regenerationImageCount, setRegenerationImageCount] = useState<1 | 2>(2);
   const [reveShotTypes, setReveShotTypes] = useState<string[]>(["hero"]);
   const [regenerationInputFiles, setRegenerationInputFiles] = useState<File[]>([]);
   const [regenerationError, setRegenerationError] = useState<string | null>(null);
@@ -270,6 +271,7 @@ const GenerationResults = ({
     try {
       const queuedGeneration = await regenerateJobImages(jobId, {
         additionalDescription: additionalDescription.trim(),
+        requestedImageCount: regenerationImageCount,
         inputImages: regenerationInputFiles,
         shotTypes: usesReveRegeneration ? reveShotTypes : [],
       });
@@ -522,7 +524,12 @@ const GenerationResults = ({
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {Array.from({ length: Math.max(displayImages.length, effectiveLoading ? requestedImageCount : displayImages.length) }).map((_, i) => {
+        {Array.from({
+          length: Math.max(
+            displayImages.length,
+            effectiveLoading ? (isRegenerating ? regenerationImageCount : requestedImageCount) : displayImages.length,
+          ),
+        }).map((_, i) => {
           const src = displayImages[i];
           const isSelected = selectedImages.includes(i);
           if (!src) {
@@ -656,6 +663,19 @@ const GenerationResults = ({
             className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
           />
           <span className="text-xs text-muted-foreground">{additionalDescription.length}/250</span>
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Number of Images</p>
+            <select
+              value={String(regenerationImageCount)}
+              onChange={(event) =>
+                setRegenerationImageCount((event.target.value === "1" ? 1 : 2) as 1 | 2)
+              }
+              className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+            >
+              <option value="1">1</option>
+              <option value="2">2</option>
+            </select>
+          </div>
           <div className="space-y-2">
             <p className="text-sm font-medium">Input Images (required, 1 to 3)</p>
             <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-border bg-background px-4 py-3 text-sm hover:border-primary/50 hover:bg-secondary/40 transition-colors">
@@ -808,11 +828,16 @@ const GenerationResults = ({
               )}
 
               {/* Additional Metadata */}
-              {productData.additionalInfo && Object.keys(productData.additionalInfo).length > 0 && (
+              {productData.additionalInfo &&
+                Object.entries(productData.additionalInfo).some(
+                  ([key, value]) => key !== "add_style_number" && String(value).trim().length > 0,
+                ) && (
                 <div className="pt-3 border-t border-border space-y-2">
                   <span className="text-xs text-muted-foreground">Additional Information:</span>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
-                    {Object.entries(productData.additionalInfo).map(([key, value]) => (
+                    {Object.entries(productData.additionalInfo)
+                      .filter(([key, value]) => key !== "add_style_number" && String(value).trim().length > 0)
+                      .map(([key, value]) => (
                       value && (
                         <div key={key} className="flex items-center justify-between text-[11px] border-b border-border/50 pb-1">
                           <span className="text-muted-foreground font-medium">{key}:</span>

@@ -55,6 +55,27 @@ REVE_REGEN_SHOT_TYPES = {
     "jewellery_box",
     "close_detail",
 }
+STYLE_NUMBER_KEYS = ("style no.", "style no", "style_number", "stylenumber")
+
+
+def _is_truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return False
+
+
+def _extract_style_number(additional_input: dict[str, Any] | None) -> str | None:
+    if not additional_input:
+        return None
+    for key in STYLE_NUMBER_KEYS:
+        value = additional_input.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
 
 
 def _job_summary(job: Job) -> JobSummaryResponse:
@@ -166,6 +187,21 @@ async def create_job(
         if payload.batch_id
         else current_user.default_image_model
     ) or "gpt-image-1.5"
+
+    normalized_additional_input = payload.additional_input if isinstance(payload.additional_input, dict) else None
+    style_toggle_requested = _is_truthy((normalized_additional_input or {}).get("add_style_number"))
+    style_number = _extract_style_number(normalized_additional_input)
+
+    if (style_toggle_requested or style_number) and not current_user.enable_style_number:
+        raise HTTPException(status_code=403, detail="Style number feature is not enabled for this user.")
+
+    if style_toggle_requested:
+        if not style_number:
+            raise HTTPException(status_code=422, detail="Style number is required when add_style_number is enabled.")
+        normalized_additional_input = dict(normalized_additional_input or {})
+        normalized_additional_input["add_style_number"] = True
+        normalized_additional_input["style no."] = style_number
+
     job = Job(
         job_id=generated_job_id,
         user_id=current_user.id,
@@ -180,7 +216,7 @@ async def create_job(
         social_link_2=payload.social_link_2,
         social_link_3=payload.social_link_3,
         social_link_4=payload.social_link_4,
-        additional_input_json=payload.additional_input,
+        additional_input_json=normalized_additional_input,
         video_duration_seconds=payload.video_duration_seconds,
         batch_id=payload.batch_id,
         batch_name=payload.batch_name,
@@ -400,6 +436,7 @@ async def get_job(
 async def regenerate_job_images(
     job_id: str,
     additional_description: str = Form(...),
+    requested_image_count: int = Form(default=2, ge=1, le=2),
     image_model: str | None = Form(default=None),
     input_images: list[UploadFile] = File(default=[]),
     shot_types: list[str] = Form(default=[]),
@@ -512,7 +549,13 @@ async def regenerate_job_images(
     await db.commit()
     await db.refresh(generation)
 
-    await queue_regeneration_task(job.job_id, generation.id, selected_image_model, normalized_shot_types)
+    await queue_regeneration_task(
+        job.job_id,
+        generation.id,
+        selected_image_model,
+        normalized_shot_types,
+        requested_image_count,
+    )
 
     return JobGenerationResponse(
         id=generation.id,

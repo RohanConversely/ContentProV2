@@ -26,6 +26,7 @@ const defaultCreateState: AdminCreateUserPayload = {
   industry: "jewelry",
   defaultImageModel: "gpt-image-1.5",
   defaultBatchImageModel: "gpt-batch-api",
+  enableStyleNumber: false,
   plan: "free",
 };
 
@@ -68,6 +69,7 @@ const AdminUsersPage = () => {
       industry: user.industry,
       defaultImageModel: user.defaultImageModel,
       defaultBatchImageModel: user.defaultBatchImageModel,
+      enableStyleNumber: user.enableStyleNumber,
       plan: user.plan,
     });
     setMessage(`Changes saved successfully for ${user.displayName}.`);
@@ -180,6 +182,19 @@ const AdminUsersPage = () => {
                   <option value="reve">reve</option>
                   <option value="gpt-batch-api">gpt batch api</option>
                 </select>
+              </label>
+              <label className="flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 md:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={createState.enableStyleNumber}
+                  onChange={(event) =>
+                    setCreateState((prev) => ({
+                      ...prev,
+                      enableStyleNumber: event.target.checked,
+                    }))
+                  }
+                />
+                <span className="text-sm">Style Number</span>
               </label>
               <select
                 className="rounded-2xl border border-border bg-background px-4 py-3"

@@ -12,6 +12,7 @@ export interface UserProfile {
   industry: string;
   defaultImageModel: "reve" | "gpt-image-1.5" | "gpt-batch-api";
   defaultBatchModel: "reve" | "gpt-image-1.5" | "gpt-batch-api";
+  enableStyleNumber: boolean;
   memberSince: string;
 }
 
@@ -110,6 +111,7 @@ export const mockUser: UserProfile = {
   industry: "jewelry",
   defaultImageModel: "gpt-image-1.5",
   defaultBatchModel: "gpt-batch-api",
+  enableStyleNumber: false,
   memberSince: "January 2026",
 };
 

@@ -50,6 +50,7 @@ def build_token_response(user: User, token: str) -> TokenResponse:
         industry=user.industry or DEFAULT_INDUSTRY,
         default_image_model=_normalized_default_image_model(user.default_image_model),
         default_batch_image_model=_normalized_default_batch_image_model(user.default_batch_image_model),
+        enable_style_number=bool(user.enable_style_number),
     )
 
 
@@ -62,6 +63,7 @@ def build_me_response(user: User) -> MeResponse:
         industry=user.industry or DEFAULT_INDUSTRY,
         default_image_model=_normalized_default_image_model(user.default_image_model),
         default_batch_image_model=_normalized_default_batch_image_model(user.default_batch_image_model),
+        enable_style_number=bool(user.enable_style_number),
         plan=user.plan or "free",
         member_since=user.created_at,
     )

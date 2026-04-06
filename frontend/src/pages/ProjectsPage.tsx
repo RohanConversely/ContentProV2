@@ -130,6 +130,7 @@ const ProjectDetailView = ({
   const [logsError, setLogsError] = useState<string | null>(null);
   const [activeGenerationId, setActiveGenerationId] = useState<string | null>(project.detail.activeGenerationId ?? null);
   const [additionalDescription, setAdditionalDescription] = useState("");
+  const [regenerationImageCount, setRegenerationImageCount] = useState<1 | 2>(2);
   const [reveShotTypes, setReveShotTypes] = useState<string[]>(["hero"]);
   const [regenerationInputFiles, setRegenerationInputFiles] = useState<File[]>([]);
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -233,6 +234,7 @@ const ProjectDetailView = ({
     try {
       const queuedGeneration = await regenerateJobImages(localProject.id, {
         additionalDescription: additionalDescription.trim(),
+        requestedImageCount: regenerationImageCount,
         inputImages: regenerationInputFiles,
         shotTypes: usesReveRegeneration ? reveShotTypes : [],
       });
@@ -553,7 +555,20 @@ const ProjectDetailView = ({
           ) : null}
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {displayImages.map((src, i) => (
+          {Array.from({ length: Math.max(displayImages.length, isRegenerating ? regenerationImageCount : displayImages.length) }).map((_, i) => {
+            const src = displayImages[i];
+            if (!src) {
+              return (
+                <div
+                  key={`placeholder-${i}`}
+                  className="aspect-square overflow-hidden rounded-xl border border-border bg-card"
+                >
+                  <div className="h-full w-full animate-pulse bg-gradient-to-br from-secondary via-card to-secondary" />
+                </div>
+              );
+            }
+
+            return (
             <motion.div
               key={i}
               initial={{ opacity: 0, y: 12 }}
@@ -590,7 +605,8 @@ const ProjectDetailView = ({
                 </div>
               </div>
             </motion.div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -654,6 +670,17 @@ const ProjectDetailView = ({
           className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
         />
         <span className="text-xs text-muted-foreground">{additionalDescription.length}/250</span>
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Number of Images</p>
+          <select
+            value={String(regenerationImageCount)}
+            onChange={(event) => setRegenerationImageCount((event.target.value === "1" ? 1 : 2) as 1 | 2)}
+            className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+          >
+            <option value="1">1</option>
+            <option value="2">2</option>
+          </select>
+        </div>
         <div className="space-y-2">
           <p className="text-sm font-medium">Input Images (required, 1 to 3)</p>
           <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-border bg-background px-4 py-3 text-sm hover:border-primary/50 hover:bg-secondary/40 transition-colors">

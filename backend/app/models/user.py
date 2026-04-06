@@ -24,6 +24,7 @@ class User(Base):
     industry: Mapped[str] = mapped_column(String(64), default="jewelry")
     default_image_model: Mapped[str] = mapped_column(String(50), default="gpt-image-1.5")
     default_batch_image_model: Mapped[str] = mapped_column(String(50), default="gpt-batch-api")
+    enable_style_number: Mapped[bool] = mapped_column(Boolean, default=False)
     plan: Mapped[str] = mapped_column(String(50), default="free")
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

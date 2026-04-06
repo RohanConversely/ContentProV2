@@ -50,6 +50,7 @@ def _user_response(user: User) -> AdminUserResponse:
         industry=user.industry,
         default_image_model=user.default_image_model or "gpt-image-1.5",
         default_batch_image_model=user.default_batch_image_model or "gpt-batch-api",
+        enable_style_number=bool(user.enable_style_number),
         plan=user.plan,
         created_at=user.created_at,
     )
@@ -146,6 +147,7 @@ async def create_user(
         industry=payload.industry,
         default_image_model=payload.default_image_model,
         default_batch_image_model=payload.default_batch_image_model,
+        enable_style_number=payload.enable_style_number,
         plan=payload.plan,
     )
     db.add(user)
@@ -182,6 +184,8 @@ async def update_user(
         user.default_image_model = payload.default_image_model
     if payload.default_batch_image_model is not None:
         user.default_batch_image_model = payload.default_batch_image_model
+    if payload.enable_style_number is not None:
+        user.enable_style_number = payload.enable_style_number
     if payload.plan is not None:
         user.plan = payload.plan
     if payload.password is not None:
