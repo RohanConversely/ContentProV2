@@ -143,7 +143,7 @@ def generate_images(
     image_model = os.getenv("OPENAI_BATCH_IMAGE_MODEL", DEFAULT_BATCH_IMAGE_MODEL)
     image_size = os.getenv("OPENAI_BATCH_IMAGE_SIZE", "1024x1024")
     image_quality = os.getenv("OPENAI_BATCH_IMAGE_QUALITY", "low")
-    input_fidelity = os.getenv("OPENAI_BATCH_INPUT_FIDELITY", "low")
+    input_fidelity = os.getenv("OPENAI_BATCH_INPUT_FIDELITY", "high")
     completion_window = os.getenv("OPENAI_BATCH_COMPLETION_WINDOW", DEFAULT_BATCH_COMPLETION_WINDOW)
     poll_interval_seconds = int(os.getenv("OPENAI_BATCH_POLL_INTERVAL_SECONDS", str(DEFAULT_BATCH_POLL_INTERVAL_SECONDS)))
     timeout_seconds = int(os.getenv("OPENAI_BATCH_TIMEOUT_SECONDS", str(DEFAULT_BATCH_TIMEOUT_SECONDS)))
