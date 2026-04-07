@@ -88,6 +88,7 @@ interface GenerationResultsProps {
   onBack: () => void;
   onStartOver: () => void;
   onCreateVideo?: (images: string[]) => void;
+  hideMetadataDetails?: boolean;
 }
 
 const REVE_SHOT_OPTIONS = [
@@ -115,6 +116,7 @@ const GenerationResults = ({
   onBack,
   onStartOver,
   onCreateVideo,
+  hideMetadataDetails = false,
 }: GenerationResultsProps) => {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [selectedImages, setSelectedImages] = useState<number[]>([]);
@@ -216,7 +218,9 @@ const GenerationResults = ({
     if (jobId) {
       await downloadJobImagesArchive(
         jobId,
-        `${productData.brandName}_${productData.productName}`,
+        hideMetadataDetails
+          ? `${productData.productName || "generated-images"}`
+          : `${productData.brandName}_${productData.productName}`,
         selectedGeneration?.id ?? null,
       );
       return;
@@ -404,10 +408,18 @@ const GenerationResults = ({
               Generated Images
             </h2>
             <p className="text-sm text-muted-foreground mt-0.5">
-              A+ Content for{" "}
-              <span className="text-primary font-semibold">
-                {productData.brandName}
-              </span>
+              {hideMetadataDetails ? (
+                <>
+                  Product: <span className="text-primary font-semibold">{productData.productName || "Untitled Product"}</span>
+                </>
+              ) : (
+                <>
+                  A+ Content for{" "}
+                  <span className="text-primary font-semibold">
+                    {productData.brandName}
+                  </span>
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -741,115 +753,137 @@ const GenerationResults = ({
 
       {/* Summary footer */}
       {effectiveAllDone && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="rounded-xl border border-border bg-card/60 backdrop-blur p-5 space-y-4"
-            >
-              {/* Header row */}
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                    <Building2 className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">
-                      {productData.productName || "Untitled Project"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {displayImages.length} images generated {jobId ? `· Job ${jobId}` : ""}
-                    </p>
-                  </div>
+        hideMetadataDetails ? (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-xl border border-border bg-card/60 backdrop-blur p-5"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <Building2 className="h-5 w-5 text-primary" />
                 </div>
-                <div className="flex items-center gap-2">
-                  {productData.brandWebsite && (
-                    <a
-                      href={productData.brandWebsite.startsWith("http") ? productData.brandWebsite : `https://${productData.brandWebsite}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs text-primary hover:bg-secondary transition-colors"
-                    >
-                      <Globe className="h-3.5 w-3.5" />
-                      {productData.brandWebsite.replace(/^https?:\/\//, "").replace(/\/$/, "")}
-                    </a>
-                  )}
-                </div>
-              </div>
-
-              {/* Details grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-3 border-t border-border">
-                <div className="space-y-1">
-                  <span className="text-muted-foreground">Brand</span>
-                  <p className="font-medium truncate">{productData.brandName || "—"}</p>
-                </div>
-                <div className="space-y-1">
-                  <span className="text-muted-foreground">Product</span>
-                  <p className="font-medium truncate">{productData.productName || "—"}</p>
-                </div>
-                <div className="space-y-1">
-                  <span className="text-muted-foreground">Category</span>
-                  <p className="font-medium truncate">{productData.productCategory || "—"}</p>
-                </div>
-                <div className="space-y-1">
-                  <span className="text-muted-foreground">Dimensions</span>
-                  <p className="font-medium truncate">
-                    {productData.dimensionLength && productData.dimensionBreadth && productData.dimensionHeight
-                      ? `${productData.dimensionLength} × ${productData.dimensionBreadth} × ${productData.dimensionHeight} ${productData.dimensionUnit}`
-                      : "—"}
+                <div>
+                  <p className="text-sm font-semibold">{productData.productName || "Untitled Product"}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {displayImages.length} images generated {jobId ? `· Job ${jobId}` : ""}
                   </p>
                 </div>
               </div>
-
-              {/* Description */}
-              {productData.productDescription && (
-                <div className="pt-2 border-t border-border space-y-1">
-                  <span className="text-xs text-muted-foreground">Description</span>
-                  <p className="text-xs">{productData.productDescription}</p>
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-xl border border-border bg-card/60 backdrop-blur p-5 space-y-4"
+          >
+            {/* Header row */}
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <Building2 className="h-5 w-5 text-primary" />
                 </div>
-              )}
-
-              {/* Social links */}
-              {(productData.socialLinkInstagram || productData.socialLinkFacebook || productData.socialLinkLinkedin || productData.socialLinkX) && (
-                <div className="pt-3 border-t border-border flex flex-wrap items-center gap-3">
-                  <span className="text-xs text-muted-foreground">Socials:</span>
-                  {productData.socialLinkInstagram && (
-                    <a href={productData.socialLinkInstagram} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">Instagram</a>
-                  )}
-                  {productData.socialLinkFacebook && (
-                    <a href={productData.socialLinkFacebook} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">Facebook</a>
-                  )}
-                  {productData.socialLinkLinkedin && (
-                    <a href={productData.socialLinkLinkedin} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">LinkedIn</a>
-                  )}
-                  {productData.socialLinkX && (
-                    <a href={productData.socialLinkX} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">X</a>
-                  )}
+                <div>
+                  <p className="text-sm font-semibold">
+                    {productData.productName || "Untitled Project"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {displayImages.length} images generated {jobId ? `· Job ${jobId}` : ""}
+                  </p>
                 </div>
-              )}
+              </div>
+              <div className="flex items-center gap-2">
+                {productData.brandWebsite && (
+                  <a
+                    href={productData.brandWebsite.startsWith("http") ? productData.brandWebsite : `https://${productData.brandWebsite}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs text-primary hover:bg-secondary transition-colors"
+                  >
+                    <Globe className="h-3.5 w-3.5" />
+                    {productData.brandWebsite.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                  </a>
+                )}
+              </div>
+            </div>
 
-              {/* Additional Metadata */}
-              {productData.additionalInfo &&
-                Object.entries(productData.additionalInfo).some(
-                  ([key, value]) => key !== "add_style_number" && String(value).trim().length > 0,
-                ) && (
-                <div className="pt-3 border-t border-border space-y-2">
-                  <span className="text-xs text-muted-foreground">Additional Information:</span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
-                    {Object.entries(productData.additionalInfo)
-                      .filter(([key, value]) => key !== "add_style_number" && String(value).trim().length > 0)
-                      .map(([key, value]) => (
-                      value && (
-                        <div key={key} className="flex items-center justify-between text-[11px] border-b border-border/50 pb-1">
-                          <span className="text-muted-foreground font-medium">{key}:</span>
-                          <span className="truncate max-w-[150px]">{value}</span>
-                        </div>
-                      )
-                    ))}
-                  </div>
+            {/* Details grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-3 border-t border-border">
+              <div className="space-y-1">
+                <span className="text-muted-foreground">Brand</span>
+                <p className="font-medium truncate">{productData.brandName || "—"}</p>
+              </div>
+              <div className="space-y-1">
+                <span className="text-muted-foreground">Product</span>
+                <p className="font-medium truncate">{productData.productName || "—"}</p>
+              </div>
+              <div className="space-y-1">
+                <span className="text-muted-foreground">Category</span>
+                <p className="font-medium truncate">{productData.productCategory || "—"}</p>
+              </div>
+              <div className="space-y-1">
+                <span className="text-muted-foreground">Dimensions</span>
+                <p className="font-medium truncate">
+                  {productData.dimensionLength && productData.dimensionBreadth && productData.dimensionHeight
+                    ? `${productData.dimensionLength} × ${productData.dimensionBreadth} × ${productData.dimensionHeight} ${productData.dimensionUnit}`
+                    : "—"}
+                </p>
+              </div>
+            </div>
+
+            {/* Description */}
+            {productData.productDescription && (
+              <div className="pt-2 border-t border-border space-y-1">
+                <span className="text-xs text-muted-foreground">Description</span>
+                <p className="text-xs">{productData.productDescription}</p>
+              </div>
+            )}
+
+            {/* Social links */}
+            {(productData.socialLinkInstagram || productData.socialLinkFacebook || productData.socialLinkLinkedin || productData.socialLinkX) && (
+              <div className="pt-3 border-t border-border flex flex-wrap items-center gap-3">
+                <span className="text-xs text-muted-foreground">Socials:</span>
+                {productData.socialLinkInstagram && (
+                  <a href={productData.socialLinkInstagram} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">Instagram</a>
+                )}
+                {productData.socialLinkFacebook && (
+                  <a href={productData.socialLinkFacebook} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">Facebook</a>
+                )}
+                {productData.socialLinkLinkedin && (
+                  <a href={productData.socialLinkLinkedin} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">LinkedIn</a>
+                )}
+                {productData.socialLinkX && (
+                  <a href={productData.socialLinkX} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">X</a>
+                )}
+              </div>
+            )}
+
+            {/* Additional Metadata */}
+            {productData.additionalInfo &&
+              Object.entries(productData.additionalInfo).some(
+                ([key, value]) => key !== "add_style_number" && String(value).trim().length > 0,
+              ) && (
+              <div className="pt-3 border-t border-border space-y-2">
+                <span className="text-xs text-muted-foreground">Additional Information:</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+                  {Object.entries(productData.additionalInfo)
+                    .filter(([key, value]) => key !== "add_style_number" && String(value).trim().length > 0)
+                    .map(([key, value]) => (
+                    value && (
+                      <div key={key} className="flex items-center justify-between text-[11px] border-b border-border/50 pb-1">
+                        <span className="text-muted-foreground font-medium">{key}:</span>
+                        <span className="truncate max-w-[150px]">{value}</span>
+                      </div>
+                    )
+                  ))}
                 </div>
-              )}
-            </motion.div>
-          )}
+              </div>
+            )}
+          </motion.div>
+        )
+      )}
 
       {/* Lightbox */}
       {previewImage && (

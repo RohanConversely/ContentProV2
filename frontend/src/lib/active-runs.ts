@@ -18,7 +18,7 @@ export interface PersistedSingleRun {
 export interface PersistedBatchRunPayload {
   id: string;
   mode: "images" | "video";
-  sourceType: "image_link" | "drive_folder";
+  sourceType: "image_link" | "drive_folder" | "folder_upload";
   batch_id?: string;
   batch_name?: string;
   productData: ProductFormData;

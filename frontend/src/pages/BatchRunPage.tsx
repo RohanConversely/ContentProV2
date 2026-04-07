@@ -9,6 +9,7 @@ import type { ProductFormData } from "@/components/CreationWizard";
 import {
   createJob,
   getJob,
+  uploadJobAsset,
   uploadRemoteFolderAssets,
   uploadRemoteJobAsset,
   cancelJob,
@@ -21,6 +22,7 @@ import {
   readActiveBatchRun,
   writeActiveBatchRun,
 } from "@/lib/active-runs";
+import { getTransientBatchFiles } from "@/lib/batch-transient-files";
 
 type BatchMode = "images" | "video";
 type BatchJobStatus = "queued" | "creating" | "uploading" | "running" | "completed" | "failed" | "cancelled";
@@ -28,8 +30,9 @@ type BatchJobStatus = "queued" | "creating" | "uploading" | "running" | "complet
 interface BatchJobRunPayload {
   id: string;
   mode: BatchMode;
-  sourceType: "image_link" | "drive_folder";
+  sourceType: "image_link" | "drive_folder" | "folder_upload";
   productData: ProductFormData;
+  folderUploadKey?: string;
   batch_id?: string;
   batch_name?: string;
 }
@@ -133,10 +136,11 @@ const BatchRunPage = () => {
     if (jobStates.length === 0) return;
     writeActiveBatchRun({
       mode: defaultMode,
-      jobs: jobStates.map(({ id, mode, sourceType, batch_id, batch_name, productData }) => ({
+      jobs: jobStates.map(({ id, mode, sourceType, folderUploadKey, batch_id, batch_name, productData }) => ({
         id,
         mode,
         sourceType,
+        folderUploadKey,
         batch_id,
         batch_name,
         productData,
@@ -291,9 +295,6 @@ const BatchRunPage = () => {
           }
 
           const sourceImageUrl = localJob.productData.productImages[0];
-          if (!sourceImageUrl) {
-            throw new Error(localJob.sourceType === "drive_folder" ? "Batch row is missing a folder URL." : "Batch row is missing an image URL.");
-          }
 
           const liveJob = await getJob(backendJobId);
           const hasRawImage = liveJob.assets.some((asset) => asset.asset_type === "raw_image" && !asset.is_deleted);
@@ -302,13 +303,32 @@ const BatchRunPage = () => {
               ...job,
               status: "uploading",
               stage: "queued",
-              message: "Downloading source image and queuing the job.",
+              message:
+                localJob.sourceType === "folder_upload"
+                  ? "Uploading folder images and queuing the job."
+                  : "Downloading source image and queuing the job.",
             }));
-            const shouldUseFolder = localJob.sourceType === "drive_folder" || looksLikeDriveFolder(sourceImageUrl);
-            if (shouldUseFolder) {
-              await uploadRemoteFolderAssets(backendJobId, sourceImageUrl, 5);
+
+            if (localJob.sourceType === "folder_upload") {
+              const folderUploadKey = localJob.folderUploadKey;
+              if (!folderUploadKey) {
+                throw new Error("Folder files are unavailable for this job.");
+              }
+              const localFiles = getTransientBatchFiles(folderUploadKey);
+              if (localFiles.length === 0) {
+                throw new Error("Folder files are unavailable. Re-upload the folder and run again.");
+              }
+              await uploadJobAsset(backendJobId, localFiles);
             } else {
-              await uploadRemoteJobAsset(backendJobId, sourceImageUrl);
+              if (!sourceImageUrl) {
+                throw new Error(localJob.sourceType === "drive_folder" ? "Batch row is missing a folder URL." : "Batch row is missing an image URL.");
+              }
+              const shouldUseFolder = localJob.sourceType === "drive_folder" || looksLikeDriveFolder(sourceImageUrl);
+              if (shouldUseFolder) {
+                await uploadRemoteFolderAssets(backendJobId, sourceImageUrl, 5);
+              } else {
+                await uploadRemoteJobAsset(backendJobId, sourceImageUrl);
+              }
             }
           }
 
@@ -523,7 +543,7 @@ const BatchRunPage = () => {
                             {job.productData.productName || `Job ${index + 1}`}
                           </p>
               <p className="text-[11px] text-muted-foreground truncate flex items-center gap-1.5">
-                <span>{job.productData.brandName || "Untitled brand"}</span>
+                {job.sourceType !== "folder_upload" ? <span>{job.productData.brandName || "Untitled brand"}</span> : null}
                 <span className={`inline-flex items-center gap-1 ${statusTone}`}>
                   <StatusIcon className={`h-3 w-3 ${job.status === "running" ? "animate-spin" : ""}`} />
                   {job.status}
@@ -568,6 +588,7 @@ const BatchRunPage = () => {
                     }
                   : undefined
               }
+              hideMetadataDetails={activeJob.sourceType === "folder_upload"}
             />
           </div>
         </div>

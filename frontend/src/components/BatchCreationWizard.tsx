@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
@@ -7,10 +7,13 @@ import { ArrowLeft, Download, FileSpreadsheet, Play, RefreshCw, Upload, X } from
 import { Checkbox } from "@/components/ui/checkbox";
 import type { ProductFormData } from "./CreationWizard";
 import { writeActiveBatchRun } from "@/lib/active-runs";
+import { setTransientBatchFiles } from "@/lib/batch-transient-files";
 import { useAuth } from "@/contexts/AuthContext";
+import sampleSheetUrl from "../../sample.xlsx?url";
+import styleSampleSheetUrl from "../../style_sample.xlsx?url";
 
 type BatchMode = "images" | "video";
-type BatchSourceType = "image_link" | "drive_folder";
+type BatchSourceType = "image_link" | "drive_folder" | "folder_upload";
 
 type BatchRowInput = {
   brandName: string;
@@ -32,6 +35,7 @@ type BatchJob = BatchRowInput & {
   rowNumber: number;
   errors: string[];
   rawValues: Record<string, string>;
+  folderFiles?: File[];
 };
 
 type BatchJobRunPayload = {
@@ -39,6 +43,7 @@ type BatchJobRunPayload = {
   mode: BatchMode;
   sourceType: BatchSourceType;
   productData: ProductFormData;
+  folderUploadKey?: string;
   batch_id?: string;
   batch_name?: string;
 };
@@ -86,25 +91,6 @@ function safeString(v: unknown) {
   if (typeof v === "number") return String(v).trim();
   if (typeof v === "boolean") return String(v).trim();
   return "";
-}
-
-function toTemplateCsv() {
-  const rows = [TEMPLATE_HEADERS.join(",")];
-  rows.push(
-    [
-      "https://drive.google.com/file/d/...",
-      "Tatsya",
-      "https://tatsya.com",
-      "Premium Marble Cake Stand",
-      "Kitchen & Dining",
-      "Short product description (optional)",
-      "https://instagram.com/tatsya",
-      "",
-      "",
-      "",
-    ].join(","),
-  );
-  return rows.join("\n");
 }
 
 async function readFileAsArrayBuffer(file: File) {
@@ -269,6 +255,102 @@ function parseRecordsToJobs(records: Record<string, unknown>[], requireStyleNumb
   return jobs;
 }
 
+function getWebkitRelativePath(file: File): string {
+  const withRelativePath = file as File & { webkitRelativePath?: string };
+  return (withRelativePath.webkitRelativePath ?? file.name).trim();
+}
+
+function buildFolderUploadJobs(
+  files: File[],
+  defaults: { brandName: string; brandWebsite: string; productCategory: string },
+): BatchJob[] {
+  const imageFiles = files.filter((file) => file.type.startsWith("image/"));
+  if (imageFiles.length === 0) {
+    return [];
+  }
+
+  const fileEntries = imageFiles.map((file) => {
+    const relativePath = getWebkitRelativePath(file);
+    const segments = relativePath.split("/").filter(Boolean);
+    return { file, relativePath, segments };
+  });
+
+  const hasSubfolders = fileEntries.some(({ segments }) => segments.length >= 3);
+  const jobs: BatchJob[] = [];
+
+  if (hasSubfolders) {
+    const grouped = new Map<string, File[]>();
+    fileEntries.forEach(({ file, segments }) => {
+      if (segments.length < 3) {
+        return;
+      }
+      const groupName = segments[1];
+      const existing = grouped.get(groupName) ?? [];
+      existing.push(file);
+      grouped.set(groupName, existing);
+    });
+
+    let rowNumber = 1;
+    Array.from(grouped.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([groupName, groupFiles]) => {
+        const pickedFiles = [...groupFiles].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 5);
+        jobs.push({
+          id: `folder-${rowNumber}-${Date.now()}`,
+          rowNumber,
+          brandName: defaults.brandName,
+          brandWebsite: defaults.brandWebsite,
+          productName: groupName,
+          productCategory: defaults.productCategory,
+          productDescription: "",
+          socialLinkInstagram: "",
+          socialLinkFacebook: "",
+          socialLinkLinkedin: "",
+          socialLinkX: "",
+          styleNumber: "",
+          imageLink: groupName,
+          additionalInfo: {
+            folder_upload_group: groupName,
+          },
+          errors: pickedFiles.length === 0 ? ["No valid images found in this subfolder"] : [],
+          rawValues: {
+            "folder name": groupName,
+            "images picked": String(pickedFiles.length),
+          },
+          folderFiles: pickedFiles,
+        });
+        rowNumber += 1;
+      });
+    return jobs;
+  }
+
+  const sortedFiles = [...imageFiles].sort((a, b) => a.name.localeCompare(b.name));
+  return sortedFiles.map((file, index) => ({
+    id: `folder-${index + 1}-${Date.now()}`,
+    rowNumber: index + 1,
+    brandName: defaults.brandName,
+    brandWebsite: defaults.brandWebsite,
+    productName: file.name,
+    productCategory: defaults.productCategory,
+    productDescription: "",
+    socialLinkInstagram: "",
+    socialLinkFacebook: "",
+    socialLinkLinkedin: "",
+    socialLinkX: "",
+    styleNumber: "",
+    imageLink: file.name,
+    additionalInfo: {
+      folder_upload_group: file.name,
+    },
+    errors: [],
+    rawValues: {
+      "image file": file.name,
+      "images picked": "1",
+    },
+    folderFiles: [file],
+  }));
+}
+
 export default function BatchCreationWizard({
   mode,
   onBack,
@@ -279,6 +361,7 @@ export default function BatchCreationWizard({
   const { user } = useAuth();
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [jobs, setJobs] = useState<BatchJob[]>([]);
@@ -288,6 +371,12 @@ export default function BatchCreationWizard({
   const [requestedImageCount, setRequestedImageCount] = useState(4);
   const [addStyleNumber, setAddStyleNumber] = useState(false);
   const isRunning = false;
+
+  useEffect(() => {
+    if (!folderInputRef.current) return;
+    folderInputRef.current.setAttribute("webkitdirectory", "");
+    folderInputRef.current.setAttribute("directory", "");
+  }, []);
 
   const validJobs = useMemo(() => jobs.filter((j) => j.errors.length === 0), [jobs]);
   const invalidCount = useMemo(() => jobs.filter((j) => j.errors.length > 0).length, [jobs]);
@@ -307,19 +396,17 @@ export default function BatchCreationWizard({
     setColumnHeaders([]);
     setSelectedIds(new Set());
     if (inputRef.current) inputRef.current.value = "";
+    if (folderInputRef.current) folderInputRef.current.value = "";
   };
 
   const downloadTemplate = () => {
-    const csv = toTemplateCsv();
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
+    const url = addStyleNumber ? styleSampleSheetUrl : sampleSheetUrl;
     const a = document.createElement("a");
     a.href = url;
-    a.download = "contentpro_batch_template.csv";
+    a.download = addStyleNumber ? "style_sample.xlsx" : "sample.xlsx";
     document.body.appendChild(a);
     a.click();
     a.remove();
-    URL.revokeObjectURL(url);
   };
 
   const toggleSelect = (id: string, checked: boolean) => {
@@ -385,10 +472,60 @@ export default function BatchCreationWizard({
     }
   };
 
+  const handleFolderFiles = (files: FileList | null) => {
+    setParseError(null);
+    setSelectedIds(new Set());
+
+    const selectedFiles = Array.from(files ?? []);
+    if (selectedFiles.length === 0) {
+      setParseError("Please choose a folder with image files.");
+      return;
+    }
+
+    const defaultBrandName = user?.name?.trim() || "Batch Upload";
+    const folderJobs = buildFolderUploadJobs(selectedFiles, {
+      brandName: defaultBrandName,
+      brandWebsite: "https://example.com",
+      productCategory: "General",
+    });
+
+    if (folderJobs.length === 0) {
+      setFileName(null);
+      setJobs([]);
+      setColumnHeaders([]);
+      setSelectedIds(new Set());
+      setParseError("No image files found in the selected folder.");
+      return;
+    }
+
+    const headers = Array.from(
+      folderJobs.reduce((acc, job) => {
+        Object.keys(job.rawValues).forEach((key) => acc.add(key));
+        return acc;
+      }, new Set<string>()),
+    );
+
+    const rootFolderName = getWebkitRelativePath(selectedFiles[0]).split("/").filter(Boolean)[0] || "Folder Upload";
+    setFileName(rootFolderName);
+    setJobs(folderJobs);
+    setColumnHeaders(headers);
+    setSelectedIds(new Set(folderJobs.filter((j) => j.errors.length === 0).map((j) => j.id)));
+  };
+
   const runBatch = async () => {
     if (selectedJobs.length === 0) return;
 
-    if (addStyleNumber) {
+    const styleEnabled = sourceType !== "folder_upload" && addStyleNumber;
+
+    if (sourceType === "folder_upload") {
+      const missingFolderJobs = selectedJobs.filter((job) => !job.folderFiles || job.folderFiles.length === 0);
+      if (missingFolderJobs.length > 0) {
+        setParseError(`Selected ${missingFolderJobs.length} job(s) without folder images. Please re-upload the folder.`);
+        return;
+      }
+    }
+
+    if (styleEnabled) {
       const hasStyleHeader = columnHeaders.some((header) => STYLE_NO_NORMALIZED_HEADERS.has(normalizeHeaderKey(header)));
       if (!hasStyleHeader) {
         setParseError('Style number is enabled. Uploaded file must include a "style no." column.');
@@ -404,8 +541,19 @@ export default function BatchCreationWizard({
 
     const batch_id = `batch_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     const batch_name = fileName || "Batch Generation";
+    const folderFileMap: Record<string, File[]> = {};
 
     const payload: BatchJobRunPayload[] = selectedJobs.map((j) => {
+      let folderUploadKey: string | undefined;
+      if (sourceType === "folder_upload") {
+        const files = j.folderFiles ?? [];
+        if (files.length === 0) {
+          throw new Error(`Folder upload job ${j.rowNumber} has no image files.`);
+        }
+        folderUploadKey = `folder-upload-${Date.now()}-${j.rowNumber}-${Math.random().toString(36).slice(2, 8)}`;
+        folderFileMap[folderUploadKey] = files;
+      }
+
       const productData: ProductFormData = {
         brandName: j.brandName,
         brandWebsite: j.brandWebsite,
@@ -421,10 +569,10 @@ export default function BatchCreationWizard({
         dimensionHeight: "",
         productDescription: j.productDescription,
         requestedImageCount,
-        addStyleNumber,
-        styleNumber: addStyleNumber ? j.styleNumber : "",
-        productImages: [j.imageLink],
-        additionalInfo: addStyleNumber
+        addStyleNumber: styleEnabled,
+        styleNumber: styleEnabled ? j.styleNumber : "",
+        productImages: sourceType === "folder_upload" ? [] : [j.imageLink],
+        additionalInfo: styleEnabled
           ? {
               ...j.additionalInfo,
               "add_style_number": "true",
@@ -438,10 +586,15 @@ export default function BatchCreationWizard({
         mode,
         sourceType,
         productData,
+        folderUploadKey,
         batch_id,
         batch_name,
       };
     });
+
+    if (sourceType === "folder_upload") {
+      setTransientBatchFiles(folderFileMap);
+    }
 
     writeActiveBatchRun({
       mode,
@@ -486,7 +639,9 @@ export default function BatchCreationWizard({
             {mode === "images" ? "Batch: Generate A+ Images" : "Batch: Generate Video"}
           </h2>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Upload a CSV/XLSX, review rows, select jobs, and run generation on the batch.
+              {sourceType === "folder_upload"
+                ? "Upload a folder, review jobs, select jobs, and run generation on the batch."
+                : "Upload a CSV/XLSX, review rows, select jobs, and run generation on the batch."}
             </p>
           </div>
         </div>
@@ -496,7 +651,11 @@ export default function BatchCreationWizard({
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => setSourceType("image_link")}
+            onClick={() => {
+              resetAll();
+              setParseError(null);
+              setSourceType("image_link");
+            }}
             className={`px-4 py-2 rounded-lg border text-sm transition-colors ${
               sourceType === "image_link"
                 ? "border-primary bg-primary/10 text-primary"
@@ -507,7 +666,11 @@ export default function BatchCreationWizard({
           </button>
           <button
             type="button"
-            onClick={() => setSourceType("drive_folder")}
+            onClick={() => {
+              resetAll();
+              setParseError(null);
+              setSourceType("drive_folder");
+            }}
             className={`px-4 py-2 rounded-lg border text-sm transition-colors ${
               sourceType === "drive_folder"
                 ? "border-primary bg-primary/10 text-primary"
@@ -516,10 +679,28 @@ export default function BatchCreationWizard({
           >
             Google Drive Folder Links
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              resetAll();
+              setParseError(null);
+              setAddStyleNumber(false);
+              setSourceType("folder_upload");
+            }}
+            className={`px-4 py-2 rounded-lg border text-sm transition-colors ${
+              sourceType === "folder_upload"
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border hover:bg-secondary"
+            }`}
+          >
+            Folder Upload
+          </button>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
           {sourceType === "drive_folder"
             ? 'Each row should contain a public Google Drive folder link in the "image link" column. The first 5 images will be used.'
+            : sourceType === "folder_upload"
+              ? "Upload one folder directly. If subfolders exist, each subfolder becomes one job and the first 5 images are used."
             : 'Each row should contain one direct image link in the "image link" column.'}
         </p>
         <div className="mt-4 space-y-2">
@@ -536,7 +717,7 @@ export default function BatchCreationWizard({
             ))}
           </select>
         </div>
-        {user?.enableStyleNumber ? (
+        {user?.enableStyleNumber && sourceType !== "folder_upload" ? (
           <div className="mt-4 space-y-2">
             <label className="flex items-center gap-2 text-sm font-medium">
               <input
@@ -557,6 +738,11 @@ export default function BatchCreationWizard({
             ) : null}
           </div>
         ) : null}
+        {sourceType === "folder_upload" ? (
+          <p className="mt-4 text-xs text-muted-foreground">
+            Style number is disabled for folder upload.
+          </p>
+        ) : null}
       </div>
 
       {/* Upload box */}
@@ -565,14 +751,30 @@ export default function BatchCreationWizard({
           <div className="space-y-1">
             <p className="text-sm font-semibold flex items-center gap-2">
               <FileSpreadsheet className="h-4 w-4 text-primary" />
-              Upload batch file
+              {sourceType === "folder_upload" ? "Upload folder" : "Upload batch file"}
             </p>
             <p className="text-xs text-muted-foreground">
-              The first row must be headers. Supported formats: <span className="font-medium">.csv</span>,{" "}
-              <span className="font-medium">.xlsx</span>.
+              {sourceType === "folder_upload" ? (
+                "Choose a folder with images."
+              ) : (
+                <>
+                  The first row must be headers. Supported formats: <span className="font-medium">.csv</span>,{" "}
+                  <span className="font-medium">.xlsx</span>.
+                </>
+              )}
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {sourceType !== "folder_upload" && (
+              <button
+                onClick={downloadTemplate}
+                disabled={isRunning}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border text-xs font-medium hover:bg-secondary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Download className="h-3.5 w-3.5" />
+                {addStyleNumber ? "Style sample" : "Sample sheet"}
+              </button>
+            )}
             {jobs.length > 0 && (
               <button
                 onClick={resetAll}
@@ -583,11 +785,11 @@ export default function BatchCreationWizard({
               </button>
             )}
             <button
-              onClick={() => inputRef.current?.click()}
+              onClick={() => (sourceType === "folder_upload" ? folderInputRef.current?.click() : inputRef.current?.click())}
               disabled={isRunning}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-primary text-primary-foreground text-sm font-semibold shadow-glow hover:opacity-90 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed"
             >
-              <Upload className="h-4 w-4" /> Choose file
+              <Upload className="h-4 w-4" /> {sourceType === "folder_upload" ? "Choose folder" : "Choose file"}
             </button>
             <input
               ref={inputRef}
@@ -599,13 +801,25 @@ export default function BatchCreationWizard({
               }}
               className="hidden"
             />
+            <input
+              ref={folderInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => {
+                handleFolderFiles(e.target.files);
+              }}
+              className="hidden"
+            />
           </div>
         </div>
 
-        <div className="text-xs text-muted-foreground">
-          Expected columns (case/spacing tolerant):{" "}
-          <span className="font-medium text-foreground/90">{TEMPLATE_HEADERS.join(", ")}</span>
-        </div>
+        {sourceType !== "folder_upload" ? (
+          <div className="text-xs text-muted-foreground">
+            Expected columns (case/spacing tolerant):{" "}
+            <span className="font-medium text-foreground/90">{TEMPLATE_HEADERS.join(", ")}</span>
+          </div>
+        ) : null}
 
         {fileName && (
           <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card/40 px-4 py-3">
