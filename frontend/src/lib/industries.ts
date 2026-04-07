@@ -1,5 +1,5 @@
 export interface IndustryOption {
-  id: "fashion" | "electronics" | "beauty" | "food" | "home" | "sports" | "jewelry" | "health";
+  id: "fashion" | "electronics" | "beauty" | "food" | "home" | "sports" | "jewelry" | "health" | "pet_accessories";
   label: string;
   emoji: string;
 }
@@ -13,6 +13,7 @@ export const industries: IndustryOption[] = [
   { id: "sports", label: "Sports & Fitness", emoji: "🏋️" },
   { id: "jewelry", label: "Jewelry & Accessories", emoji: "💎" },
   { id: "health", label: "Health & Wellness", emoji: "🌿" },
+  { id: "pet_accessories", label: "Pet Accessories", emoji: "🐾" },
 ];
 
 export function industryLabel(industryId: string): string {

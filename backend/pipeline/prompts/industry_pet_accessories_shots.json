@@ -1,0 +1,8 @@
+[
+  {"key":"hero","label":"Hero","prompt":"."},
+  {"key":"lifestyle","label":"Lifestyle","prompt":"."},
+  {"key":"wearable","label":"Wearable","prompt":"."},
+  {"key":"wearable_ethnic","label":"Wearable ethnic","prompt":"."},
+  {"key":"jewellery_box","label":"Product Display","prompt":"."},
+  {"key":"close_detail","label":"Close Detail","prompt":"."}
+]
