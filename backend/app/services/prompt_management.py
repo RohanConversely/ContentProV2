@@ -24,6 +24,7 @@ DEFAULT_PROMPT_FILES = {
     "sports": "industry_sports.txt",
     "jewelry": "industry_jewelry.txt",
     "health": "industry_health.txt",
+    "pet_accessories": "industry_pet_accessories.txt",
 }
 
 DEFAULT_SHOT_PROMPT_FILES = {
@@ -35,6 +36,7 @@ DEFAULT_SHOT_PROMPT_FILES = {
     "sports": "industry_sports_shots.json",
     "jewelry": "industry_jewelry_shots.json",
     "health": "industry_health_shots.json",
+    "pet_accessories": "industry_pet_accessories_shots.json",
 }
 
 
