@@ -21,12 +21,18 @@ DEFAULT_BATCH_IMAGE_MODEL = "gpt-image-1.5"
 DEFAULT_BATCH_COMPLETION_WINDOW = "24h"
 DEFAULT_BATCH_POLL_INTERVAL_SECONDS = 20
 DEFAULT_BATCH_TIMEOUT_SECONDS = 1800
+EXTENSION_MIME_MAP = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+}
 
 
 def _to_data_url(image_path: Path) -> str:
-    mime_type, _ = mimetypes.guess_type(str(image_path))
-    if not mime_type:
-        mime_type = "image/png"
+    mime_type = mimetypes.guess_type(str(image_path))[0]
+    if not mime_type or mime_type == "application/octet-stream":
+        mime_type = EXTENSION_MIME_MAP.get(image_path.suffix.lower(), "image/png")
     encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")
     return f"data:{mime_type};base64,{encoded}"
 

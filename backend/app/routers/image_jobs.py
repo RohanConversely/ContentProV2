@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -13,6 +14,12 @@ from ..schemas.image_jobs import (
 from ..services.image_pipeline import persist_upload_file, run_batch_image_jobs, run_single_image_job
 
 router = APIRouter(prefix="/api/image", tags=["image-pipeline"])
+IMAGE_SUFFIX_MIME_MAP = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+}
 
 
 def _parse_additional_info(payload: str | None) -> dict[str, Any] | None:
@@ -29,6 +36,17 @@ def _parse_additional_info(payload: str | None) -> dict[str, Any] | None:
     return parsed
 
 
+def _resolve_upload_image_mime(file: UploadFile) -> str | None:
+    content_type = (file.content_type or "").lower()
+    if content_type.startswith("image/"):
+        return content_type
+
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix in IMAGE_SUFFIX_MIME_MAP and content_type in {"", "application/octet-stream"}:
+        return IMAGE_SUFFIX_MIME_MAP[suffix]
+    return None
+
+
 @router.post("/single", response_model=SingleImageJobResponse)
 async def create_single_image_job(
     image_file: UploadFile = File(...),
@@ -42,7 +60,7 @@ async def create_single_image_job(
     num_images: int = Form(default=6),
     temperature: float = Form(default=0.1),
 ) -> dict[str, Any]:
-    if not image_file.content_type or not image_file.content_type.startswith("image/"):
+    if _resolve_upload_image_mime(image_file) is None:
         raise HTTPException(status_code=422, detail="image_file must be an image upload.")
 
     image_path = await persist_upload_file(image_file)

@@ -56,6 +56,12 @@ REVE_REGEN_SHOT_TYPES = {
     "close_detail",
 }
 STYLE_NUMBER_KEYS = ("style no.", "style no", "style_number", "stylenumber")
+IMAGE_SUFFIX_MIME_MAP = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+}
 
 
 def _is_truthy(value: Any) -> bool:
@@ -75,6 +81,17 @@ def _extract_style_number(additional_input: dict[str, Any] | None) -> str | None
         value = additional_input.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
+    return None
+
+
+def _resolve_upload_image_mime(file: UploadFile) -> str | None:
+    content_type = (file.content_type or "").lower()
+    if content_type.startswith("image/"):
+        return content_type
+
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix in IMAGE_SUFFIX_MIME_MAP and content_type in {"", "application/octet-stream"}:
+        return IMAGE_SUFFIX_MIME_MAP[suffix]
     return None
 
 
@@ -509,7 +526,8 @@ async def regenerate_job_images(
 
     uploaded_input_count = 0
     for index, file in enumerate(input_images, start=1):
-        if not file.content_type or not file.content_type.startswith("image/"):
+        mime_type = _resolve_upload_image_mime(file)
+        if mime_type is None:
             raise HTTPException(status_code=422, detail="All regeneration input files must be images.")
 
         contents = await file.read()
@@ -518,7 +536,7 @@ async def regenerate_job_images(
 
         filename = file.filename or f"regeneration_input_{index}.png"
         storage_key = f"{job.storage_prefix}/regeneration/{generation.id}/{index:02d}_{filename}"
-        await storage_service.upload_bytes(contents, storage_key, file.content_type)
+        await storage_service.upload_bytes(contents, storage_key, mime_type)
 
         db.add(
             Asset(
@@ -528,7 +546,7 @@ async def regenerate_job_images(
                 stage="stage_2",
                 storage_key=storage_key,
                 original_filename=filename,
-                mime_type=file.content_type,
+                mime_type=mime_type,
                 size_bytes=len(contents),
                 metadata_json={
                     "source": "regenerate_upload",

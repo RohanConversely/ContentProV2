@@ -2,17 +2,26 @@
 import argparse
 import base64
 import json
+import mimetypes
 import os
 import sys
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
+from PIL import Image
 
 from ..logger import JsonLogger, log_usage
 
 load_dotenv()
 DEFAULT_RESULT_PREFIX = "__RESULT__"
+SUPPORTED_IMAGE_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
+EXTENSION_MIME_MAP = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+}
 
 
 def load_prompt(prompt_file: str) -> str:
@@ -37,6 +46,39 @@ def with_context(base: dict[str, Any] | None, extra: dict[str, Any]) -> dict[str
     merged = dict(base or {})
     merged.update(extra)
     return merged
+
+
+def _resolve_image_mime_type(image_path: Path) -> str:
+    guessed_type, _ = mimetypes.guess_type(str(image_path))
+    if guessed_type in SUPPORTED_IMAGE_MIME_TYPES:
+        return guessed_type
+
+    suffix = image_path.suffix.lower()
+    if suffix in EXTENSION_MIME_MAP:
+        return EXTENSION_MIME_MAP[suffix]
+
+    try:
+        with Image.open(image_path) as image:
+            image_format = (image.format or "").lower()
+    except Exception:
+        image_format = ""
+
+    if image_format in {"jpeg", "jpg"}:
+        return "image/jpeg"
+    if image_format == "png":
+        return "image/png"
+    if image_format == "webp":
+        return "image/webp"
+    return "image/png"
+
+
+def _build_upload_image_inputs(reference_images: list[Path]) -> list[tuple[str, bytes, str]]:
+    uploads: list[tuple[str, bytes, str]] = []
+    for index, image_path in enumerate(reference_images, start=1):
+        filename = image_path.name or f"reference_{index}.png"
+        mime_type = _resolve_image_mime_type(image_path)
+        uploads.append((filename, image_path.read_bytes(), mime_type))
+    return uploads
 
 
 def _normalize_shot_prompts(raw_value: Any) -> list[dict[str, str]]:
@@ -119,6 +161,7 @@ def generate_images(
         raise ValueError("At least one product image is required for image generation.")
 
     reference_images = [Path(path) for path in resolved_image_paths]
+    reference_image_uploads = _build_upload_image_inputs(reference_images)
 
     selected_shot_prompts = _selected_shot_prompts(shot_prompts, num_images)
 
@@ -165,7 +208,7 @@ def generate_images(
             )
 
         response = client.images.edit(
-            image=reference_images,
+            image=reference_image_uploads,
             model="gpt-image-1.5",
             prompt=request_text,
             n=remaining_images,

@@ -19,6 +19,12 @@ from pipeline.image_single_orchestrator import run_single_product_upload
 RUNTIME_ROOT = Path(__file__).resolve().parents[2] / "runtime"
 UPLOAD_ROOT = RUNTIME_ROOT / "uploads"
 DOWNLOAD_ROOT = RUNTIME_ROOT / "downloads"
+CONTENT_TYPE_SUFFIX_MAP = {
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+}
 
 
 def _ensure_parent(path: Path) -> None:
@@ -254,9 +260,17 @@ def _download_drive_folder_image_payloads(folder_url: str, max_images: int = 5) 
 
 
 async def persist_upload_file(file: UploadFile) -> Path:
-    suffix = Path(file.filename or "").suffix or ".bin"
+    filename_suffix = Path(file.filename or "").suffix.lower()
+    suffix = filename_suffix
+    if not suffix:
+        suffix = CONTENT_TYPE_SUFFIX_MAP.get((file.content_type or "").lower(), "")
+
+    content = await file.read()
+    if not suffix and content.startswith(b"RIFF") and b"WEBP" in content[:16]:
+        suffix = ".webp"
+
+    suffix = suffix or ".bin"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=_prepare_root(UPLOAD_ROOT)) as handle:
-        content = await file.read()
         handle.write(content)
         return Path(handle.name).resolve()
 
