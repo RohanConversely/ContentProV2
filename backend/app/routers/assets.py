@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import select
@@ -27,6 +28,23 @@ from app.utils.presigned_urls import generate_url
 router = APIRouter(tags=["assets"])
 MAX_SOURCE_IMAGES = 5
 USER_CANCELLED_MESSAGE = "User cancelled the job."
+IMAGE_SUFFIX_MIME_MAP = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+}
+
+
+def _resolve_upload_image_mime(file: UploadFile) -> str:
+    content_type = (file.content_type or "").lower()
+    if content_type.startswith("image/"):
+        return content_type
+
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix in IMAGE_SUFFIX_MIME_MAP and content_type in {"", "application/octet-stream"}:
+        return IMAGE_SUFFIX_MIME_MAP[suffix]
+    return file.content_type or "application/octet-stream"
 
 
 def _asset_response(asset: Asset) -> AssetResponse:
@@ -90,9 +108,10 @@ async def upload_job_asset(
     created_assets: list[Asset] = []
     for file in files:
         contents = await file.read()
+        mime_type = _resolve_upload_image_mime(file)
         storage_key = f"{job.storage_prefix}/raw/{file.filename}"
         await storage_service.upload_bytes(
-            contents, storage_key, file.content_type or "application/octet-stream"
+            contents, storage_key, mime_type
         )
 
         asset = Asset(
@@ -101,7 +120,7 @@ async def upload_job_asset(
             stage=stage,
             storage_key=storage_key,
             original_filename=file.filename,
-            mime_type=file.content_type or "application/octet-stream",
+            mime_type=mime_type,
             size_bytes=len(contents),
             metadata_json=None,
         )
