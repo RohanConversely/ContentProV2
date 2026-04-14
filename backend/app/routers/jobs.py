@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
+from app.constants import INDUSTRY_IDS
 from app.database import get_db
 from app.models.asset import Asset
 from app.models.job_generation import JobGeneration
@@ -93,6 +94,17 @@ def _resolve_upload_image_mime(file: UploadFile) -> str | None:
     if suffix in IMAGE_SUFFIX_MIME_MAP and content_type in {"", "application/octet-stream"}:
         return IMAGE_SUFFIX_MIME_MAP[suffix]
     return None
+
+
+def _normalize_selected_shot_keys(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    normalized: list[str] = []
+    for item in value:
+        key = str(item).strip().lower()
+        if key:
+            normalized.append(key)
+    return normalized
 
 
 def _job_summary(job: Job) -> JobSummaryResponse:
@@ -218,6 +230,26 @@ async def create_job(
         normalized_additional_input = dict(normalized_additional_input or {})
         normalized_additional_input["add_style_number"] = True
         normalized_additional_input["style no."] = style_number
+
+    normalized_additional_input = dict(normalized_additional_input or {})
+    selected_industry = str(normalized_additional_input.get("industry") or current_user.industry or "").strip().lower()
+    if selected_industry not in INDUSTRY_IDS:
+        raise HTTPException(status_code=422, detail="A valid industry selection is required.")
+
+    prompt_category = str(normalized_additional_input.get("prompt_category") or payload.product_category or "").strip()
+    if not prompt_category:
+        raise HTTPException(status_code=422, detail="A category selection is required.")
+
+    selected_shot_keys = _normalize_selected_shot_keys(normalized_additional_input.get("selected_shot_keys"))
+    if len(selected_shot_keys) != payload.requested_image_count:
+        raise HTTPException(
+            status_code=422,
+            detail="selected_shot_keys must match requested_image_count.",
+        )
+
+    normalized_additional_input["industry"] = selected_industry
+    normalized_additional_input["prompt_category"] = prompt_category
+    normalized_additional_input["selected_shot_keys"] = selected_shot_keys
 
     job = Job(
         job_id=generated_job_id,

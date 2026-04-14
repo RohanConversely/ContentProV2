@@ -6,9 +6,11 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Download, FileSpreadsheet, Play, RefreshCw, Upload, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { ProductFormData } from "./CreationWizard";
+import { getPromptCatalog } from "@/lib/api";
 import { writeActiveBatchRun } from "@/lib/active-runs";
 import { setTransientBatchFiles } from "@/lib/batch-transient-files";
 import { useAuth } from "@/contexts/AuthContext";
+import { industries } from "@/lib/industries";
 import sampleSheetUrl from "../../sample.xlsx?url";
 import styleSampleSheetUrl from "../../style_sample.xlsx?url";
 
@@ -370,7 +372,32 @@ export default function BatchCreationWizard({
   const [sourceType, setSourceType] = useState<BatchSourceType>("image_link");
   const [requestedImageCount, setRequestedImageCount] = useState(4);
   const [addStyleNumber, setAddStyleNumber] = useState(false);
+  const [selectedIndustry, setSelectedIndustry] = useState(user?.industry ?? "jewelry");
+  const [selectedPromptCategory, setSelectedPromptCategory] = useState("default");
+  const [selectedShotKeys, setSelectedShotKeys] = useState<string[]>([]);
+  const [promptCategories, setPromptCategories] = useState<
+    { category_key: string; category_label: string; shot_prompts: { key: string; label: string; prompt: string }[] }[]
+  >([]);
   const isRunning = false;
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const catalog = await getPromptCatalog(selectedIndustry);
+        const categories = catalog.categories ?? [];
+        setPromptCategories(categories);
+        const nextCategory = categories.find((item) => item.category_key === selectedPromptCategory)
+          ? selectedPromptCategory
+          : categories[0]?.category_key ?? "default";
+        setSelectedPromptCategory(nextCategory);
+        const category = categories.find((item) => item.category_key === nextCategory);
+        const nextShots = (category?.shot_prompts ?? []).slice(0, requestedImageCount).map((item) => item.key);
+        setSelectedShotKeys(nextShots);
+      } catch {
+        setPromptCategories([]);
+      }
+    })();
+  }, [selectedIndustry]);
 
   useEffect(() => {
     if (!folderInputRef.current) return;
@@ -385,6 +412,20 @@ export default function BatchCreationWizard({
     () => validJobs.filter((j) => selectedIds.has(j.id)),
     [selectedIds, validJobs],
   );
+
+  const resolveCategoryForJob = (rawCategory: string) => {
+    const normalizedInput = normalizeHeaderKey(rawCategory || "");
+    if (!normalizedInput) {
+      return null;
+    }
+    return (
+      promptCategories.find(
+        (item) =>
+          normalizeHeaderKey(item.category_key) === normalizedInput ||
+          normalizeHeaderKey(item.category_label) === normalizedInput,
+      ) ?? null
+    );
+  };
 
   const allValidSelected = validJobs.length > 0 && selectedIds.size === validJobs.length;
   const anySelected = selectedIds.size > 0;
@@ -486,7 +527,7 @@ export default function BatchCreationWizard({
     const folderJobs = buildFolderUploadJobs(selectedFiles, {
       brandName: defaultBrandName,
       brandWebsite: "https://example.com",
-      productCategory: "General",
+      productCategory: selectedPromptCategory || "default",
     });
 
     if (folderJobs.length === 0) {
@@ -514,6 +555,24 @@ export default function BatchCreationWizard({
 
   const runBatch = async () => {
     if (selectedJobs.length === 0) return;
+
+    if (sourceType === "folder_upload" && selectedShotKeys.length !== requestedImageCount) {
+      setParseError(`Select exactly ${requestedImageCount} shot prompt(s).`);
+      return;
+    }
+
+    if (sourceType !== "folder_upload") {
+      const invalidCategoryRows = selectedJobs.filter((job) => {
+        const matchedCategory = resolveCategoryForJob(job.productCategory);
+        return !matchedCategory || (matchedCategory.shot_prompts ?? []).length < requestedImageCount;
+      });
+      if (invalidCategoryRows.length > 0) {
+        setParseError(
+          `Missing category configuration or enough shot prompts for ${invalidCategoryRows.length} selected row(s).`,
+        );
+        return;
+      }
+    }
 
     const styleEnabled = sourceType !== "folder_upload" && addStyleNumber;
 
@@ -555,10 +614,27 @@ export default function BatchCreationWizard({
       }
 
       const productData: ProductFormData = {
+        ...(() => {
+          if (sourceType === "folder_upload") {
+            return {
+              promptCategory: selectedPromptCategory,
+              selectedShotKeys,
+            };
+          }
+          const matchedCategory = resolveCategoryForJob(j.productCategory);
+          const categoryShotKeys = (matchedCategory?.shot_prompts ?? [])
+            .slice(0, requestedImageCount)
+            .map((item) => item.key);
+          return {
+            promptCategory: matchedCategory?.category_key ?? (j.productCategory || selectedPromptCategory),
+            selectedShotKeys: categoryShotKeys,
+          };
+        })(),
         brandName: j.brandName,
         brandWebsite: j.brandWebsite,
         productName: j.productName,
         productCategory: j.productCategory,
+        industry: selectedIndustry,
         socialLinkInstagram: j.socialLinkInstagram,
         socialLinkFacebook: j.socialLinkFacebook,
         socialLinkLinkedin: j.socialLinkLinkedin,
@@ -578,7 +654,9 @@ export default function BatchCreationWizard({
               "add_style_number": "true",
               "style no.": j.styleNumber,
             }
-          : j.additionalInfo,
+          : {
+              ...j.additionalInfo,
+            },
       };
 
       return {
@@ -707,7 +785,18 @@ export default function BatchCreationWizard({
           <p className="text-sm font-medium">Number of Images</p>
           <select
             value={String(requestedImageCount)}
-            onChange={(e) => setRequestedImageCount(Number(e.target.value))}
+            onChange={(e) => {
+              const nextCount = Number(e.target.value);
+              setRequestedImageCount(nextCount);
+              const category = promptCategories.find((item) => item.category_key === selectedPromptCategory);
+              const available = (category?.shot_prompts ?? []).map((item) => item.key);
+              const nextSelected = selectedShotKeys.filter((key) => available.includes(key)).slice(0, nextCount);
+              for (const key of available) {
+                if (nextSelected.length >= nextCount) break;
+                if (!nextSelected.includes(key)) nextSelected.push(key);
+              }
+              setSelectedShotKeys(nextSelected);
+            }}
             className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
           >
             {[1, 2, 3, 4].map((count) => (
@@ -716,6 +805,69 @@ export default function BatchCreationWizard({
               </option>
             ))}
           </select>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <label className="space-y-2">
+            <span className="text-sm font-medium">Industry</span>
+            <select
+              value={selectedIndustry}
+              onChange={(e) => setSelectedIndustry(e.target.value)}
+              className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+            >
+              {industries.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-2">
+            <span className="text-sm font-medium">Folder Upload Category</span>
+            <select
+              value={selectedPromptCategory}
+              onChange={(e) => {
+                const nextCategory = e.target.value;
+                setSelectedPromptCategory(nextCategory);
+                const category = promptCategories.find((item) => item.category_key === nextCategory);
+                setSelectedShotKeys((category?.shot_prompts ?? []).slice(0, requestedImageCount).map((item) => item.key));
+              }}
+              className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+            >
+              {promptCategories.map((item) => (
+                <option key={item.category_key} value={item.category_key}>
+                  {item.category_label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="mt-4 space-y-2">
+          <p className="text-sm font-medium">Shot prompts (select exactly {requestedImageCount})</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {(promptCategories.find((item) => item.category_key === selectedPromptCategory)?.shot_prompts ?? []).map((shot) => {
+              const checked = selectedShotKeys.includes(shot.key);
+              return (
+                <label key={shot.key} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => {
+                      const next = [...selectedShotKeys];
+                      if (e.target.checked) {
+                        if (next.length >= requestedImageCount) return;
+                        next.push(shot.key);
+                      } else {
+                        const index = next.indexOf(shot.key);
+                        if (index >= 0) next.splice(index, 1);
+                      }
+                      setSelectedShotKeys(next);
+                    }}
+                  />
+                  <span>{shot.label || shot.key}</span>
+                </label>
+              );
+            })}
+          </div>
         </div>
         {user?.enableStyleNumber && sourceType !== "folder_upload" ? (
           <div className="mt-4 space-y-2">

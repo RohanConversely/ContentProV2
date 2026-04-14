@@ -7,8 +7,10 @@ import AdminUsersList from "@/components/AdminUsersList";
 import Navbar from "@/components/Navbar";
 import {
   adminCreateUser,
+  adminListDefaultCategoryPrompts,
   adminDeleteUser,
   adminListDefaultPrompts,
+  adminUpsertDefaultCategoryPrompt,
   adminListUsers,
   adminUpdateDefaultPrompt,
   adminUpdateUser,
@@ -37,7 +39,11 @@ const AdminUsersPage = () => {
   const [defaultShotPrompts, setDefaultShotPrompts] = useState<
     Record<string, { key: string; label: string; prompt: string }[]>
   >({});
+  const [defaultCategoryPrompts, setDefaultCategoryPrompts] = useState<
+    Record<string, { category_key: string; category_label: string; category_prompt_text: string; shot_prompts: { key: string; label: string; prompt: string }[] }[]>
+  >({});
   const [selectedIndustry, setSelectedIndustry] = useState("jewelry");
+  const [selectedCategoryKey, setSelectedCategoryKey] = useState("default");
   const [message, setMessage] = useState("");
   const [createState, setCreateState] = useState<AdminCreateUserPayload>(defaultCreateState);
   const [modalUser, setModalUser] = useState<AdminUserRecord | null>(null);
@@ -47,6 +53,16 @@ const AdminUsersPage = () => {
     setUsers(userRows);
     setDefaultPrompts(Object.fromEntries(promptRows.map((row) => [row.industry, row.prompt_text])));
     setDefaultShotPrompts(Object.fromEntries(promptRows.map((row) => [row.industry, row.shot_prompts || []])));
+
+    const categoryEntries = await Promise.all(
+      industries.map(async (industry) => ({
+        industry: industry.id,
+        categories: await adminListDefaultCategoryPrompts(industry.id),
+      })),
+    );
+    setDefaultCategoryPrompts(Object.fromEntries(categoryEntries.map((entry) => [entry.industry, entry.categories])));
+    const selectedCategories = categoryEntries.find((entry) => entry.industry === selectedIndustry)?.categories ?? [];
+    setSelectedCategoryKey((prev) => (selectedCategories.some((item) => item.category_key === prev) ? prev : (selectedCategories[0]?.category_key ?? "default")));
   };
 
   useEffect(() => {
@@ -83,9 +99,18 @@ const AdminUsersPage = () => {
     await loadAll();
   };
 
-  const handleSaveDefaultPrompt = async () => {
+  const handleSavePromptHierarchy = async () => {
+    const category = (defaultCategoryPrompts[selectedIndustry] ?? []).find((item) => item.category_key === selectedCategoryKey);
     await adminUpdateDefaultPrompt(selectedIndustry, defaultPrompts[selectedIndustry] ?? "");
-    setMessage("Default prompt updated.");
+    if (category) {
+      await adminUpsertDefaultCategoryPrompt(selectedIndustry, category.category_key, {
+        categoryLabel: category.category_label,
+        categoryPromptText: category.category_prompt_text,
+        shotPrompts: category.shot_prompts,
+      });
+    }
+    setMessage("Prompt hierarchy updated.");
+    toast.success("Prompt hierarchy saved.");
     await loadAll();
   };
 
@@ -99,12 +124,43 @@ const AdminUsersPage = () => {
           {message ? <p className="mt-2 text-sm text-muted-foreground">{message}</p> : null}
         </div>
 
-        <div className="grid gap-8 xl:grid-cols-[1.2fr,0.8fr]">
-          <section className="rounded-3xl border border-border bg-card/80 p-6 space-y-6">
-            <div>
-              <h2 className="font-display text-xl font-semibold">Create User</h2>
-            </div>
-            <form className="grid gap-3 md:grid-cols-2" onSubmit={handleCreateUser}>
+        <AdminDefaultPromptPanel
+          defaultPrompts={defaultPrompts}
+          defaultCategoryPrompts={defaultCategoryPrompts}
+          selectedIndustry={selectedIndustry}
+          selectedCategoryKey={selectedCategoryKey}
+          onSelectedIndustryChange={(industry) => {
+            setSelectedIndustry(industry);
+            const categories = defaultCategoryPrompts[industry] ?? [];
+            setSelectedCategoryKey(categories[0]?.category_key ?? "default");
+          }}
+          onSelectedCategoryKeyChange={setSelectedCategoryKey}
+          onPromptChange={(industry, promptText) =>
+            setDefaultPrompts((prev) => ({ ...prev, [industry]: promptText }))
+          }
+          onCategoryChange={(industry, categoryKey, next) =>
+            setDefaultCategoryPrompts((prev) => ({
+              ...prev,
+              [industry]: (prev[industry] ?? []).map((item) =>
+                item.category_key === categoryKey
+                  ? {
+                      ...item,
+                      category_label: next.category_label,
+                      category_prompt_text: next.category_prompt_text,
+                      shot_prompts: next.shot_prompts,
+                    }
+                  : item,
+              ),
+            }))
+          }
+          onSaveAll={handleSavePromptHierarchy}
+        />
+
+        <section className="rounded-3xl border border-border bg-card/80 p-6 space-y-6">
+          <div>
+            <h2 className="font-display text-xl font-semibold">Create User</h2>
+          </div>
+          <form className="grid gap-3 md:grid-cols-4" onSubmit={handleCreateUser}>
               <input
                 className="rounded-2xl border border-border bg-background px-4 py-3"
                 placeholder="Display name"
@@ -138,17 +194,20 @@ const AdminUsersPage = () => {
                 <option value="user">User</option>
                 <option value="superadmin">Superadmin</option>
               </select>
-              <select
-                className="rounded-2xl border border-border bg-background px-4 py-3"
-                value={createState.industry}
-                onChange={(event) => setCreateState((prev) => ({ ...prev, industry: event.target.value }))}
-              >
-                {industries.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              <label className="space-y-2">
+                <span className="text-xs font-medium text-muted-foreground">Industry</span>
+                <select
+                  className="w-full rounded-2xl border border-border bg-background px-4 py-3"
+                  value={createState.industry}
+                  onChange={(event) => setCreateState((prev) => ({ ...prev, industry: event.target.value }))}
+                >
+                  {industries.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="space-y-2">
                 <span className="text-xs font-medium text-muted-foreground">Model for single product</span>
                 <select
@@ -183,7 +242,18 @@ const AdminUsersPage = () => {
                   <option value="gpt-batch-api">gpt batch api</option>
                 </select>
               </label>
-              <label className="flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 md:col-span-2">
+              <label className="space-y-2">
+                <span className="text-xs font-medium text-muted-foreground">Subscription</span>
+                <select
+                  className="w-full rounded-2xl border border-border bg-background px-4 py-3"
+                  value={createState.plan}
+                  onChange={(event) => setCreateState((prev) => ({ ...prev, plan: event.target.value }))}
+                >
+                  <option value="free">Free</option>
+                  <option value="pro">Pro</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-3">
                 <input
                   type="checkbox"
                   checked={createState.enableStyleNumber}
@@ -196,33 +266,14 @@ const AdminUsersPage = () => {
                 />
                 <span className="text-sm">Style Number</span>
               </label>
-              <select
-                className="rounded-2xl border border-border bg-background px-4 py-3"
-                value={createState.plan}
-                onChange={(event) => setCreateState((prev) => ({ ...prev, plan: event.target.value }))}
-              >
-                <option value="free">Free</option>
-                <option value="pro">Pro</option>
-              </select>
               <button
                 type="submit"
-                className="rounded-2xl bg-primary px-4 py-3 font-semibold text-primary-foreground md:col-span-2"
+                className="rounded-2xl bg-primary px-4 py-3 font-semibold text-primary-foreground md:col-span-4 md:justify-self-center w-full md:max-w-md"
               >
                 Create User
               </button>
-            </form>
-          </section>
-
-          <AdminDefaultPromptPanel
-            defaultPrompts={defaultPrompts}
-            selectedIndustry={selectedIndustry}
-            onSelectedIndustryChange={setSelectedIndustry}
-            onPromptChange={(industry, promptText) =>
-              setDefaultPrompts((prev) => ({ ...prev, [industry]: promptText }))
-            }
-            onSave={handleSaveDefaultPrompt}
-          />
-        </div>
+          </form>
+        </section>
 
         <AdminUsersList
           users={users}
@@ -243,6 +294,7 @@ const AdminUsersPage = () => {
           user={modalUser}
           defaultPrompt={defaultPrompts[modalUser.industry] ?? ""}
           defaultShotPrompts={defaultShotPrompts[modalUser.industry] ?? []}
+          defaultCategoryPrompts={defaultCategoryPrompts[modalUser.industry] ?? []}
           onClose={() => setModalUser(null)}
           onSaved={(nextMessage) => {
             setMessage(nextMessage);

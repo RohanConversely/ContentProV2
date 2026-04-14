@@ -48,12 +48,31 @@ async def _resolve_effective_prompt_bundle(
     *,
     user_id: str,
     workspace: Path,
+    additional_input: dict[str, Any] | None = None,
+    fallback_category: str | None = None,
 ) -> PromptBundle:
     del workspace
     user = await db.get(User, user_id)
     if user is None:
         raise RuntimeError("User not found for prompt resolution.")
-    return await get_effective_prompt_bundle(db, user, user.industry)
+    payload = additional_input if isinstance(additional_input, dict) else {}
+    selected_industry = str(payload.get("industry") or user.industry or "").strip().lower() or user.industry
+    selected_category = str(payload.get("prompt_category") or fallback_category or "default").strip()
+
+    raw_selected_shots = payload.get("selected_shot_keys")
+    selected_shot_keys: list[str] | None
+    if isinstance(raw_selected_shots, list):
+        selected_shot_keys = [str(item).strip() for item in raw_selected_shots if str(item).strip()]
+    else:
+        selected_shot_keys = None
+
+    return await get_effective_prompt_bundle(
+        db,
+        user,
+        selected_industry,
+        category=selected_category,
+        selected_shot_keys=selected_shot_keys,
+    )
 
 
 async def emit(job_id: str, stage: str, status: str, message: str, db: AsyncSession | None = None) -> None:
@@ -603,7 +622,13 @@ async def run_pipeline_task(job_id: str) -> None:
         log_monitor_task: asyncio.Task[None] | None = None
         try:
             workspace = _build_job_workspace(job)
-            prompt_bundle = await _resolve_effective_prompt_bundle(db, user_id=job.user_id, workspace=workspace)
+            prompt_bundle = await _resolve_effective_prompt_bundle(
+                db,
+                user_id=job.user_id,
+                workspace=workspace,
+                additional_input=job.additional_input_json if isinstance(job.additional_input_json, dict) else None,
+                fallback_category=job.product_category,
+            )
             ctx = JobContext(
                 job_id=job.job_id,
                 brand_name=job.brand_name,
@@ -757,7 +782,13 @@ async def run_regeneration_task(
         try:
             workspace = _build_job_workspace(job) / f"regeneration_round_{generation.round_number}"
             workspace.mkdir(parents=True, exist_ok=True)
-            prompt_bundle = await _resolve_effective_prompt_bundle(db, user_id=job.user_id, workspace=workspace)
+            prompt_bundle = await _resolve_effective_prompt_bundle(
+                db,
+                user_id=job.user_id,
+                workspace=workspace,
+                additional_input=job.additional_input_json if isinstance(job.additional_input_json, dict) else None,
+                fallback_category=job.product_category,
+            )
 
             image_paths: list[Path] = []
 

@@ -80,6 +80,19 @@ interface BackendPromptResponse {
   shot_prompts: { key: string; label: string; prompt: string }[];
 }
 
+interface BackendCategoryPromptResponse {
+  industry: string;
+  category_key: string;
+  category_label: string;
+  category_prompt_text: string;
+  shot_prompts: { key: string; label: string; prompt: string }[];
+}
+
+interface BackendPromptCatalogResponse {
+  industry: string;
+  categories: BackendCategoryPromptResponse[];
+}
+
 interface BackendUsageResponse {
   plan: "free" | "pro";
   credits_used: number;
@@ -200,6 +213,9 @@ export interface GenerateImagesInput {
   brandWebsite: string;
   productName: string;
   productCategory: string;
+  industry?: string;
+  promptCategory?: string;
+  selectedShotKeys?: string[];
   socialLink1?: string;
   socialLink2?: string;
   socialLink3?: string;
@@ -659,6 +675,13 @@ export async function getRecentProjects(): Promise<RecentProjectSummary[]> {
 export async function createJob(
   input: Omit<GenerateImagesInput, "imageFiles"> & { batch_id?: string; batch_name?: string },
 ): Promise<BackendJobSummaryResponse> {
+  const additionalInput = {
+    ...(input.additionalInput ?? {}),
+    industry: input.industry,
+    prompt_category: input.promptCategory ?? input.productCategory,
+    selected_shot_keys: input.selectedShotKeys ?? [],
+  };
+
   return apiJson<BackendJobSummaryResponse>(
     "/jobs",
     {
@@ -677,7 +700,7 @@ export async function createJob(
         social_link_2: input.socialLink2,
         social_link_3: input.socialLink3,
         social_link_4: input.socialLink4,
-        additional_input: input.additionalInput,
+        additional_input: additionalInput,
         batch_id: input.batch_id,
         batch_name: input.batch_name,
       }),
@@ -846,6 +869,11 @@ export async function adminListDefaultPrompts(): Promise<BackendPromptResponse[]
   return apiJson<BackendPromptResponse[]>("/admin/prompts/defaults", {}, true);
 }
 
+export async function getPromptCatalog(industry?: string): Promise<BackendPromptCatalogResponse> {
+  const query = industry ? `?industry=${encodeURIComponent(industry)}` : "";
+  return apiJson<BackendPromptCatalogResponse>(`/prompt-catalog${query}`, {}, true);
+}
+
 export async function adminUpdateDefaultPrompt(industry: string, promptText: string): Promise<BackendPromptResponse> {
   return apiJson<BackendPromptResponse>(
     `/admin/prompts/defaults/${encodeURIComponent(industry)}`,
@@ -854,6 +882,46 @@ export async function adminUpdateDefaultPrompt(industry: string, promptText: str
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt_text: promptText }),
     },
+    true,
+  );
+}
+
+export async function adminListDefaultCategoryPrompts(industry: string): Promise<BackendCategoryPromptResponse[]> {
+  return apiJson<BackendCategoryPromptResponse[]>(
+    `/admin/prompts/defaults/${encodeURIComponent(industry)}/categories`,
+    {},
+    true,
+  );
+}
+
+export async function adminUpsertDefaultCategoryPrompt(
+  industry: string,
+  categoryKey: string,
+  payload: {
+    categoryLabel: string;
+    categoryPromptText: string;
+    shotPrompts: { key: string; label: string; prompt: string }[];
+  },
+): Promise<BackendCategoryPromptResponse> {
+  return apiJson<BackendCategoryPromptResponse>(
+    `/admin/prompts/defaults/${encodeURIComponent(industry)}/categories/${encodeURIComponent(categoryKey)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        category_label: payload.categoryLabel,
+        category_prompt_text: payload.categoryPromptText,
+        shot_prompts: payload.shotPrompts,
+      }),
+    },
+    true,
+  );
+}
+
+export async function adminDeleteDefaultCategoryPrompt(industry: string, categoryKey: string): Promise<void> {
+  await apiJson<{ ok: boolean }>(
+    `/admin/prompts/defaults/${encodeURIComponent(industry)}/categories/${encodeURIComponent(categoryKey)}`,
+    { method: "DELETE" },
     true,
   );
 }
@@ -890,6 +958,59 @@ export async function adminSetUserPromptOverride(
 export async function adminDeleteUserPromptOverride(userId: string, industry: string): Promise<void> {
   await apiJson<{ ok: boolean }>(
     `/admin/users/${encodeURIComponent(userId)}/prompts/${encodeURIComponent(industry)}`,
+    { method: "DELETE" },
+    true,
+  );
+}
+
+export async function adminSetUserCategoryPromptOverride(
+  userId: string,
+  industry: string,
+  categoryKey: string,
+  payload: {
+    categoryLabel: string;
+    categoryPromptText: string;
+    shotPrompts: { key: string; label: string; prompt: string }[];
+  },
+): Promise<BackendCategoryPromptResponse> {
+  return apiJson<BackendCategoryPromptResponse>(
+    `/admin/users/${encodeURIComponent(userId)}/prompts/${encodeURIComponent(industry)}/categories/${encodeURIComponent(categoryKey)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        category_label: payload.categoryLabel,
+        category_prompt_text: payload.categoryPromptText,
+        shot_prompts: payload.shotPrompts,
+      }),
+    },
+    true,
+  );
+}
+
+export async function adminGetUserCategoryPromptOverride(
+  userId: string,
+  industry: string,
+  categoryKey: string,
+): Promise<BackendCategoryPromptResponse | null> {
+  try {
+    return await apiJson<BackendCategoryPromptResponse>(
+      `/admin/users/${encodeURIComponent(userId)}/prompts/${encodeURIComponent(industry)}/categories/${encodeURIComponent(categoryKey)}`,
+      {},
+      true,
+    );
+  } catch {
+    return null;
+  }
+}
+
+export async function adminDeleteUserCategoryPromptOverride(
+  userId: string,
+  industry: string,
+  categoryKey: string,
+): Promise<void> {
+  await apiJson<{ ok: boolean }>(
+    `/admin/users/${encodeURIComponent(userId)}/prompts/${encodeURIComponent(industry)}/categories/${encodeURIComponent(categoryKey)}`,
     { method: "DELETE" },
     true,
   );
