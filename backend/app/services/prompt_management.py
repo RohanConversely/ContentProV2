@@ -122,6 +122,17 @@ def _filter_shot_prompts(shot_prompts: list[dict[str, str]], selected_shot_keys:
     return selected or shot_prompts
 
 
+def _default_category_shot_prompts() -> list[dict[str, str]]:
+    return [
+        {"key": "hero", "label": "Hero", "prompt": "-"},
+        {"key": "lifestyle", "label": "Lifestyle", "prompt": "-"},
+        {"key": "wearable", "label": "Wearable", "prompt": "-"},
+        {"key": "wearable_ethnic", "label": "Wearable Ethnic", "prompt": "-"},
+        {"key": "jewellery_box", "label": "Jewellery Box", "prompt": "-"},
+        {"key": "close_detail", "label": "Close Detail", "prompt": "-"},
+    ]
+
+
 def load_default_shot_prompts(industry: str) -> list[dict[str, str]]:
     path = PROMPTS_ROOT / default_shot_prompt_file_for_industry(industry)
     if not path.exists():
@@ -207,13 +218,18 @@ async def set_default_category_prompt(
     normalized_shot_prompts = _normalize_shot_prompts(shot_prompts) if shot_prompts is not None else None
     prompt = await get_default_category_prompt(db, industry, normalized_key)
     if prompt is None:
+        seeded_shot_prompts = (
+            normalized_shot_prompts
+            if normalized_shot_prompts and len(normalized_shot_prompts) > 0
+            else _default_category_shot_prompts()
+        )
         prompt = IndustryCategoryPrompt(
             id=str(uuid.uuid4()),
             industry=industry,
             category_key=normalized_key,
             category_label=category_label.strip() or normalized_key.replace("_", " ").title(),
             category_prompt_text=category_prompt_text,
-            shot_prompts_json=normalized_shot_prompts or [],
+            shot_prompts_json=seeded_shot_prompts,
             is_active=True,
         )
         db.add(prompt)
@@ -234,6 +250,40 @@ async def delete_default_category_prompt(db: AsyncSession, industry: str, catego
     await db.delete(prompt)
     await db.commit()
     return True
+
+
+async def delete_default_industry_prompt_bundle(db: AsyncSession, industry: str) -> bool:
+    deleted = False
+
+    prompt = await db.get(IndustryPrompt, industry)
+    if prompt is not None:
+        await db.delete(prompt)
+        deleted = True
+
+    category_result = await db.execute(
+        select(IndustryCategoryPrompt).where(IndustryCategoryPrompt.industry == industry)
+    )
+    for category_prompt in category_result.scalars().all():
+        await db.delete(category_prompt)
+        deleted = True
+
+    user_override_result = await db.execute(
+        select(UserPromptOverride).where(UserPromptOverride.industry == industry)
+    )
+    for user_override in user_override_result.scalars().all():
+        await db.delete(user_override)
+        deleted = True
+
+    user_category_override_result = await db.execute(
+        select(UserCategoryPromptOverride).where(UserCategoryPromptOverride.industry == industry)
+    )
+    for user_category_override in user_category_override_result.scalars().all():
+        await db.delete(user_category_override)
+        deleted = True
+
+    if deleted:
+        await db.commit()
+    return deleted
 
 
 async def get_user_category_override(

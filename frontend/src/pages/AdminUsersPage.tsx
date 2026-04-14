@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import AdminDefaultPromptPanel from "@/components/AdminDefaultPromptPanel";
@@ -7,8 +7,10 @@ import AdminUsersList from "@/components/AdminUsersList";
 import Navbar from "@/components/Navbar";
 import {
   adminCreateUser,
+  adminDeleteDefaultPrompt,
   adminListDefaultCategoryPrompts,
   adminDeleteUser,
+  adminDeleteDefaultCategoryPrompt,
   adminListDefaultPrompts,
   adminUpsertDefaultCategoryPrompt,
   adminListUsers,
@@ -48,20 +50,65 @@ const AdminUsersPage = () => {
   const [createState, setCreateState] = useState<AdminCreateUserPayload>(defaultCreateState);
   const [modalUser, setModalUser] = useState<AdminUserRecord | null>(null);
 
+  const normalizeKey = (value: string) => {
+    const lowered = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
+    return lowered.replace(/^_+|_+$/g, "") || "default";
+  };
+
+  const industryOptions = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const option of industries) {
+      byId.set(option.id, option.label);
+    }
+    for (const industryId of Object.keys(defaultPrompts)) {
+      if (!byId.has(industryId)) {
+        byId.set(industryId, industryId);
+      }
+    }
+    for (const industryId of Object.keys(defaultCategoryPrompts)) {
+      if (!byId.has(industryId)) {
+        byId.set(industryId, industryId);
+      }
+    }
+    return Array.from(byId.entries()).map(([id, label]) => ({ id, label }));
+  }, [defaultPrompts, defaultCategoryPrompts]);
+
   const loadAll = async () => {
     const [userRows, promptRows] = await Promise.all([adminListUsers(), adminListDefaultPrompts()]);
     setUsers(userRows);
     setDefaultPrompts(Object.fromEntries(promptRows.map((row) => [row.industry, row.prompt_text])));
     setDefaultShotPrompts(Object.fromEntries(promptRows.map((row) => [row.industry, row.shot_prompts || []])));
 
+    const allIndustryIds = Array.from(
+      new Set<string>([
+        ...promptRows.map((row) => row.industry),
+        selectedIndustry,
+      ]),
+    ).filter((item) => item && item.trim().length > 0);
+
     const categoryEntries = await Promise.all(
-      industries.map(async (industry) => ({
-        industry: industry.id,
-        categories: await adminListDefaultCategoryPrompts(industry.id),
+      allIndustryIds.map(async (industryId) => ({
+        industry: industryId,
+        categories: await adminListDefaultCategoryPrompts(industryId).catch(() => []),
       })),
     );
-    setDefaultCategoryPrompts(Object.fromEntries(categoryEntries.map((entry) => [entry.industry, entry.categories])));
-    const selectedCategories = categoryEntries.find((entry) => entry.industry === selectedIndustry)?.categories ?? [];
+    const categoryMap = Object.fromEntries(categoryEntries.map((entry) => [entry.industry, entry.categories]));
+    setDefaultCategoryPrompts(categoryMap);
+
+    const availableIndustryIds = Array.from(
+      new Set<string>([
+        ...promptRows.map((row) => row.industry),
+        ...Object.keys(categoryMap),
+      ]),
+    ).filter((item) => item && item.trim().length > 0);
+
+    const nextIndustry = availableIndustryIds.includes(selectedIndustry)
+      ? selectedIndustry
+      : availableIndustryIds[0] ?? "jewelry";
+    if (nextIndustry !== selectedIndustry) {
+      setSelectedIndustry(nextIndustry);
+    }
+    const selectedCategories = categoryMap[nextIndustry] ?? [];
     setSelectedCategoryKey((prev) => (selectedCategories.some((item) => item.category_key === prev) ? prev : (selectedCategories[0]?.category_key ?? "default")));
   };
 
@@ -114,6 +161,55 @@ const AdminUsersPage = () => {
     await loadAll();
   };
 
+  const handleAddIndustry = async (industryIdRaw: string) => {
+    const industryId = normalizeKey(industryIdRaw);
+    await adminUpdateDefaultPrompt(industryId, "-");
+    await adminUpsertDefaultCategoryPrompt(industryId, "default", {
+      categoryLabel: "Default",
+      categoryPromptText: "-",
+      shotPrompts: [],
+    });
+    setSelectedIndustry(industryId);
+    setSelectedCategoryKey("default");
+    setMessage(`Industry ${industryId} added.`);
+    toast.success(`Industry ${industryId} added.`);
+    await loadAll();
+  };
+
+  const handleAddCategory = async (categoryLabelRaw: string) => {
+    const categoryLabel = categoryLabelRaw.trim();
+    if (!categoryLabel) {
+      return;
+    }
+    const categoryKey = normalizeKey(categoryLabel);
+    await adminUpsertDefaultCategoryPrompt(selectedIndustry, categoryKey, {
+      categoryLabel,
+      categoryPromptText: "-",
+      shotPrompts: [],
+    });
+    setSelectedCategoryKey(categoryKey);
+    setMessage(`Category ${categoryLabel} added.`);
+    toast.success(`Category ${categoryLabel} added.`);
+    await loadAll();
+  };
+
+  const handleDeleteIndustry = async () => {
+    if (!selectedIndustry) return;
+    await adminDeleteDefaultPrompt(selectedIndustry);
+    setMessage(`Industry ${selectedIndustry} deleted.`);
+    toast.success(`Industry ${selectedIndustry} deleted.`);
+    await loadAll();
+  };
+
+  const handleDeleteCategory = async () => {
+    const category = (defaultCategoryPrompts[selectedIndustry] ?? []).find((item) => item.category_key === selectedCategoryKey);
+    if (!category) return;
+    await adminDeleteDefaultCategoryPrompt(selectedIndustry, category.category_key);
+    setMessage(`Category ${category.category_label} deleted.`);
+    toast.success(`Category ${category.category_label} deleted.`);
+    await loadAll();
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -127,6 +223,7 @@ const AdminUsersPage = () => {
         <AdminDefaultPromptPanel
           defaultPrompts={defaultPrompts}
           defaultCategoryPrompts={defaultCategoryPrompts}
+          industryOptions={industryOptions}
           selectedIndustry={selectedIndustry}
           selectedCategoryKey={selectedCategoryKey}
           onSelectedIndustryChange={(industry) => {
@@ -135,6 +232,10 @@ const AdminUsersPage = () => {
             setSelectedCategoryKey(categories[0]?.category_key ?? "default");
           }}
           onSelectedCategoryKeyChange={setSelectedCategoryKey}
+          onAddIndustry={handleAddIndustry}
+          onDeleteIndustry={handleDeleteIndustry}
+          onAddCategory={handleAddCategory}
+          onDeleteCategory={handleDeleteCategory}
           onPromptChange={(industry, promptText) =>
             setDefaultPrompts((prev) => ({ ...prev, [industry]: promptText }))
           }
@@ -201,7 +302,7 @@ const AdminUsersPage = () => {
                   value={createState.industry}
                   onChange={(event) => setCreateState((prev) => ({ ...prev, industry: event.target.value }))}
                 >
-                  {industries.map((option) => (
+                  {industryOptions.map((option) => (
                     <option key={option.id} value={option.id}>
                       {option.label}
                     </option>

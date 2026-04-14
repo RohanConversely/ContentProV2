@@ -29,6 +29,7 @@ from app.schemas.job import JobListResponse, JobLogEntryResponse, JobResponse, J
 from app.services.auth import get_user_by_email, hash_password
 from app.services.pipeline_runner import hydrate_job_assets
 from app.services.prompt_management import (
+    delete_default_industry_prompt_bundle,
     delete_default_category_prompt,
     delete_user_category_override,
     delete_user_override,
@@ -443,8 +444,8 @@ async def get_default_category_prompt_list(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ) -> list[CategoryPromptResponse]:
-    if industry not in INDUSTRY_IDS:
-        raise HTTPException(status_code=404, detail="Industry not found.")
+    if not industry.strip():
+        raise HTTPException(status_code=422, detail="Industry is required.")
     prompts = await list_default_category_prompts(db, industry)
     return [
         _category_prompt_response(
@@ -466,8 +467,8 @@ async def update_default_category_prompt_entry(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ) -> CategoryPromptResponse:
-    if industry not in INDUSTRY_IDS:
-        raise HTTPException(status_code=404, detail="Industry not found.")
+    if not industry.strip():
+        raise HTTPException(status_code=422, detail="Industry is required.")
     prompt = await set_default_category_prompt(
         db,
         industry,
@@ -492,8 +493,8 @@ async def remove_default_category_prompt_entry(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ) -> dict[str, bool]:
-    if industry not in INDUSTRY_IDS:
-        raise HTTPException(status_code=404, detail="Industry not found.")
+    if not industry.strip():
+        raise HTTPException(status_code=422, detail="Industry is required.")
     return {"ok": await delete_default_category_prompt(db, industry, category_key)}
 
 
@@ -504,14 +505,25 @@ async def update_default_prompt(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ) -> PromptResponse:
-    if industry not in INDUSTRY_IDS:
-        raise HTTPException(status_code=404, detail="Industry not found.")
+    if not industry.strip():
+        raise HTTPException(status_code=422, detail="Industry is required.")
     prompt = await set_default_prompt(db, industry, payload.prompt_text, payload.shot_prompts)
     return PromptResponse(
         industry=prompt.industry,
         prompt_text=prompt.prompt_text,
         shot_prompts=prompt.shot_prompts_json or load_default_shot_prompts(prompt.industry),
     )
+
+
+@router.delete("/prompts/defaults/{industry}")
+async def remove_default_prompt_bundle(
+    industry: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_superadmin),
+) -> dict[str, bool]:
+    if not industry.strip():
+        raise HTTPException(status_code=422, detail="Industry is required.")
+    return {"ok": await delete_default_industry_prompt_bundle(db, industry)}
 
 
 @router.get("/users/{user_id}/prompts/{industry}", response_model=PromptResponse)
