@@ -7,7 +7,6 @@ import {
   Building2,
   Globe,
   Package,
-  Tag,
   Link2,
   Upload,
   X,
@@ -22,12 +21,14 @@ import GenerationResults from "./GenerationResults";
 import VideoCreation from "./VideoCreation";
 import {
   createJob,
+  getPromptCatalog,
   getJob,
   uploadJobAsset,
   waitForJobCompletion,
   type GeneratedImageResult,
   type JobEventPayload,
 } from "@/lib/api";
+import { industries } from "@/lib/industries";
 import {
   clearActiveSingleRun,
   readActiveSingleRun,
@@ -40,6 +41,9 @@ export interface ProductFormData {
   brandWebsite: string;
   productName: string;
   productCategory: string;
+  industry: string;
+  promptCategory: string;
+  selectedShotKeys: string[];
   socialLinkInstagram: string;
   socialLinkFacebook: string;
   socialLinkLinkedin: string;
@@ -66,6 +70,9 @@ const emptyFormData: ProductFormData = {
   brandWebsite: "",
   productName: "",
   productCategory: "",
+  industry: "jewelry",
+  promptCategory: "",
+  selectedShotKeys: [],
   socialLinkInstagram: "",
   socialLinkFacebook: "",
   socialLinkLinkedin: "",
@@ -101,6 +108,9 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobUpdate, setJobUpdate] = useState<JobEventPayload | null>(null);
   const [jobTimeline, setJobTimeline] = useState<JobEventPayload[]>([]);
+  const [promptCategories, setPromptCategories] = useState<
+    { category_key: string; category_label: string; shot_prompts: { key: string; label: string; prompt: string }[] }[]
+  >([]);
   const resumedJobRef = useRef<string | null>(null);
 
   const updateField = (field: keyof ProductFormData, value: string | string[] | number | boolean) => {
@@ -150,6 +160,8 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
     formData.brandWebsite.trim().length > 0 &&
     formData.productName.trim().length > 0 &&
     formData.productCategory.trim().length > 0 &&
+    formData.promptCategory.trim().length > 0 &&
+    formData.selectedShotKeys.length === formData.requestedImageCount &&
     formData.productImages.length > 0 &&
     (!hasAnyDimension || hasAllDimensions) &&
     (!formData.addStyleNumber || formData.styleNumber.trim().length > 0);
@@ -272,6 +284,36 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
   }, [mode]);
 
   useEffect(() => {
+    void (async () => {
+      try {
+        const catalog = await getPromptCatalog(formData.industry);
+        const categories = catalog.categories ?? [];
+        setPromptCategories(categories);
+        setFormData((prev) => {
+          const nextCategory = prev.promptCategory || categories[0]?.category_key || "";
+          const activeCategory = categories.find((item) => item.category_key === nextCategory) ?? categories[0];
+          const availableKeys = new Set((activeCategory?.shot_prompts ?? []).map((entry) => entry.key));
+          const keptShots = prev.selectedShotKeys.filter((key) => availableKeys.has(key));
+          const required = Math.max(1, Math.min(prev.requestedImageCount, 4));
+          const padded = [...keptShots];
+          for (const shot of activeCategory?.shot_prompts ?? []) {
+            if (padded.length >= required) break;
+            if (!padded.includes(shot.key)) padded.push(shot.key);
+          }
+          return {
+            ...prev,
+            productCategory: nextCategory,
+            promptCategory: nextCategory,
+            selectedShotKeys: padded.slice(0, required),
+          };
+        });
+      } catch {
+        setPromptCategories([]);
+      }
+    })();
+  }, [formData.industry]);
+
+  useEffect(() => {
     if (!showResults) return;
     writeActiveSingleRun({
       mode,
@@ -315,6 +357,9 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
         brandWebsite: formData.brandWebsite,
         productName: formData.productName,
         productCategory: formData.productCategory,
+        industry: formData.industry,
+        promptCategory: formData.promptCategory,
+        selectedShotKeys: formData.selectedShotKeys,
         requestedImageCount: formData.requestedImageCount,
         socialLink1: formData.socialLinkInstagram || undefined,
         socialLink2: formData.socialLinkFacebook || undefined,
@@ -527,34 +572,101 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium flex items-center gap-2">
-                <Tag className="h-4 w-4 text-muted-foreground" />
-                Product Category <span className="text-destructive">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.productCategory}
-                onChange={(e) => updateField("productCategory", e.target.value)}
-                placeholder=""
-                className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
-              />
+              <label className="text-sm font-medium">Industry <span className="text-destructive">*</span></label>
+              <select
+                value={formData.industry}
+                onChange={(e) => updateField("industry", e.target.value)}
+                className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+              >
+                {industries.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Product Category <span className="text-destructive">*</span></label>
+              <select
+                value={formData.promptCategory}
+                onChange={(e) => {
+                  const nextCategory = e.target.value;
+                  const categoryEntry = promptCategories.find((item) => item.category_key === nextCategory);
+                  const required = Math.max(1, Math.min(formData.requestedImageCount, 4));
+                  const nextShots = (categoryEntry?.shot_prompts ?? []).slice(0, required).map((item) => item.key);
+                  setFormData((prev) => ({
+                    ...prev,
+                    productCategory: nextCategory,
+                    promptCategory: nextCategory,
+                    selectedShotKeys: nextShots,
+                  }));
+                }}
+                className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+              >
+                {(promptCategories.length ? promptCategories : [{ category_key: "", category_label: "No categories available", shot_prompts: [] }]).map((option) => (
+                  <option key={option.category_key || "none"} value={option.category_key}>
+                    {option.category_label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Number of Images</label>
+              <select
+                value={String(formData.requestedImageCount)}
+                onChange={(e) => {
+                  const nextCount = Number(e.target.value);
+                  const categoryEntry = promptCategories.find((item) => item.category_key === formData.promptCategory);
+                  const availableKeys = (categoryEntry?.shot_prompts ?? []).map((item) => item.key);
+                  const nextSelected = formData.selectedShotKeys.filter((key) => availableKeys.includes(key)).slice(0, nextCount);
+                  for (const key of availableKeys) {
+                    if (nextSelected.length >= nextCount) break;
+                    if (!nextSelected.includes(key)) nextSelected.push(key);
+                  }
+                  setFormData((prev) => ({ ...prev, requestedImageCount: nextCount, selectedShotKeys: nextSelected }));
+                }}
+                className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+              >
+                {[1, 2, 3, 4].map((count) => (
+                  <option key={count} value={count}>
+                    {count}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
 
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Number of Images</label>
-          <select
-            value={String(formData.requestedImageCount)}
-            onChange={(e) => updateField("requestedImageCount", Number(e.target.value))}
-            className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
-          >
-            {[1, 2, 3, 4].map((count) => (
-              <option key={count} value={count}>
-                {count}
-              </option>
-            ))}
-          </select>
+        <div className="space-y-3 rounded-xl border border-border bg-card/60 p-4">
+          <p className="text-sm font-medium">Shot prompts <span className="text-destructive">*</span></p>
+          <p className="text-xs text-muted-foreground">
+            Select exactly {formData.requestedImageCount} shots.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {(promptCategories.find((item) => item.category_key === formData.promptCategory)?.shot_prompts ?? []).map((shot) => {
+              const checked = formData.selectedShotKeys.includes(shot.key);
+              return (
+                <label key={shot.key} className="flex items-start gap-2 rounded-lg border border-border px-3 py-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => {
+                      const next = [...formData.selectedShotKeys];
+                      if (e.target.checked) {
+                        if (next.length >= formData.requestedImageCount) return;
+                        next.push(shot.key);
+                      } else {
+                        const idx = next.indexOf(shot.key);
+                        if (idx >= 0) next.splice(idx, 1);
+                      }
+                      updateField("selectedShotKeys", next);
+                    }}
+                  />
+                  <span>{shot.label || shot.key}</span>
+                </label>
+              );
+            })}
+          </div>
         </div>
 
         {user?.enableStyleNumber ? (

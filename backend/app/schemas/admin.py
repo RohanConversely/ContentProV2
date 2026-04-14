@@ -51,3 +51,17 @@ class PromptResponse(BaseModel):
 class PromptUpdateRequest(BaseModel):
     prompt_text: str = Field(min_length=1)
     shot_prompts: list[dict[str, str]] | None = None
+
+
+class CategoryPromptResponse(BaseModel):
+    industry: str
+    category_key: str
+    category_label: str
+    category_prompt_text: str
+    shot_prompts: list[dict[str, str]] = Field(default_factory=list)
+
+
+class CategoryPromptUpdateRequest(BaseModel):
+    category_label: str = Field(min_length=1)
+    category_prompt_text: str = Field(min_length=1)
+    shot_prompts: list[dict[str, str]] = Field(default_factory=list)

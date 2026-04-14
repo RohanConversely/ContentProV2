@@ -2,8 +2,11 @@ import { useEffect, useState } from "react";
 import { Loader2, X } from "lucide-react";
 
 import {
+  adminDeleteUserCategoryPromptOverride,
   adminDeleteUserPromptOverride,
+  adminGetUserCategoryPromptOverride,
   adminGetUserPromptOverride,
+  adminSetUserCategoryPromptOverride,
   adminSetUserPromptOverride,
   type AdminUserRecord,
 } from "@/lib/api";
@@ -12,6 +15,7 @@ import { industryLabel } from "@/lib/industries";
 interface AdminPromptOverrideModalProps {
   defaultPrompt: string;
   defaultShotPrompts: { key: string; label: string; prompt: string }[];
+  defaultCategoryPrompts: { category_key: string; category_label: string; category_prompt_text: string; shot_prompts: { key: string; label: string; prompt: string }[] }[];
   onClose: () => void;
   onSaved: (message: string) => void;
   user: AdminUserRecord | null;
@@ -20,6 +24,7 @@ interface AdminPromptOverrideModalProps {
 const AdminPromptOverrideModal = ({
   defaultPrompt,
   defaultShotPrompts,
+  defaultCategoryPrompts,
   onClose,
   onSaved,
   user,
@@ -31,6 +36,9 @@ const AdminPromptOverrideModal = ({
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
+  const [selectedCategoryKey, setSelectedCategoryKey] = useState("default");
+  const [categoryPromptText, setCategoryPromptText] = useState("");
+  const [categoryLabel, setCategoryLabel] = useState("");
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
@@ -60,9 +68,25 @@ const AdminPromptOverrideModal = ({
         setSelectedShotKey(defaultShotPrompts[0]?.key ?? "");
         setHasOverride(false);
       }
+      const defaultCategory = defaultCategoryPrompts.find((item) => item.category_key === selectedCategoryKey) ?? defaultCategoryPrompts[0];
+      if (defaultCategory) {
+        setSelectedCategoryKey(defaultCategory.category_key);
+        const categoryOverride = await adminGetUserCategoryPromptOverride(
+          user.id,
+          user.industry,
+          defaultCategory.category_key,
+        );
+        setCategoryLabel(categoryOverride?.category_label ?? defaultCategory.category_label);
+        setCategoryPromptText(categoryOverride?.category_prompt_text ?? defaultCategory.category_prompt_text);
+        const nextShots = categoryOverride?.shot_prompts?.length
+          ? categoryOverride.shot_prompts
+          : defaultCategory.shot_prompts;
+        setShotPrompts(nextShots);
+        setSelectedShotKey(nextShots[0]?.key ?? "");
+      }
       setIsLoading(false);
     })();
-  }, [defaultPrompt, defaultShotPrompts, user]);
+  }, [defaultPrompt, defaultShotPrompts, defaultCategoryPrompts, user]);
 
   if (!user) {
     return null;
@@ -76,6 +100,11 @@ const AdminPromptOverrideModal = ({
     setError("");
     try {
       await adminSetUserPromptOverride(user.id, user.industry, promptText, shotPrompts);
+      await adminSetUserCategoryPromptOverride(user.id, user.industry, selectedCategoryKey, {
+        categoryLabel,
+        categoryPromptText,
+        shotPrompts,
+      });
       setHasOverride(true);
       onSaved(`Custom prompt saved for ${user.displayName}.`);
       onClose();
@@ -90,6 +119,7 @@ const AdminPromptOverrideModal = ({
     setIsSaving(true);
     setError("");
     try {
+      await adminDeleteUserCategoryPromptOverride(user.id, user.industry, selectedCategoryKey);
       await adminDeleteUserPromptOverride(user.id, user.industry);
       onSaved(`Custom prompt removed for ${user.displayName}.`);
       onClose();
@@ -126,6 +156,56 @@ const AdminPromptOverrideModal = ({
         </div>
 
         <div className="mt-6 space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Category</label>
+            <select
+              className="w-full rounded-2xl border border-border bg-background px-4 py-3"
+              value={selectedCategoryKey}
+              onChange={(event) => {
+                void (async () => {
+                  const nextKey = event.target.value;
+                  setSelectedCategoryKey(nextKey);
+                  const nextCategory = defaultCategoryPrompts.find((item) => item.category_key === nextKey);
+                  if (!nextCategory || !user) {
+                    return;
+                  }
+                  const categoryOverride = await adminGetUserCategoryPromptOverride(
+                    user.id,
+                    user.industry,
+                    nextCategory.category_key,
+                  );
+                  setCategoryLabel(categoryOverride?.category_label ?? nextCategory.category_label);
+                  setCategoryPromptText(categoryOverride?.category_prompt_text ?? nextCategory.category_prompt_text);
+                  const nextShots = categoryOverride?.shot_prompts?.length
+                    ? categoryOverride.shot_prompts
+                    : nextCategory.shot_prompts;
+                  setShotPrompts(nextShots);
+                  setSelectedShotKey(nextShots[0]?.key ?? "");
+                })();
+              }}
+              disabled={isLoading || isSaving}
+            >
+              {defaultCategoryPrompts.map((category) => (
+                <option key={category.category_key} value={category.category_key}>
+                  {category.category_label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <input
+            className="w-full rounded-2xl border border-border bg-background px-4 py-3"
+            value={categoryLabel}
+            onChange={(event) => setCategoryLabel(event.target.value)}
+            placeholder="Category label"
+            disabled={isLoading || isSaving}
+          />
+          <textarea
+            className="min-h-[120px] w-full rounded-2xl border border-border bg-background px-4 py-3"
+            value={categoryPromptText}
+            onChange={(event) => setCategoryPromptText(event.target.value)}
+            placeholder="Category prompt"
+            disabled={isLoading || isSaving}
+          />
           <textarea
             className="min-h-[380px] w-full rounded-2xl border border-border bg-background px-4 py-3"
             value={promptText}

@@ -93,6 +93,51 @@ def _run_schema_patches(sync_conn) -> None:
         if "shot_prompts_json" not in user_prompt_override_columns:
             sync_conn.execute(text("ALTER TABLE user_prompt_overrides ADD COLUMN shot_prompts_json JSON"))
 
+    if "industry_category_prompts" not in table_names:
+        sync_conn.execute(
+            text(
+                """
+                CREATE TABLE industry_category_prompts (
+                    id VARCHAR(36) PRIMARY KEY,
+                    industry VARCHAR(64) NOT NULL,
+                    category_key VARCHAR(128) NOT NULL,
+                    category_label VARCHAR(255) NOT NULL,
+                    category_prompt_text TEXT NOT NULL,
+                    shot_prompts_json JSON,
+                    is_active BOOLEAN NOT NULL DEFAULT 1,
+                    created_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL,
+                    CONSTRAINT uq_industry_category_prompt UNIQUE (industry, category_key)
+                )
+                """
+            )
+        )
+        sync_conn.execute(text("CREATE INDEX ix_industry_category_prompts_industry ON industry_category_prompts (industry)"))
+
+    if "user_category_prompt_overrides" not in table_names:
+        sync_conn.execute(
+            text(
+                """
+                CREATE TABLE user_category_prompt_overrides (
+                    id VARCHAR(36) PRIMARY KEY,
+                    user_id VARCHAR(36) NOT NULL,
+                    industry VARCHAR(64) NOT NULL,
+                    category_key VARCHAR(128) NOT NULL,
+                    category_label VARCHAR(255) NOT NULL,
+                    category_prompt_text TEXT NOT NULL,
+                    shot_prompts_json JSON,
+                    created_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL,
+                    CONSTRAINT uq_user_category_prompt_override_user_industry_category
+                        UNIQUE (user_id, industry, category_key),
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+                """
+            )
+        )
+        sync_conn.execute(text("CREATE INDEX ix_user_category_prompt_overrides_user_id ON user_category_prompt_overrides (user_id)"))
+        sync_conn.execute(text("CREATE INDEX ix_user_category_prompt_overrides_industry ON user_category_prompt_overrides (industry)"))
+
     if "jobs" not in table_names:
         return
 
