@@ -886,6 +886,14 @@ export async function adminUpdateDefaultPrompt(industry: string, promptText: str
   );
 }
 
+export async function adminDeleteDefaultPrompt(industry: string): Promise<void> {
+  await apiJson<{ ok: boolean }>(
+    `/admin/prompts/defaults/${encodeURIComponent(industry)}`,
+    { method: "DELETE" },
+    true,
+  );
+}
+
 export async function adminListDefaultCategoryPrompts(industry: string): Promise<BackendCategoryPromptResponse[]> {
   return apiJson<BackendCategoryPromptResponse[]>(
     `/admin/prompts/defaults/${encodeURIComponent(industry)}/categories`,

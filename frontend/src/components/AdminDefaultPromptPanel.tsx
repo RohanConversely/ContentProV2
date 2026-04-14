@@ -17,10 +17,15 @@ interface CategoryPrompt {
 interface AdminDefaultPromptPanelProps {
   defaultPrompts: Record<string, string>;
   defaultCategoryPrompts: Record<string, CategoryPrompt[]>;
+  industryOptions?: { id: string; label: string }[];
   selectedIndustry: string;
   selectedCategoryKey: string;
   onSelectedIndustryChange: (industry: string) => void;
   onSelectedCategoryKeyChange: (categoryKey: string) => void;
+  onAddIndustry: (industryId: string) => Promise<void>;
+  onDeleteIndustry: () => Promise<void>;
+  onAddCategory: (categoryLabel: string) => Promise<void>;
+  onDeleteCategory: () => Promise<void>;
   onPromptChange: (industry: string, promptText: string) => void;
   onCategoryChange: (
     industry: string,
@@ -33,19 +38,34 @@ interface AdminDefaultPromptPanelProps {
 const AdminDefaultPromptPanel = ({
   defaultPrompts,
   defaultCategoryPrompts,
+  industryOptions,
   selectedIndustry,
   selectedCategoryKey,
   onSelectedIndustryChange,
   onSelectedCategoryKeyChange,
+  onAddIndustry,
+  onDeleteIndustry,
+  onAddCategory,
+  onDeleteCategory,
   onPromptChange,
   onCategoryChange,
   onSaveAll,
 }: AdminDefaultPromptPanelProps) => {
+  const resolvedIndustryOptions =
+    industryOptions && industryOptions.length > 0
+      ? industryOptions
+      : industries.map((item) => ({ id: item.id, label: item.label }));
   const categories = defaultCategoryPrompts[selectedIndustry] ?? [];
   const selectedCategory =
     categories.find((item) => item.category_key === selectedCategoryKey) ?? categories[0] ?? null;
 
   const [selectedShotKey, setSelectedShotKey] = useState("");
+  const [newIndustryId, setNewIndustryId] = useState("");
+  const [newCategoryLabel, setNewCategoryLabel] = useState("");
+  const [isAddingIndustry, setIsAddingIndustry] = useState(false);
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [isDeletingIndustry, setIsDeletingIndustry] = useState(false);
+  const [isDeletingCategory, setIsDeletingCategory] = useState(false);
 
   useEffect(() => {
     setSelectedShotKey(selectedCategory?.shot_prompts?.[0]?.key ?? "");
@@ -71,13 +91,55 @@ const AdminDefaultPromptPanel = ({
 
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="rounded-2xl border border-border bg-background/40 p-4 space-y-3">
-          <h3 className="font-medium">Industry Prompts</h3>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-medium">Industry Prompts</h3>
+            <div className="flex items-center gap-2">
+              <input
+                className="w-36 rounded-xl border border-border bg-background px-3 py-2 text-xs"
+                value={newIndustryId}
+                onChange={(event) => setNewIndustryId(event.target.value)}
+                placeholder="new_industry"
+                disabled={isAddingIndustry}
+              />
+              <button
+                type="button"
+                className="rounded-xl border border-border bg-background px-3 py-2 text-xs hover:bg-secondary disabled:opacity-60"
+                disabled={isAddingIndustry || !newIndustryId.trim()}
+                onClick={async () => {
+                  setIsAddingIndustry(true);
+                  try {
+                    await onAddIndustry(newIndustryId);
+                    setNewIndustryId("");
+                  } finally {
+                    setIsAddingIndustry(false);
+                  }
+                }}
+              >
+                Add Industry
+              </button>
+              <button
+                type="button"
+                className="rounded-xl border border-destructive/40 bg-background px-3 py-2 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-60"
+                disabled={isDeletingIndustry || !selectedIndustry}
+                onClick={async () => {
+                  setIsDeletingIndustry(true);
+                  try {
+                    await onDeleteIndustry();
+                  } finally {
+                    setIsDeletingIndustry(false);
+                  }
+                }}
+              >
+                Delete Industry
+              </button>
+            </div>
+          </div>
           <select
             className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm"
             value={selectedIndustry}
             onChange={(event) => onSelectedIndustryChange(event.target.value)}
           >
-            {industries.map((option) => (
+            {resolvedIndustryOptions.map((option) => (
               <option key={option.id} value={option.id}>
                 {option.label}
               </option>
@@ -93,7 +155,49 @@ const AdminDefaultPromptPanel = ({
         </div>
 
         <div className="rounded-2xl border border-border bg-background/40 p-4 space-y-3">
-          <h3 className="font-medium">Category Prompts</h3>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-medium">Category Prompts</h3>
+            <div className="flex items-center gap-2">
+              <input
+                className="w-36 rounded-xl border border-border bg-background px-3 py-2 text-xs"
+                value={newCategoryLabel}
+                onChange={(event) => setNewCategoryLabel(event.target.value)}
+                placeholder="New category"
+                disabled={isAddingCategory}
+              />
+              <button
+                type="button"
+                className="rounded-xl border border-border bg-background px-3 py-2 text-xs hover:bg-secondary disabled:opacity-60"
+                disabled={isAddingCategory || !newCategoryLabel.trim()}
+                onClick={async () => {
+                  setIsAddingCategory(true);
+                  try {
+                    await onAddCategory(newCategoryLabel);
+                    setNewCategoryLabel("");
+                  } finally {
+                    setIsAddingCategory(false);
+                  }
+                }}
+              >
+                Add Category
+              </button>
+              <button
+                type="button"
+                className="rounded-xl border border-destructive/40 bg-background px-3 py-2 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-60"
+                disabled={isDeletingCategory || !selectedCategory}
+                onClick={async () => {
+                  setIsDeletingCategory(true);
+                  try {
+                    await onDeleteCategory();
+                  } finally {
+                    setIsDeletingCategory(false);
+                  }
+                }}
+              >
+                Delete Category
+              </button>
+            </div>
+          </div>
           <select
             className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm"
             value={selectedCategory?.category_key ?? ""}
@@ -202,6 +306,23 @@ const AdminDefaultPromptPanel = ({
                     }}
                     placeholder="Shot prompt"
                   />
+                  <button
+                    type="button"
+                    className="rounded-xl border border-destructive/40 bg-background px-3 py-2 text-xs text-destructive hover:bg-destructive/10"
+                    onClick={() => {
+                      if (!selectedCategory || selectedShotIndex < 0) return;
+                      const next = [...selectedCategory.shot_prompts];
+                      next.splice(selectedShotIndex, 1);
+                      onCategoryChange(selectedIndustry, selectedCategory.category_key, {
+                        ...selectedCategory,
+                        shot_prompts: next,
+                      });
+                      const fallback = next[Math.max(0, selectedShotIndex - 1)]?.key ?? next[0]?.key ?? "";
+                      setSelectedShotKey(fallback);
+                    }}
+                  >
+                    Delete Shot Prompt
+                  </button>
                 </div>
               ) : null}
             </>
