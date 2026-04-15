@@ -33,7 +33,7 @@ def upgrade() -> None:
         sa.Column("category_label", sa.String(length=255), nullable=False),
         sa.Column("category_prompt_text", sa.Text(), nullable=False),
         sa.Column("shot_prompts_json", sa.JSON(), nullable=True),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("1")),
+        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
