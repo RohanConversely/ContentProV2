@@ -315,9 +315,13 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
 
   useEffect(() => {
     if (!showResults) return;
+    const persistedFormData = {
+      ...formData,
+      productImages: [],
+    };
     writeActiveSingleRun({
       mode,
-      formData,
+      formData: persistedFormData,
       jobId,
       isGenerating,
       generationError,
