@@ -74,13 +74,19 @@ def upgrade() -> None:
                 shot_prompts_raw = json.loads(shot_prompts_raw)
             except Exception:
                 shot_prompts_raw = None
+        if shot_prompts_raw is None:
+            shot_prompts_value = None
+        elif isinstance(shot_prompts_raw, str):
+            shot_prompts_value = shot_prompts_raw
+        else:
+            shot_prompts_value = json.dumps(shot_prompts_raw)
         bind.execute(
             sa.text(
                 """
                 INSERT INTO industry_category_prompts
                 (id, industry, category_key, category_label, category_prompt_text, shot_prompts_json, is_active, created_at, updated_at)
                 VALUES
-                (:id, :industry, :category_key, :category_label, :category_prompt_text, :shot_prompts_json, :is_active, :created_at, :updated_at)
+                (:id, :industry, :category_key, :category_label, :category_prompt_text, CAST(:shot_prompts_json AS JSON), :is_active, :created_at, :updated_at)
                 """
             ),
             {
@@ -89,7 +95,7 @@ def upgrade() -> None:
                 "category_key": "default",
                 "category_label": "Default",
                 "category_prompt_text": "Use a balanced visual treatment suitable for this category while preserving product accuracy.",
-                "shot_prompts_json": shot_prompts_raw,
+                "shot_prompts_json": shot_prompts_value,
                 "is_active": True,
                 "created_at": now,
                 "updated_at": now,
