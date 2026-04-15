@@ -58,7 +58,11 @@ function writeJson<T>(key: string, value: T | null): void {
     window.localStorage.removeItem(key);
     return;
   }
-  window.localStorage.setItem(key, JSON.stringify(value));
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    window.localStorage.removeItem(key);
+  }
 }
 
 export function readActiveSingleRun(): PersistedSingleRun | null {
