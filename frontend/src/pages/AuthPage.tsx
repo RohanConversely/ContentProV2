@@ -4,7 +4,6 @@ import { motion } from "framer-motion";
 import { ArrowRight, Eye, EyeOff, Loader2, Sparkles } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getGoogleLoginUrl } from "@/lib/api";
-import { industries } from "@/lib/industries";
 
 const AuthPage = () => {
   const location = useLocation();
@@ -13,7 +12,6 @@ const AuthPage = () => {
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [industry, setIndustry] = useState("jewelry");
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -35,7 +33,6 @@ const AuthPage = () => {
           displayName: displayName.trim(),
           email: email.trim(),
           password,
-          industry,
         });
         return;
       }
@@ -127,26 +124,6 @@ const AuthPage = () => {
                     required
                   />
                 </label>
-                <div className="space-y-2 text-sm">
-                  <span className="text-muted-foreground">Industry</span>
-                  <div className="grid grid-cols-2 gap-2">
-                    {industries.map((option) => (
-                      <button
-                        key={option.id}
-                        type="button"
-                        onClick={() => setIndustry(option.id)}
-                        className={`rounded-2xl border px-3 py-3 text-left transition-colors ${
-                          industry === option.id
-                            ? "border-primary bg-primary/10 text-foreground"
-                            : "border-border bg-background text-muted-foreground hover:border-primary/40"
-                        }`}
-                      >
-                        <span className="mr-2">{option.emoji}</span>
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
               </>
             ) : null}
 

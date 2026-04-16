@@ -1,13 +1,5 @@
 INDUSTRY_OPTIONS = [
-    {"id": "fashion", "label": "Fashion & Apparel"},
-    {"id": "electronics", "label": "Electronics & Tech"},
-    {"id": "beauty", "label": "Beauty & Skincare"},
-    {"id": "food", "label": "Food & Beverage"},
-    {"id": "home", "label": "Home & Living"},
-    {"id": "sports", "label": "Sports & Fitness"},
-    {"id": "jewelry", "label": "Jewelry & Accessories"},
-    {"id": "health", "label": "Health & Wellness"},
-    {"id": "pet_accessories", "label": "Pet Accessories"},
+    {"id": "jewelry", "label": "Jewellery"},
 ]
 
 INDUSTRY_IDS = tuple(option["id"] for option in INDUSTRY_OPTIONS)

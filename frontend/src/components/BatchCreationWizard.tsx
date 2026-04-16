@@ -6,13 +6,22 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Download, FileSpreadsheet, Play, RefreshCw, Upload, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { ProductFormData } from "./CreationWizard";
-import { getPromptCatalog } from "@/lib/api";
+import { getPromptCatalog, getPromptIndustries } from "@/lib/api";
 import { writeActiveBatchRun } from "@/lib/active-runs";
 import { setTransientBatchFiles } from "@/lib/batch-transient-files";
 import { useAuth } from "@/contexts/AuthContext";
 import { industries } from "@/lib/industries";
 import sampleSheetUrl from "../../sample.xlsx?url";
 import styleSampleSheetUrl from "../../style_sample.xlsx?url";
+
+const industryLabelMap = new Map<string, string>(industries.map((item) => [item.id, item.label]));
+
+const formatIndustryLabel = (industryId: string): string =>
+  industryId
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 
 type BatchMode = "images" | "video";
 type BatchSourceType = "image_link" | "drive_folder" | "folder_upload";
@@ -373,12 +382,42 @@ export default function BatchCreationWizard({
   const [requestedImageCount, setRequestedImageCount] = useState(4);
   const [addStyleNumber, setAddStyleNumber] = useState(false);
   const [selectedIndustry, setSelectedIndustry] = useState(user?.industry ?? "jewelry");
+  const [industryOptions, setIndustryOptions] = useState<{ id: string; label: string }[]>([]);
   const [selectedPromptCategory, setSelectedPromptCategory] = useState("default");
   const [selectedShotKeys, setSelectedShotKeys] = useState<string[]>([]);
   const [promptCategories, setPromptCategories] = useState<
     { category_key: string; category_label: string; shot_prompts: { key: string; label: string; prompt: string }[] }[]
   >([]);
   const isRunning = false;
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const availableIndustries = await getPromptIndustries();
+        if (!availableIndustries.length) {
+          setIndustryOptions([]);
+          return;
+        }
+
+        const nextOptions = availableIndustries.map((industryId) => ({
+          id: industryId,
+          label: industryLabelMap.get(industryId) ?? formatIndustryLabel(industryId),
+        }));
+        setIndustryOptions(nextOptions);
+
+        const nextIndustry =
+          nextOptions.find((item) => item.id === selectedIndustry)?.id ??
+          nextOptions.find((item) => item.id === (user?.industry ?? ""))?.id ??
+          nextOptions[0]?.id ??
+          "";
+        if (nextIndustry && nextIndustry !== selectedIndustry) {
+          setSelectedIndustry(nextIndustry);
+        }
+      } catch {
+        setIndustryOptions([]);
+      }
+    })();
+  }, [selectedIndustry, user?.industry]);
 
   useEffect(() => {
     void (async () => {
@@ -562,13 +601,18 @@ export default function BatchCreationWizard({
     }
 
     if (sourceType !== "folder_upload") {
+      const defaultCategory =
+        promptCategories.find((item) => item.category_key === "default") ??
+        promptCategories[0] ??
+        null;
       const invalidCategoryRows = selectedJobs.filter((job) => {
         const matchedCategory = resolveCategoryForJob(job.productCategory);
-        return !matchedCategory || (matchedCategory.shot_prompts ?? []).length < requestedImageCount;
+        const effectiveCategory = matchedCategory ?? defaultCategory;
+        return !effectiveCategory || (effectiveCategory.shot_prompts ?? []).length < requestedImageCount;
       });
       if (invalidCategoryRows.length > 0) {
         setParseError(
-          `Missing category configuration or enough shot prompts for ${invalidCategoryRows.length} selected row(s).`,
+          `Missing default/matched category configuration or enough shot prompts for ${invalidCategoryRows.length} selected row(s).`,
         );
         return;
       }
@@ -621,12 +665,17 @@ export default function BatchCreationWizard({
               selectedShotKeys,
             };
           }
+          const defaultCategory =
+            promptCategories.find((item) => item.category_key === "default") ??
+            promptCategories[0] ??
+            null;
           const matchedCategory = resolveCategoryForJob(j.productCategory);
-          const categoryShotKeys = (matchedCategory?.shot_prompts ?? [])
+          const effectiveCategory = matchedCategory ?? defaultCategory;
+          const categoryShotKeys = (effectiveCategory?.shot_prompts ?? [])
             .slice(0, requestedImageCount)
             .map((item) => item.key);
           return {
-            promptCategory: matchedCategory?.category_key ?? (j.productCategory || selectedPromptCategory),
+            promptCategory: effectiveCategory?.category_key ?? "default",
             selectedShotKeys: categoryShotKeys,
           };
         })(),
@@ -814,61 +863,65 @@ export default function BatchCreationWizard({
               onChange={(e) => setSelectedIndustry(e.target.value)}
               className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
             >
-              {industries.map((option) => (
+              {industryOptions.map((option) => (
                 <option key={option.id} value={option.id}>
                   {option.label}
                 </option>
               ))}
             </select>
           </label>
-          <label className="space-y-2">
-            <span className="text-sm font-medium">Folder Upload Category</span>
-            <select
-              value={selectedPromptCategory}
-              onChange={(e) => {
-                const nextCategory = e.target.value;
-                setSelectedPromptCategory(nextCategory);
-                const category = promptCategories.find((item) => item.category_key === nextCategory);
-                setSelectedShotKeys((category?.shot_prompts ?? []).slice(0, requestedImageCount).map((item) => item.key));
-              }}
-              className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
-            >
-              {promptCategories.map((item) => (
-                <option key={item.category_key} value={item.category_key}>
-                  {item.category_label}
-                </option>
-              ))}
-            </select>
-          </label>
+          {sourceType === "folder_upload" ? (
+            <label className="space-y-2">
+              <span className="text-sm font-medium">Folder Upload Category</span>
+              <select
+                value={selectedPromptCategory}
+                onChange={(e) => {
+                  const nextCategory = e.target.value;
+                  setSelectedPromptCategory(nextCategory);
+                  const category = promptCategories.find((item) => item.category_key === nextCategory);
+                  setSelectedShotKeys((category?.shot_prompts ?? []).slice(0, requestedImageCount).map((item) => item.key));
+                }}
+                className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+              >
+                {promptCategories.map((item) => (
+                  <option key={item.category_key} value={item.category_key}>
+                    {item.category_label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </div>
-        <div className="mt-4 space-y-2">
-          <p className="text-sm font-medium">Shot prompts (select exactly {requestedImageCount})</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {(promptCategories.find((item) => item.category_key === selectedPromptCategory)?.shot_prompts ?? []).map((shot) => {
-              const checked = selectedShotKeys.includes(shot.key);
-              return (
-                <label key={shot.key} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={(e) => {
-                      const next = [...selectedShotKeys];
-                      if (e.target.checked) {
-                        if (next.length >= requestedImageCount) return;
-                        next.push(shot.key);
-                      } else {
-                        const index = next.indexOf(shot.key);
-                        if (index >= 0) next.splice(index, 1);
-                      }
-                      setSelectedShotKeys(next);
-                    }}
-                  />
-                  <span>{shot.label || shot.key}</span>
-                </label>
-              );
-            })}
+        {sourceType === "folder_upload" ? (
+          <div className="mt-4 space-y-2">
+            <p className="text-sm font-medium">Shot prompts (select exactly {requestedImageCount})</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {(promptCategories.find((item) => item.category_key === selectedPromptCategory)?.shot_prompts ?? []).map((shot) => {
+                const checked = selectedShotKeys.includes(shot.key);
+                return (
+                  <label key={shot.key} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        const next = [...selectedShotKeys];
+                        if (e.target.checked) {
+                          if (next.length >= requestedImageCount) return;
+                          next.push(shot.key);
+                        } else {
+                          const index = next.indexOf(shot.key);
+                          if (index >= 0) next.splice(index, 1);
+                        }
+                        setSelectedShotKeys(next);
+                      }}
+                    />
+                    <span>{shot.label || shot.key}</span>
+                  </label>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        ) : null}
         {user?.enableStyleNumber && sourceType !== "folder_upload" ? (
           <div className="mt-4 space-y-2">
             <label className="flex items-center gap-2 text-sm font-medium">

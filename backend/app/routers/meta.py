@@ -1,13 +1,22 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import INDUSTRY_IDS
+from app.constants import DEFAULT_INDUSTRY
 from app.database import get_db
 from app.models.user import User
 from app.routers.auth import get_current_user
-from app.services.prompt_management import list_default_category_prompts, list_user_category_overrides
+from app.services.prompt_management import list_default_category_prompts, list_default_prompts, list_user_category_overrides
 
 router = APIRouter(tags=["meta"])
+
+
+@router.get("/prompt-industries")
+async def get_prompt_industries(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> dict:
+    prompts = await list_default_prompts(db)
+    return {"industries": [prompt.industry for prompt in prompts]}
 
 
 @router.get("/audio/tracks")
@@ -34,9 +43,18 @@ async def get_prompt_catalog(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    selected_industry = (industry or current_user.industry or "").strip().lower() or current_user.industry
-    if selected_industry not in INDUSTRY_IDS:
-        selected_industry = current_user.industry
+    available_prompts = await list_default_prompts(db)
+    available_industries = {prompt.industry for prompt in available_prompts if prompt.industry and prompt.industry.strip()}
+
+    selected_industry = (industry or current_user.industry or "").strip().lower()
+    if selected_industry not in available_industries:
+        fallback_industry = (current_user.industry or "").strip().lower()
+        if fallback_industry in available_industries:
+            selected_industry = fallback_industry
+        elif DEFAULT_INDUSTRY in available_industries:
+            selected_industry = DEFAULT_INDUSTRY
+        else:
+            selected_industry = next(iter(available_industries), DEFAULT_INDUSTRY)
 
     defaults = await list_default_category_prompts(db, selected_industry)
     overrides = await list_user_category_overrides(db, current_user.id, selected_industry)

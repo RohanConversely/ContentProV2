@@ -23,8 +23,8 @@ class AdminCreateUserRequest(BaseModel):
     password: str = Field(min_length=8)
     display_name: str = Field(min_length=1)
     role: str = Field(pattern="^(user|superadmin)$", default="user")
-    industry: str = Field(pattern="^(fashion|electronics|beauty|food|home|sports|jewelry|health|pet_accessories)$")
-    default_image_model: str = Field(default="gpt-image-1.5", pattern="^(reve|gpt-image-1.5|gpt-image-1|gpt-batch-api)$")
+    industry: str = Field(pattern="^[a-z0-9_]+$")
+    default_image_model: str = Field(default="gpt-batch-api", pattern="^(reve|gpt-image-1.5|gpt-image-1|gpt-batch-api)$")
     default_batch_image_model: str = Field(default="gpt-batch-api", pattern="^(reve|gpt-image-1.5|gpt-image-1|gpt-batch-api)$")
     enable_style_number: bool = Field(default=False)
     plan: str = Field(default="free")
@@ -34,7 +34,7 @@ class AdminUpdateUserRequest(BaseModel):
     email: EmailStr | None = None
     display_name: str | None = Field(default=None, min_length=1)
     role: str | None = Field(default=None, pattern="^(user|superadmin)$")
-    industry: str | None = Field(default=None, pattern="^(fashion|electronics|beauty|food|home|sports|jewelry|health|pet_accessories)$")
+    industry: str | None = Field(default=None, pattern="^[a-z0-9_]+$")
     default_image_model: str | None = Field(default=None, pattern="^(reve|gpt-image-1.5|gpt-image-1|gpt-batch-api)$")
     default_batch_image_model: str | None = Field(default=None, pattern="^(reve|gpt-image-1.5|gpt-image-1|gpt-batch-api)$")
     enable_style_number: bool | None = None

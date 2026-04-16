@@ -19,7 +19,7 @@ import {
   type AdminCreateUserPayload,
   type AdminUserRecord,
 } from "@/lib/api";
-import { industries } from "@/lib/industries";
+import { industryLabel } from "@/lib/industries";
 import { toast } from "@/components/ui/sonner";
 
 const defaultCreateState: AdminCreateUserPayload = {
@@ -27,8 +27,8 @@ const defaultCreateState: AdminCreateUserPayload = {
   password: "",
   displayName: "",
   role: "user",
-  industry: "jewelry",
-  defaultImageModel: "gpt-image-1.5",
+  industry: "",
+  defaultImageModel: "gpt-batch-api",
   defaultBatchImageModel: "gpt-batch-api",
   enableStyleNumber: false,
   plan: "free",
@@ -44,7 +44,7 @@ const AdminUsersPage = () => {
   const [defaultCategoryPrompts, setDefaultCategoryPrompts] = useState<
     Record<string, { category_key: string; category_label: string; category_prompt_text: string; shot_prompts: { key: string; label: string; prompt: string }[] }[]>
   >({});
-  const [selectedIndustry, setSelectedIndustry] = useState("jewelry");
+  const [selectedIndustry, setSelectedIndustry] = useState("");
   const [selectedCategoryKey, setSelectedCategoryKey] = useState("default");
   const [message, setMessage] = useState("");
   const [createState, setCreateState] = useState<AdminCreateUserPayload>(defaultCreateState);
@@ -55,23 +55,41 @@ const AdminUsersPage = () => {
     return lowered.replace(/^_+|_+$/g, "") || "default";
   };
 
+  const formatIndustryLabel = (industryId: string) => {
+    const knownLabel = industryLabel(industryId);
+    if (knownLabel !== industryId) {
+      return knownLabel;
+    }
+    return industryId
+      .split("_")
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  };
+
   const industryOptions = useMemo(() => {
     const byId = new Map<string, string>();
-    for (const option of industries) {
-      byId.set(option.id, option.label);
-    }
     for (const industryId of Object.keys(defaultPrompts)) {
-      if (!byId.has(industryId)) {
-        byId.set(industryId, industryId);
-      }
+      byId.set(industryId, formatIndustryLabel(industryId));
     }
     for (const industryId of Object.keys(defaultCategoryPrompts)) {
-      if (!byId.has(industryId)) {
-        byId.set(industryId, industryId);
-      }
+      if (!byId.has(industryId)) byId.set(industryId, formatIndustryLabel(industryId));
     }
     return Array.from(byId.entries()).map(([id, label]) => ({ id, label }));
   }, [defaultPrompts, defaultCategoryPrompts]);
+
+  useEffect(() => {
+    if (industryOptions.length === 0) {
+      setCreateState((prev) => (prev.industry === "" ? prev : { ...prev, industry: "" }));
+      return;
+    }
+    const firstIndustry = industryOptions[0]?.id ?? "";
+    setCreateState((prev) =>
+      industryOptions.some((option) => option.id === prev.industry)
+        ? prev
+        : { ...prev, industry: firstIndustry },
+    );
+  }, [industryOptions]);
 
   const loadAll = async () => {
     const [userRows, promptRows] = await Promise.all([adminListUsers(), adminListDefaultPrompts()]);
@@ -104,7 +122,7 @@ const AdminUsersPage = () => {
 
     const nextIndustry = availableIndustryIds.includes(selectedIndustry)
       ? selectedIndustry
-      : availableIndustryIds[0] ?? "jewelry";
+      : availableIndustryIds[0] ?? "";
     if (nextIndustry !== selectedIndustry) {
       setSelectedIndustry(nextIndustry);
     }
@@ -378,6 +396,7 @@ const AdminUsersPage = () => {
 
         <AdminUsersList
           users={users}
+          industryOptions={industryOptions}
           onUsersChange={setUsers}
           onSaveUser={(user) => void handleSaveUser(user)}
           onDeleteUser={(userId) => void handleDeleteUser(userId)}

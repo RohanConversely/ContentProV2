@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { industries, industryLabel } from "@/lib/industries";
+import { industryLabel } from "@/lib/industries";
 
 interface ShotPrompt {
   key: string;
@@ -51,10 +51,7 @@ const AdminDefaultPromptPanel = ({
   onCategoryChange,
   onSaveAll,
 }: AdminDefaultPromptPanelProps) => {
-  const resolvedIndustryOptions =
-    industryOptions && industryOptions.length > 0
-      ? industryOptions
-      : industries.map((item) => ({ id: item.id, label: item.label }));
+  const resolvedIndustryOptions = industryOptions ?? [];
   const categories = defaultCategoryPrompts[selectedIndustry] ?? [];
   const selectedCategory =
     categories.find((item) => item.category_key === selectedCategoryKey) ?? categories[0] ?? null;
@@ -98,7 +95,7 @@ const AdminDefaultPromptPanel = ({
                 className="w-36 rounded-xl border border-border bg-background px-3 py-2 text-xs"
                 value={newIndustryId}
                 onChange={(event) => setNewIndustryId(event.target.value)}
-                placeholder="new_industry"
+                placeholder="New Industry"
                 disabled={isAddingIndustry}
               />
               <button
@@ -145,7 +142,7 @@ const AdminDefaultPromptPanel = ({
               </option>
             ))}
           </select>
-          <p className="text-xs text-muted-foreground">{industryLabel(selectedIndustry)}</p>
+          <p className="text-xs text-muted-foreground">{industryLabel(selectedIndustry || "")}</p>
           <textarea
             className="min-h-[260px] w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm"
             value={defaultPrompts[selectedIndustry] ?? ""}
@@ -184,7 +181,7 @@ const AdminDefaultPromptPanel = ({
               <button
                 type="button"
                 className="rounded-xl border border-destructive/40 bg-background px-3 py-2 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-60"
-                disabled={isDeletingCategory || !selectedCategory}
+                disabled={isDeletingCategory || !selectedCategory || selectedCategory.category_key === "default"}
                 onClick={async () => {
                   setIsDeletingCategory(true);
                   try {
@@ -222,6 +219,7 @@ const AdminDefaultPromptPanel = ({
                   })
                 }
                 placeholder="Category label"
+                disabled={selectedCategory.category_key === "default"}
               />
               <textarea
                 className="min-h-[260px] w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm"

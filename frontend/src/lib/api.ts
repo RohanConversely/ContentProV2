@@ -93,6 +93,10 @@ interface BackendPromptCatalogResponse {
   categories: BackendCategoryPromptResponse[];
 }
 
+interface BackendPromptIndustriesResponse {
+  industries: string[];
+}
+
 interface BackendUsageResponse {
   plan: "free" | "pro";
   credits_used: number;
@@ -193,12 +197,10 @@ export interface AuthPayload {
 
 export interface RegisterPayload extends AuthPayload {
   displayName: string;
-  industry: string;
 }
 
 export interface UpdateProfilePayload {
   displayName?: string;
-  industry?: string;
 }
 
 export interface ChangePasswordPayload {
@@ -588,7 +590,6 @@ export async function registerAccount(payload: RegisterPayload): Promise<UserPro
         email: payload.email,
         password: payload.password,
         display_name: payload.displayName,
-        industry: payload.industry,
       }),
     },
     false,
@@ -626,7 +627,6 @@ export async function updateCurrentUser(payload: UpdateProfilePayload): Promise<
       },
       body: JSON.stringify({
         display_name: payload.displayName,
-        industry: payload.industry,
       }),
     },
     true,
@@ -872,6 +872,11 @@ export async function adminListDefaultPrompts(): Promise<BackendPromptResponse[]
 export async function getPromptCatalog(industry?: string): Promise<BackendPromptCatalogResponse> {
   const query = industry ? `?industry=${encodeURIComponent(industry)}` : "";
   return apiJson<BackendPromptCatalogResponse>(`/prompt-catalog${query}`, {}, true);
+}
+
+export async function getPromptIndustries(): Promise<string[]> {
+  const response = await apiJson<BackendPromptIndustriesResponse>("/prompt-industries", {}, true);
+  return response.industries ?? [];
 }
 
 export async function adminUpdateDefaultPrompt(industry: string, promptText: string): Promise<BackendPromptResponse> {
