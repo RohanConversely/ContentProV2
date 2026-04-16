@@ -22,6 +22,7 @@ import VideoCreation from "./VideoCreation";
 import {
   createJob,
   getPromptCatalog,
+  getPromptIndustries,
   getJob,
   uploadJobAsset,
   waitForJobCompletion,
@@ -96,6 +97,16 @@ const dimensionUnits = [
 ];
 
 const MAX_SOURCE_IMAGES = 5;
+
+const industryLabelMap = new Map<string, string>(industries.map((item) => [item.id, item.label]));
+
+const formatIndustryLabel = (industryId: string): string =>
+  industryId
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
 const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
   const { user } = useAuth();
   const [formData, setFormData] = useState<ProductFormData>(emptyFormData);
@@ -111,7 +122,37 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
   const [promptCategories, setPromptCategories] = useState<
     { category_key: string; category_label: string; shot_prompts: { key: string; label: string; prompt: string }[] }[]
   >([]);
+  const [industryOptions, setIndustryOptions] = useState<{ id: string; label: string }[]>([]);
   const resumedJobRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const availableIndustries = await getPromptIndustries();
+        if (!availableIndustries.length) {
+          setIndustryOptions([]);
+          return;
+        }
+
+        const nextOptions = availableIndustries.map((industryId) => ({
+          id: industryId,
+          label: industryLabelMap.get(industryId) ?? formatIndustryLabel(industryId),
+        }));
+        setIndustryOptions(nextOptions);
+
+        setFormData((prev) => {
+          const candidate =
+            nextOptions.find((item) => item.id === prev.industry)?.id ??
+            nextOptions.find((item) => item.id === (user?.industry ?? ""))?.id ??
+            nextOptions[0]?.id ??
+            "";
+          return candidate && candidate !== prev.industry ? { ...prev, industry: candidate } : prev;
+        });
+      } catch {
+        setIndustryOptions([]);
+      }
+    })();
+  }, [user?.industry]);
 
   const updateField = (field: keyof ProductFormData, value: string | string[] | number | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -582,7 +623,7 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
                 onChange={(e) => updateField("industry", e.target.value)}
                 className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
               >
-                {industries.map((option) => (
+                {industryOptions.map((option) => (
                   <option key={option.id} value={option.id}>
                     {option.label}
                   </option>

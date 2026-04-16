@@ -1,19 +1,11 @@
 export interface IndustryOption {
-  id: "fashion" | "electronics" | "beauty" | "food" | "home" | "sports" | "jewelry" | "health" | "pet_accessories";
+  id: "jewelry";
   label: string;
   emoji: string;
 }
 
 export const industries: IndustryOption[] = [
-  { id: "fashion", label: "Fashion & Apparel", emoji: "👗" },
-  { id: "electronics", label: "Electronics & Tech", emoji: "💻" },
-  { id: "beauty", label: "Beauty & Skincare", emoji: "💄" },
-  { id: "food", label: "Food & Beverage", emoji: "🍽️" },
-  { id: "home", label: "Home & Living", emoji: "🏡" },
-  { id: "sports", label: "Sports & Fitness", emoji: "🏋️" },
-  { id: "jewelry", label: "Jewelry & Accessories", emoji: "💎" },
-  { id: "health", label: "Health & Wellness", emoji: "🌿" },
-  { id: "pet_accessories", label: "Pet Accessories", emoji: "🐾" },
+  { id: "jewelry", label: "Jewellery", emoji: "💎" },
 ];
 
 export function industryLabel(industryId: string): string {

@@ -12,7 +12,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { type AdminUserRecord } from "@/lib/api";
-import { industries, industryLabel } from "@/lib/industries";
+import { industryLabel } from "@/lib/industries";
 
 interface AdminUsersListProps {
   onDeleteUser: (userId: string) => void;
@@ -21,6 +21,7 @@ interface AdminUsersListProps {
   onSaveUser: (user: AdminUserRecord) => void;
   users: AdminUserRecord[];
   onUsersChange: (users: AdminUserRecord[]) => void;
+  industryOptions: { id: string; label: string }[];
 }
 
 const AdminUsersList = ({
@@ -30,6 +31,7 @@ const AdminUsersList = ({
   onSaveUser,
   users,
   onUsersChange,
+  industryOptions,
 }: AdminUsersListProps) => {
   const [query, setQuery] = useState("");
   const [expandedUserIds, setExpandedUserIds] = useState<string[]>([]);
@@ -122,7 +124,7 @@ const AdminUsersList = ({
                       value={user.industry}
                       onChange={(event) => updateUser(user.id, { industry: event.target.value })}
                     >
-                      {industries.map((option) => (
+                      {industryOptions.map((option) => (
                         <option key={option.id} value={option.id}>
                           {option.label}
                         </option>

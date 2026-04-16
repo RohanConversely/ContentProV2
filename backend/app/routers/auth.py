@@ -121,7 +121,7 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
         email=payload.email,
         hashed_password=hash_password(payload.password),
         display_name=payload.display_name,
-        industry=payload.industry,
+        industry=DEFAULT_INDUSTRY,
     )
     db.add(user)
     await db.commit()
@@ -152,8 +152,6 @@ async def update_me(
 ) -> MeResponse:
     if payload.display_name is not None:
         current_user.display_name = payload.display_name
-    if payload.industry is not None:
-        current_user.industry = payload.industry
     await db.commit()
     await db.refresh(current_user)
     return build_me_response(current_user)
@@ -253,7 +251,7 @@ async def google_callback(
                 hashed_password=hash_password(access_token),
                 display_name=display_name,
                 industry=DEFAULT_INDUSTRY,
-                default_image_model="gpt-image-1.5",
+                default_image_model="gpt-batch-api",
                 default_batch_image_model="gpt-batch-api",
             )
             db.add(user)

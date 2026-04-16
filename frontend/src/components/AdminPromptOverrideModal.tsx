@@ -197,7 +197,7 @@ const AdminPromptOverrideModal = ({
             value={categoryLabel}
             onChange={(event) => setCategoryLabel(event.target.value)}
             placeholder="Category label"
-            disabled={isLoading || isSaving}
+            disabled={isLoading || isSaving || selectedCategoryKey === "default"}
           />
           <textarea
             className="min-h-[120px] w-full rounded-2xl border border-border bg-background px-4 py-3"

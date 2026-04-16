@@ -10,7 +10,6 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
-from app.constants import INDUSTRY_IDS
 from app.database import get_db
 from app.models.asset import Asset
 from app.models.job_generation import JobGeneration
@@ -38,6 +37,7 @@ from app.services.pipeline_runner import (
     queue_regeneration_task,
     subscribe,
 )
+from app.services.prompt_management import list_default_prompts
 from app.services.storage import storage_service
 
 router = APIRouter(tags=["jobs"])
@@ -233,7 +233,12 @@ async def create_job(
 
     normalized_additional_input = dict(normalized_additional_input or {})
     selected_industry = str(normalized_additional_input.get("industry") or current_user.industry or "").strip().lower()
-    if selected_industry not in INDUSTRY_IDS:
+    available_industries = {
+        prompt.industry
+        for prompt in await list_default_prompts(db)
+        if prompt.industry and prompt.industry.strip()
+    }
+    if selected_industry not in available_industries:
         raise HTTPException(status_code=422, detail="A valid industry selection is required.")
 
     prompt_category = str(normalized_additional_input.get("prompt_category") or payload.product_category or "").strip()

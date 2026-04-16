@@ -215,6 +215,7 @@ async def set_default_category_prompt(
     shot_prompts: list[dict[str, str]] | None = None,
 ) -> IndustryCategoryPrompt:
     normalized_key = _normalize_category_key(category_key)
+    normalized_label = "Default" if normalized_key == "default" else (category_label.strip() or normalized_key.replace("_", " ").title())
     normalized_shot_prompts = _normalize_shot_prompts(shot_prompts) if shot_prompts is not None else None
     prompt = await get_default_category_prompt(db, industry, normalized_key)
     if prompt is None:
@@ -227,14 +228,14 @@ async def set_default_category_prompt(
             id=str(uuid.uuid4()),
             industry=industry,
             category_key=normalized_key,
-            category_label=category_label.strip() or normalized_key.replace("_", " ").title(),
+            category_label=normalized_label,
             category_prompt_text=category_prompt_text,
             shot_prompts_json=seeded_shot_prompts,
             is_active=True,
         )
         db.add(prompt)
     else:
-        prompt.category_label = category_label.strip() or prompt.category_label
+        prompt.category_label = "Default" if normalized_key == "default" else (category_label.strip() or prompt.category_label)
         prompt.category_prompt_text = category_prompt_text
         if normalized_shot_prompts is not None:
             prompt.shot_prompts_json = normalized_shot_prompts
@@ -244,6 +245,8 @@ async def set_default_category_prompt(
 
 
 async def delete_default_category_prompt(db: AsyncSession, industry: str, category_key: str) -> bool:
+    if _normalize_category_key(category_key) == "default":
+        return False
     prompt = await get_default_category_prompt(db, industry, category_key)
     if prompt is None:
         return False
@@ -328,6 +331,7 @@ async def set_user_category_override(
     shot_prompts: list[dict[str, str]] | None = None,
 ) -> UserCategoryPromptOverride:
     normalized_key = _normalize_category_key(category_key)
+    normalized_label = "Default" if normalized_key == "default" else (category_label.strip() or normalized_key.replace("_", " ").title())
     normalized_shot_prompts = _normalize_shot_prompts(shot_prompts) if shot_prompts is not None else None
     override = await get_user_category_override(db, user_id, industry, normalized_key)
     if override is None:
@@ -335,13 +339,13 @@ async def set_user_category_override(
             user_id=user_id,
             industry=industry,
             category_key=normalized_key,
-            category_label=category_label.strip() or normalized_key.replace("_", " ").title(),
+            category_label=normalized_label,
             category_prompt_text=category_prompt_text,
             shot_prompts_json=normalized_shot_prompts or [],
         )
         db.add(override)
     else:
-        override.category_label = category_label.strip() or override.category_label
+        override.category_label = "Default" if normalized_key == "default" else (category_label.strip() or override.category_label)
         override.category_prompt_text = category_prompt_text
         if normalized_shot_prompts is not None:
             override.shot_prompts_json = normalized_shot_prompts

@@ -71,7 +71,8 @@ async def ensure_bootstrap_data(db: AsyncSession) -> None:
                 display_name=settings.superadmin_display_name,
                 role=SUPERADMIN_ROLE,
                 industry=DEFAULT_INDUSTRY,
-                default_image_model="reve",
+                default_image_model="gpt-batch-api",
+                default_batch_image_model="gpt-batch-api",
                 plan="pro",
             )
         )

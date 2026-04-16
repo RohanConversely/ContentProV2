@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import INDUSTRY_IDS, SUPERADMIN_ROLE
+from app.constants import SUPERADMIN_ROLE
 from app.database import get_db
 from app.models.asset import Asset
 from app.models.job_generation import JobGeneration
@@ -495,6 +495,8 @@ async def remove_default_category_prompt_entry(
 ) -> dict[str, bool]:
     if not industry.strip():
         raise HTTPException(status_code=422, detail="Industry is required.")
+    if category_key.strip().lower() == "default":
+        raise HTTPException(status_code=400, detail="Default category cannot be deleted.")
     return {"ok": await delete_default_category_prompt(db, industry, category_key)}
 
 
@@ -533,8 +535,8 @@ async def get_prompt_override(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ) -> PromptResponse:
-    if industry not in INDUSTRY_IDS:
-        raise HTTPException(status_code=404, detail="Industry not found.")
+    if not industry.strip():
+        raise HTTPException(status_code=422, detail="Industry is required.")
     override = await get_user_override(db, user_id, industry)
     if override is None:
         raise HTTPException(status_code=404, detail="Prompt override not found.")
@@ -553,8 +555,8 @@ async def update_prompt_override(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ) -> PromptResponse:
-    if industry not in INDUSTRY_IDS:
-        raise HTTPException(status_code=404, detail="Industry not found.")
+    if not industry.strip():
+        raise HTTPException(status_code=422, detail="Industry is required.")
     result = await db.execute(select(User).where(User.id == user_id, User.is_deleted.is_(False)))
     user = result.scalar_one_or_none()
     if user is None:
@@ -575,8 +577,8 @@ async def get_user_category_prompt_override(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ) -> CategoryPromptResponse:
-    if industry not in INDUSTRY_IDS:
-        raise HTTPException(status_code=404, detail="Industry not found.")
+    if not industry.strip():
+        raise HTTPException(status_code=422, detail="Industry is required.")
     override = await get_user_category_override(db, user_id, industry, category_key)
     if override is None:
         default_prompt = await get_default_category_prompt(db, industry, category_key)
@@ -607,8 +609,8 @@ async def update_user_category_prompt_override(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ) -> CategoryPromptResponse:
-    if industry not in INDUSTRY_IDS:
-        raise HTTPException(status_code=404, detail="Industry not found.")
+    if not industry.strip():
+        raise HTTPException(status_code=422, detail="Industry is required.")
     result = await db.execute(select(User).where(User.id == user_id, User.is_deleted.is_(False)))
     user = result.scalar_one_or_none()
     if user is None:
@@ -639,8 +641,8 @@ async def remove_user_category_prompt_override(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ) -> dict[str, bool]:
-    if industry not in INDUSTRY_IDS:
-        raise HTTPException(status_code=404, detail="Industry not found.")
+    if not industry.strip():
+        raise HTTPException(status_code=422, detail="Industry is required.")
     return {"ok": await delete_user_category_override(db, user_id, industry, category_key)}
 
 
@@ -651,6 +653,6 @@ async def remove_prompt_override(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ) -> dict[str, bool]:
-    if industry not in INDUSTRY_IDS:
-        raise HTTPException(status_code=404, detail="Industry not found.")
+    if not industry.strip():
+        raise HTTPException(status_code=422, detail="Industry is required.")
     return {"ok": await delete_user_override(db, user_id, industry)}
