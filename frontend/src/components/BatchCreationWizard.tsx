@@ -383,6 +383,7 @@ export default function BatchCreationWizard({
   const [addStyleNumber, setAddStyleNumber] = useState(false);
   const [selectedIndustry, setSelectedIndustry] = useState(user?.industry ?? "jewelry");
   const [industryOptions, setIndustryOptions] = useState<{ id: string; label: string }[]>([]);
+  const [jobThumbnailUrls, setJobThumbnailUrls] = useState<Record<string, string>>({});
   const [selectedPromptCategory, setSelectedPromptCategory] = useState("default");
   const [selectedShotKeys, setSelectedShotKeys] = useState<string[]>([]);
   const [promptCategories, setPromptCategories] = useState<
@@ -452,6 +453,33 @@ export default function BatchCreationWizard({
     [selectedIds, validJobs],
   );
 
+  const showFolderThumbnails = useMemo(
+    () =>
+      sourceType === "folder_upload" &&
+      jobs.length > 0 &&
+      jobs.every((job) => (job.folderFiles?.length ?? 0) === 1),
+    [jobs, sourceType],
+  );
+
+  useEffect(() => {
+    if (!showFolderThumbnails) {
+      setJobThumbnailUrls({});
+      return;
+    }
+
+    const nextThumbnailUrls: Record<string, string> = {};
+    jobs.forEach((job) => {
+      const firstFile = job.folderFiles?.[0];
+      if (!firstFile) return;
+      nextThumbnailUrls[job.id] = URL.createObjectURL(firstFile);
+    });
+    setJobThumbnailUrls(nextThumbnailUrls);
+
+    return () => {
+      Object.values(nextThumbnailUrls).forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [jobs, showFolderThumbnails]);
+
   const resolveCategoryForJob = (rawCategory: string) => {
     const normalizedInput = normalizeHeaderKey(rawCategory || "");
     if (!normalizedInput) {
@@ -468,6 +496,7 @@ export default function BatchCreationWizard({
 
   const allValidSelected = validJobs.length > 0 && selectedIds.size === validJobs.length;
   const anySelected = selectedIds.size > 0;
+  const previewGridTemplateColumns = `42px 72px ${showFolderThumbnails ? "120px " : ""}repeat(${columnHeaders.length}, minmax(220px, 1fr)) minmax(260px, 1.2fr)`;
 
   const resetAll = () => {
     setFileName(null);
@@ -1092,7 +1121,7 @@ export default function BatchCreationWizard({
               <div
                 className="grid gap-0 min-w-max"
                 style={{
-                  gridTemplateColumns: `42px 72px repeat(${columnHeaders.length}, minmax(220px, 1fr)) minmax(260px, 1.2fr)`,
+                  gridTemplateColumns: previewGridTemplateColumns,
                 }}
               >
                 <div className="contents bg-secondary/50 text-xs font-medium text-muted-foreground">
@@ -1104,6 +1133,7 @@ export default function BatchCreationWizard({
                     />
                   </div>
                   <div className="p-3">Row</div>
+                  {showFolderThumbnails ? <div className="p-3">Thumbnail</div> : null}
                   {columnHeaders.map((header) => (
                     <div key={header} className="p-3 whitespace-nowrap">
                       {header}
@@ -1123,7 +1153,7 @@ export default function BatchCreationWizard({
                           isValid ? "bg-card" : "bg-destructive/5"
                         }`}
                         style={{
-                          gridTemplateColumns: `42px 72px repeat(${columnHeaders.length}, minmax(220px, 1fr)) minmax(260px, 1.2fr)`,
+                          gridTemplateColumns: previewGridTemplateColumns,
                         }}
                       >
                         <div className="p-3 flex items-start justify-center">
@@ -1135,6 +1165,19 @@ export default function BatchCreationWizard({
                           />
                         </div>
                         <div className="p-3 text-xs text-muted-foreground">{j.rowNumber}</div>
+                        {showFolderThumbnails ? (
+                          <div className="p-2">
+                            {jobThumbnailUrls[j.id] ? (
+                              <img
+                                src={jobThumbnailUrls[j.id]}
+                                alt={`Row ${j.rowNumber} preview`}
+                                className="h-14 w-14 rounded-md border border-border object-cover"
+                              />
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </div>
+                        ) : null}
                         {columnHeaders.map((header) => {
                           const value = j.rawValues[header] ?? "";
                           const maybeUrl = /^https?:\/\//i.test(value);
