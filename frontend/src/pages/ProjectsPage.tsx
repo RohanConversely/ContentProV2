@@ -61,6 +61,88 @@ const REVE_SHOT_OPTIONS = [
   { key: "close_detail", label: "Close Detail" },
 ] as const;
 
+const PROJECT_SHOT_KEY_LABELS: Record<string, string> = {
+  hero: "Hero",
+  lifestyle: "Lifestyle",
+  front_view: "Front View",
+  wearable: "Wearable",
+  wearable_ethnic: "Wearable Ethnic",
+  jewellery_box: "Jewellery Box",
+  close_detail: "Close Detail",
+};
+
+const toTitleCase = (value: string): string =>
+  value
+    .split(" ")
+    .filter(Boolean)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(" ");
+
+const toReadableCategoryName = (value: string): string => {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return "—";
+
+  const parts = normalized.split("_").filter(Boolean);
+  if (parts.length >= 4 && parts[1] === "s") {
+    const base = `${parts[0]}'s`;
+    const variants = parts.slice(2).map((part) => toTitleCase(part));
+    return `${toTitleCase(base)} (${variants.join(", ")})`;
+  }
+
+  return toTitleCase(parts.join(" "));
+};
+
+const toReadableAdditionalInfoKey = (key: string): string => {
+  if (key === "prompt_category") return "Category";
+  if (key === "selected_shot_keys") return "Selected Shot Prompts";
+  return toTitleCase(key.replace(/_/g, " "));
+};
+
+const parseShotKeys = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item ?? "").trim().toLowerCase())
+      .filter(Boolean);
+  }
+
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!normalized) return [];
+
+  if (normalized.includes(",")) {
+    return normalized.split(",").map((item) => item.trim()).filter(Boolean);
+  }
+
+  const knownKeys = Object.keys(PROJECT_SHOT_KEY_LABELS).sort((a, b) => b.length - a.length);
+  const parsed: string[] = [];
+  let remaining = normalized;
+
+  while (remaining.length > 0) {
+    const matched = knownKeys.find((key) => remaining.startsWith(key));
+    if (!matched) {
+      return [normalized];
+    }
+    parsed.push(matched);
+    remaining = remaining.slice(matched.length);
+  }
+
+  return parsed;
+};
+
+const toReadableAdditionalInfoValue = (key: string, value: unknown): string => {
+  if (key === "prompt_category") {
+    return toReadableCategoryName(String(value ?? ""));
+  }
+
+  if (key === "selected_shot_keys") {
+    const shotKeys = parseShotKeys(value);
+    return shotKeys
+      .map((shotKey) => PROJECT_SHOT_KEY_LABELS[shotKey] ?? toTitleCase(shotKey.replace(/_/g, " ")))
+      .join(", ");
+  }
+
+  return String(value ?? "");
+};
+
 const ImageLightbox = ({
   src,
   onClose,
@@ -447,7 +529,7 @@ const ProjectDetailView = ({
           </div>
         )}
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-3 border-t border-border">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs pt-3 border-t border-border">
           <div className="space-y-1">
             <span className="text-muted-foreground">Brand</span>
             <p className="font-medium truncate">{detail.brandName || "—"}</p>
@@ -455,10 +537,6 @@ const ProjectDetailView = ({
           <div className="space-y-1">
             <span className="text-muted-foreground">Product</span>
             <p className="font-medium truncate">{detail.productName || "—"}</p>
-          </div>
-          <div className="space-y-1">
-            <span className="text-muted-foreground">Category</span>
-            <p className="font-medium truncate">{detail.productCategory || "—"}</p>
           </div>
           <div className="space-y-1">
             <span className="text-muted-foreground">Dimensions</span>
@@ -496,8 +574,8 @@ const ProjectDetailView = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-xs">
               {Object.entries(detail.additionalInfo).map(([key, value]) => (
                 <div key={key} className="space-y-0.5">
-                  <p className="text-muted-foreground">{key}</p>
-                  <p className="break-words">{value}</p>
+                  <p className="text-muted-foreground">{toReadableAdditionalInfoKey(key)}</p>
+                  <p className="break-words">{toReadableAdditionalInfoValue(key, value)}</p>
                 </div>
               ))}
             </div>
