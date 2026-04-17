@@ -5,6 +5,27 @@ import { ArrowRight, Eye, EyeOff, Loader2, Sparkles } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getGoogleLoginUrl } from "@/lib/api";
 
+const GoogleLogo = () => (
+  <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24">
+    <path
+      fill="#EA4335"
+      d="M12 10.2v3.9h5.4c-.2 1.3-1.5 3.9-5.4 3.9-3.2 0-5.9-2.7-5.9-6s2.7-6 5.9-6c1.8 0 3 .8 3.7 1.5l2.5-2.4C16.8 3.7 14.6 2.7 12 2.7 6.9 2.7 2.7 6.9 2.7 12s4.2 9.3 9.3 9.3c5.4 0 9-3.8 9-9.1 0-.6-.1-1.1-.2-1.6H12z"
+    />
+    <path
+      fill="#34A853"
+      d="M3.8 7.6l3.2 2.4C7.8 8.2 9.7 6.9 12 6.9c1.8 0 3 .8 3.7 1.5l2.5-2.4C16.8 3.7 14.6 2.7 12 2.7c-3.6 0-6.7 2.1-8.2 4.9z"
+    />
+    <path
+      fill="#FBBC05"
+      d="M12 21.3c2.5 0 4.7-.8 6.3-2.3l-2.9-2.4c-.8.6-1.9 1.1-3.4 1.1-2.2 0-4.1-1.5-4.8-3.5L4 16.7c1.5 2.9 4.6 4.6 8 4.6z"
+    />
+    <path
+      fill="#4285F4"
+      d="M21 12.2c0-.6-.1-1.1-.2-1.6H12v3.9h5.4c-.3 1.4-1.1 2.4-2 3.1l2.9 2.4c1.7-1.6 2.7-4 2.7-7.8z"
+    />
+  </svg>
+);
+
 const AuthPage = () => {
   const location = useLocation();
   const { isAuthenticated, isLoading, loginWithPassword, registerWithPassword } = useAuth();
@@ -104,7 +125,7 @@ const AuthPage = () => {
               onClick={handleGoogleSignIn}
               className="flex w-full items-center justify-center gap-3 rounded-2xl border border-border bg-background px-5 py-3 text-sm font-semibold transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <GoogleLogo />}
               Continue with Google
             </button>
 
