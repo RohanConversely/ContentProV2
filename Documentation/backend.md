@@ -96,13 +96,18 @@ backend/
 │   │   ├── job.py           # Job model
 │   │   ├── asset.py         # Asset model
 │   │   ├── job_generation.py # Generation rounds model
-│   │   └── pricing.py       # Pricing snapshot & pipeline logs
+│   │   ├── pricing.py       # Pricing snapshot & pipeline logs
+│   │   ├── industry_prompt.py      # Industry-level prompt config
+│   │   ├── industry_category_prompt.py # Category-level prompts
+│   │   ├── user_prompt_override.py # User-level prompt overrides
+│   │   └── user_category_prompt_override.py # User category overrides
 │   ├── routers/             # API route handlers
 │   │   ├── auth.py          # Authentication endpoints
 │   │   ├── jobs.py          # Job CRUD & execution
 │   │   ├── assets.py        # Asset upload/download
 │   │   ├── image_jobs.py    # Image-specific endpoints
-│   │   └── meta.py          # Health, usage endpoints
+│   │   ├── meta.py          # Health, usage endpoints
+│   │   └── admin.py         # Admin endpoints (users, prompts)
 │   ├── schemas/             # Pydantic request/response models
 │   │   ├── auth.py
 │   │   ├── job.py
@@ -112,7 +117,9 @@ backend/
 │   │   ├── auth.py          # Password hashing, JWT
 │   │   ├── storage.py       # Storage abstraction (local/S3)
 │   │   ├── image_pipeline.py # Pipeline orchestration
-│   │   └── pipeline_runner.py # Task queue & execution
+│   │   ├── pipeline_runner.py # Task queue & execution
+│   │   └── prompt_management.py # Prompt hierarchy management
+│   ├── constants.py         # App constants (industries, roles)
 │   └── utils/
 │       └── presigned_urls.py
 ├── pipeline/                # Image generation pipeline
@@ -129,6 +136,8 @@ backend/
 │       ├── product_kyc.py   # Stage 1: KYC generation
 │       ├── image_gen_with_KYC.py  # Stage 2: OpenAI image gen
 │       ├── image_gen_with_flux.py # Stage 2: Flux image gen
+│       ├── image_gen_with_openai_batch.py # OpenAI batch API integration
+│       ├── style_number_overlay.py # Add style number to generated images
 │       └── reve/             # REVE API integration
 │           ├── image_gen_reve.py
 │           ├── kyc_compressor.py
@@ -447,6 +456,104 @@ Get user usage statistics.
 
 ---
 
+### Admin (Superadmin Only)
+
+#### GET `/admin/users`
+List all users.
+
+**Response:**
+```json
+[
+  {
+    "id": "uuid",
+    "email": "user@example.com",
+    "display_name": "John Doe",
+    "role": "user",
+    "industry": "jewelry",
+    "default_image_model": "gpt-batch-api",
+    "default_batch_image_model": "gpt-batch-api",
+    "enable_style_number": false,
+    "plan": "free",
+    "created_at": "2024-01-15T00:00:00Z"
+  }
+]
+```
+
+#### POST `/admin/users`
+Create a new user.
+
+**Request:**
+```json
+{
+  "email": "newuser@example.com",
+  "password": "securepassword",
+  "display_name": "New User",
+  "role": "user",
+  "industry": "jewelry",
+  "default_image_model": "gpt-batch-api",
+  "default_batch_image_model": "gpt-batch-api",
+  "enable_style_number": false,
+  "plan": "free"
+}
+```
+
+#### PUT `/admin/users/{user_id}`
+Update user properties.
+
+#### DELETE `/admin/users/{user_id}`
+Soft delete a user.
+
+#### GET `/admin/prompts/defaults`
+List default industry prompts.
+
+**Response:**
+```json
+[
+  {
+    "industry": "jewelry",
+    "prompt_text": "...",
+    "shot_prompts": [...]
+  }
+]
+```
+
+#### PUT `/admin/prompts/defaults/{industry}`
+Update default industry prompt.
+
+**Request:**
+```json
+{
+  "prompt_text": "...",
+  "shot_prompts": [...]
+}
+```
+
+#### GET `/admin/prompts/defaults/{industry}/categories`
+List category prompts for an industry.
+
+#### PUT `/admin/prompts/defaults/{industry}/categories/{category_key}`
+Upsert a category prompt.
+
+#### DELETE `/admin/prompts/defaults/{industry}/categories/{category_key}`
+Delete a category prompt.
+
+#### GET `/admin/users/{user_id}/prompts/{industry}`
+Get user-specific prompt override.
+
+#### PUT `/admin/users/{user_id}/prompts/{industry}`
+Set user-specific prompt override.
+
+#### DELETE `/admin/users/{user_id}/prompts/{industry}`
+Delete user-specific prompt override.
+
+#### GET `/prompt-catalog`
+Get prompt hierarchy for a user (industry + categories).
+
+#### GET `/prompt-industries`
+Get list of available industries.
+
+---
+
 ## LLM Integration
 
 ### Image Generation Models
@@ -456,7 +563,8 @@ The backend supports multiple image generation providers:
 | Model | Provider | Description |
 |-------|----------|-------------|
 | `reve` | REVE API | Jewelry-specific AI (primary) |
-| `gpt-image-1` | OpenAI | GPT Image 1 model |
+| `gpt-image-1.5` | OpenAI | GPT Image 1 model (updated from gpt-image-1) |
+| `gpt-batch-api` | OpenAI Batch API | Batch processing with GPT Image 1 |
 | `flux-2-pro` | Replicate/FLUX | FLUX Pro (via Replicate) |
 
 ### REVE API
@@ -596,7 +704,14 @@ All `/jobs/*`, `/assets/*`, `/batches/*` endpoints require valid JWT in Authoriz
 - `email`: Unique email
 - `hashed_password`: Bcrypt hash
 - `display_name`: User's name
+- `role`: "user" or "superadmin"
+- `industry`: Industry (e.g., "jewelry")
+- `default_image_model`: Default model for single jobs (e.g., "gpt-batch-api", "reve", "gpt-image-1.5")
+- `default_batch_image_model`: Default model for batch jobs
+- `enable_style_number`: Whether to overlay style number on images
 - `plan`: "free" or "pro"
+- `is_deleted`: Soft delete flag
+- `deleted_at`: Deletion timestamp
 - `created_at`, `updated_at`: Timestamps
 
 ### Job
@@ -648,6 +763,80 @@ All `/jobs/*`, `/assets/*`, `/batches/*` endpoints require valid JWT in Authoriz
 - `context`: Additional data
 - `logged_at`: Timestamp
 
+### IndustryPrompt (Industry-Level Prompt)
+- `industry`: Primary key (e.g., "jewelry")
+- `prompt_text`: Default prompt for the industry
+- `shot_prompts_json`: Shot type prompts (hero, lifestyle, etc.)
+
+### IndustryCategoryPrompt (Category-Level Prompts)
+- `id`: UUID
+- `industry`: FK to IndustryPrompt
+- `category_key`: Category identifier (e.g., "default", "rings", "necklaces")
+- `category_label`: Display label
+- `category_prompt_text`: Category-specific prompt instructions
+- `shot_prompts_json`: Category-specific shot prompts
+- `is_active`: Whether the category is active
+
+### UserPromptOverride (User-Level Prompt Override)
+- `id`: UUID
+- `user_id`: FK to User
+- `industry`: Industry identifier
+- `prompt_text`: User-specific prompt override
+- `shot_prompts_json`: User-specific shot prompts
+
+### UserCategoryPromptOverride (User-Level Category Override)
+- `id`: UUID
+- `user_id`: FK to User
+- `industry`: Industry identifier
+- `category_key`: Category identifier
+- `category_label`: Display label
+- `category_prompt_text`: Category-specific prompt override
+- `shot_prompts_json`: Category-specific shot prompts
+
+---
+
+## Prompt Hierarchy System
+
+---
+
+## Prompt Hierarchy System
+
+The backend implements a hierarchical prompt system that allows flexible prompt customization at multiple levels:
+
+### Hierarchy Levels (in order of priority)
+
+1. **User Category Override** - Highest priority
+2. **Industry Category Default** - Middle priority
+3. **User Industry Override** - Lower priority
+4. **Industry Default Prompt** - Lowest priority (baseline)
+
+### Pipeline Integration
+
+When generating images, the pipeline:
+1. Loads user's default industry from their profile
+2. Looks for user-specific prompt overrides
+3. Falls back to industry-level defaults
+4. Applies category-specific prompts if specified
+5. Uses shot-type prompts for specific image variations
+
+### Style Number Overlay
+
+Users can enable `enable_style_number` to overlay style numbers on generated images:
+- Uses Montserrat-SemiBold font
+- Positioned at bottom-left of image
+- Format: "STYLE NO : {style_number}"
+
+### Available Industries
+- `jewelry` (default)
+
+### Available Shot Types
+- `hero` - Main product shot
+- `lifestyle` - Product in lifestyle context
+- `wearable` - Product being worn
+- `wearable_ethnic` - Ethnic wear context
+- `jewellery_box` - Product in packaging
+- `close_detail` - Close-up detail shot
+
 ---
 
 ## Deployment
@@ -692,6 +881,41 @@ alembic upgrade head
 # Start server
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
+
+---
+
+## Running Locally
+
+### Prerequisites
+- Python 3.10+
+- Docker (for PostgreSQL)
+
+### Backend Only (with SQLite)
+```bash
+cd backend
+pip install -r requirements.txt
+alembic upgrade head
+uvicorn app.main:app --reload
+```
+
+### Full Stack with Docker Compose
+```bash
+# From project root
+docker compose -f backend/docker-compose.yml up -d
+# Backend runs on http://localhost:8000
+# PostgreSQL on localhost:5432
+```
+
+### Environment Variables
+Create `backend/.env`:
+```env
+DATABASE_URL=sqlite+aiosqlite:///./contentpro.db
+JWT_SECRET=your-secret-key
+ALLOWED_ORIGINS=http://localhost:5173
+# Optional: OpenAI, REVE, DigitalOcean Spaces keys
+```
+
+---
 
 ---
 
