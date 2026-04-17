@@ -164,16 +164,56 @@ const AdminUsersPage = () => {
     await loadAll();
   };
 
-  const handleSavePromptHierarchy = async () => {
-    const category = (defaultCategoryPrompts[selectedIndustry] ?? []).find((item) => item.category_key === selectedCategoryKey);
-    await adminUpdateDefaultPrompt(selectedIndustry, defaultPrompts[selectedIndustry] ?? "");
-    if (category) {
-      await adminUpsertDefaultCategoryPrompt(selectedIndustry, category.category_key, {
-        categoryLabel: category.category_label,
-        categoryPromptText: category.category_prompt_text,
-        shotPrompts: category.shot_prompts,
+  const handleSavePromptHierarchy = async (industryIdRaw: string) => {
+    const sourceIndustry = selectedIndustry;
+    if (!sourceIndustry) return;
+
+    const targetIndustry = normalizeKey(industryIdRaw || sourceIndustry);
+    if (!targetIndustry) return;
+
+    const sourcePromptText = defaultPrompts[sourceIndustry] ?? "";
+    const sourceCategories = defaultCategoryPrompts[sourceIndustry] ?? [];
+
+    const industryAlreadyExists =
+      targetIndustry !== sourceIndustry &&
+      (Object.prototype.hasOwnProperty.call(defaultPrompts, targetIndustry) ||
+        Object.prototype.hasOwnProperty.call(defaultCategoryPrompts, targetIndustry));
+    if (industryAlreadyExists) {
+      toast.error(`Industry ${targetIndustry} already exists.`);
+      return;
+    }
+
+    if (targetIndustry !== sourceIndustry) {
+      await adminUpdateDefaultPrompt(targetIndustry, sourcePromptText || "-");
+      for (const category of sourceCategories) {
+        await adminUpsertDefaultCategoryPrompt(targetIndustry, category.category_key, {
+          categoryLabel: category.category_label,
+          categoryPromptText: category.category_prompt_text,
+          shotPrompts: category.shot_prompts,
+        });
+      }
+
+      const usersToMove = users.filter((user) => user.industry === sourceIndustry);
+      for (const user of usersToMove) {
+        await adminUpdateUser(user.id, { industry: targetIndustry });
+      }
+
+      await adminDeleteDefaultPrompt(sourceIndustry);
+      setSelectedIndustry(targetIndustry);
+    }
+
+    const industryForSave = targetIndustry;
+    const promptTextToSave = sourcePromptText || "-";
+    await adminUpdateDefaultPrompt(industryForSave, promptTextToSave);
+    const selectedCategory = sourceCategories.find((item) => item.category_key === selectedCategoryKey);
+    if (selectedCategory) {
+      await adminUpsertDefaultCategoryPrompt(industryForSave, selectedCategory.category_key, {
+        categoryLabel: selectedCategory.category_label,
+        categoryPromptText: selectedCategory.category_prompt_text,
+        shotPrompts: selectedCategory.shot_prompts,
       });
     }
+
     setMessage("Prompt hierarchy updated.");
     toast.success("Prompt hierarchy saved.");
     await loadAll();
