@@ -3,11 +3,12 @@
 ## Overview
 
 ContentPro frontend is a React + TypeScript application that provides a complete user interface for:
-- User authentication (email/password)
+- User authentication (email/password, Google OAuth)
 - Single image job creation with live progress tracking
 - Batch image job creation from CSV/XLSX files
 - Project and batch management
 - Asset viewing, logs, and downloads
+- **Admin panel for user management and prompt configuration**
 
 The frontend is fully integrated with the backend API. It is not a mock-only UI.
 
@@ -29,6 +30,7 @@ The frontend is fully integrated with the backend API. It is not a mock-only UI.
 | Real-time Updates | Server-Sent Events (SSE) |
 | Form Handling | React Hook Form + Zod |
 | Testing | Vitest |
+| Data Fetching | TanStack Query (React Query) |
 
 ---
 
@@ -63,7 +65,10 @@ frontend/src/
 │   ├── GenreThemeSelector.tsx   # Style/theme selection
 │   ├── ClientKycStep.tsx        # KYC form step
 │   ├── NavLink.tsx              # Navigation link component
-│   └── ProtectedRoute.tsx       # Auth guard component
+│   ├── ProtectedRoute.tsx       # Auth guard component
+│   ├── AdminDefaultPromptPanel.tsx   # Admin prompt management panel
+│   ├── AdminUsersList.tsx            # Admin user list component
+│   └── AdminPromptOverrideModal.tsx # Admin user prompt override modal
 ├── contexts/
 │   ├── AuthContext.tsx          # Authentication state (login/logout/user)
 │   └── ProcessContext.tsx       # Active job tracking
@@ -174,6 +179,7 @@ Main project listing:
 | `/project/:jobId` | Job detail view | Yes |
 | `/profile` | User profile | Yes |
 | `/settings` | App settings | Yes |
+| `/admin/users` | Admin users & prompts | Yes (superadmin only) |
 
 ---
 
@@ -226,6 +232,23 @@ Main project listing:
 | GET | `/health` | Health check |
 | GET | `/usage` | Get user usage |
 | GET | `/benefits` | Get Pro benefits |
+
+### Admin
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/admin/users` | List all users (superadmin) |
+| POST | `/admin/users` | Create new user (superadmin) |
+| PUT | `/admin/users/{user_id}` | Update user (superadmin) |
+| DELETE | `/admin/users/{user_id}` | Delete user (superadmin) |
+| GET | `/admin/prompts/defaults` | List default prompts |
+| PUT | `/admin/prompts/defaults/{industry}` | Update default prompt |
+| DELETE | `/admin/prompts/defaults/{industry}` | Delete industry prompt |
+| GET | `/admin/prompts/defaults/{industry}/categories` | List category prompts |
+| PUT | `/admin/prompts/defaults/{industry}/categories/{key}` | Upsert category prompt |
+| DELETE | `/admin/prompts/defaults/{industry}/categories/{key}` | Delete category prompt |
+| GET | `/admin/users/{user_id}/prompts/{industry}` | Get user prompt override |
+| PUT | `/admin/users/{user_id}/prompts/{industry}` | Set user prompt override |
+| DELETE | `/admin/users/{user_id}/prompts/{industry}` | Delete user prompt override |
 
 ---
 
@@ -288,6 +311,11 @@ Icons are provided by [Lucide React](https://lucide.dev/) - a consistent, lightw
 - Real-time status updates
 - Persisted across page reloads via localStorage
 
+### TanStack Query
+- Used for server state management
+- Caching and background refetching for API data
+- Optimistic updates for mutations
+
 ### Active Runs Persistence (`lib/active-runs.ts`)
 
 Persists active jobs in localStorage to survive page reloads:
@@ -313,9 +341,7 @@ Clears completed batch runs automatically.
 
 ### Current Active Mode
 - **Email/Password** - Full implementation with registration, login, change password
-
-### Available but Not Active
-- **Google OAuth** - Code exists but not deployed due to IP-based production hosting
+- **Google OAuth** - Full implementation with registration, login
 
 ### Session Management
 - JWT tokens stored in localStorage
@@ -351,20 +377,34 @@ subscribeToJobEvents(jobId, {
 
 ---
 
-## Deployment
+## Running Locally
+
+### Prerequisites
+- Node.js 18+
+- npm or yarn
+
+### Setup
+```bash
+cd frontend
+npm install
+```
+
+### Development
+```bash
+npm run dev    # Start dev server on localhost:5173
+```
+
+### Production Build
+```bash
+npm run build  # Production build
+npm run lint   # Run ESLint
+npm test       # Run tests
+```
 
 ### Environment Variables
 | Variable | Description |
 |----------|-------------|
 | `VITE_API_URL` | Backend API URL (e.g., `http://127.0.0.1:8000`) |
-
-### Development
-```bash
-npm run dev    # Start dev server on localhost:5173
-npm run build  # Production build
-npm run lint   # Run ESLint
-npm test       # Run tests
-```
 
 ### Production
 - Built with Vite for production

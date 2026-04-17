@@ -5,7 +5,7 @@
 ContentPro uses a relational database to store:
 - User accounts and authentication
 - Jobs (single and batch)
-- Assets (source images, generated images, KYC files)
+- Assets (source images, generated images, logs, pricing artifacts)
 - Generation rounds (regeneration history)
 - Pricing snapshots (cost tracking)
 - Pipeline execution logs
@@ -42,7 +42,23 @@ erDiagram
     JOB_GENERATIONS ||--o{ ASSETS : contains
     ASSETS }o--|| JOBS : references
     ASSETS }o--|| JOB_GENERATIONS : references
+    USERS ||--o{ USER_PROMPT_OVERRIDES : has
+    USERS ||--o{ USER_CATEGORY_PROMPT_OVERRIDES : has
+    INDUSTRY_PROMPTS ||--o{ INDUSTRY_CATEGORY_PROMPTS : contains
+    INDUSTRY_PROMPTS ||--o{ USER_PROMPT_OVERRIDES : applies_to
+    INDUSTRY_PROMPTS ||--o{ USER_CATEGORY_PROMPT_OVERRIDES : applies_to
 ```
+
+**New Tables Added (v20260413+):**
+- `industry_prompts` - Industry-level default prompts
+- `industry_category_prompts` - Category-specific prompts within industries
+- `user_prompt_overrides` - User-specific prompt overrides
+- `user_category_prompt_overrides` - User-specific category overrides
+
+**Current Prompt Baseline (v20260416+):**
+- Production prompt bootstrap is currently normalized to the `jewelry` industry
+- The default category row is stored under `category_key = 'default'`
+- Baseline shot prompts are stored in `shot_prompts_json` on both industry and category prompt tables
 
 ---
 
@@ -58,7 +74,14 @@ Stores user accounts and authentication information.
 | email | VARCHAR(255) | UNIQUE, NOT NULL, INDEX | User email |
 | hashed_password | VARCHAR(255) | NOT NULL | Bcrypt hash |
 | display_name | VARCHAR(255) | NOT NULL | Display name |
+| role | VARCHAR(32) | NOT NULL DEFAULT 'user' | 'user' or 'superadmin' |
+| industry | VARCHAR(64) | NOT NULL DEFAULT 'jewelry' | Selected industry |
+| default_image_model | VARCHAR(50) | NOT NULL DEFAULT 'gpt-batch-api' | Default image model |
+| default_batch_image_model | VARCHAR(50) | NOT NULL DEFAULT 'gpt-batch-api' | Default batch model |
+| enable_style_number | BOOLEAN | NOT NULL DEFAULT FALSE | Style number toggle |
 | plan | VARCHAR(50) | NOT NULL DEFAULT 'free' | 'free' or 'pro' |
+| is_deleted | BOOLEAN | NOT NULL DEFAULT FALSE, INDEX | Soft-delete flag |
+| deleted_at | DATETIME | NULLABLE, TZ | Soft-delete timestamp |
 | created_at | DATETIME | NOT NULL, TZ | Account creation time |
 | updated_at | DATETIME | NOT NULL, TZ | Last update time |
 
@@ -87,6 +110,7 @@ Stores job records - one row per single job or per batch row.
 | social_link_4 | VARCHAR(500) | NULLABLE | Social media link |
 | additional_input | JSON | NULLABLE | Extra input data |
 | image_model | VARCHAR(50) | NOT NULL DEFAULT 'reve' | Image generation model |
+| requested_image_count | INTEGER | NOT NULL DEFAULT 4 | Requested output image count |
 | video_duration_seconds | INTEGER | NOT NULL DEFAULT 8 | Video duration (legacy) |
 | batch_id | VARCHAR(64) | NULLABLE, INDEX | Batch grouping ID |
 | batch_name | VARCHAR(255) | NULLABLE | Batch display name |
@@ -125,7 +149,7 @@ Stores job records - one row per single job or per batch row.
 
 ### assets
 
-Stores all file assets - source images, generated images, KYC files, logs, pricing reports.
+Stores all file assets - source images, generated images, logs, and pricing reports.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
@@ -152,8 +176,6 @@ Stores all file assets - source images, generated images, KYC files, logs, prici
 |------|-------------|
 | raw_image | Source product images |
 | generated_image | AI-generated images |
-| kyc_json | Full KYC output |
-| filtered_kyc_json | Filtered KYC for stage 2 |
 | job_log | Execution log file |
 | pricing_report | Pricing JSON file |
 
@@ -204,8 +226,8 @@ Stores cost and token usage for each job.
 | job_id | VARCHAR(36) | FK → jobs.id, UNIQUE | Owner job |
 | raw_price_data | JSON | NULLABLE | Full API response |
 | total_cost_usd | NUMERIC(12,6) | NULLABLE | Total cost in USD |
-| stage_1_cost_usd | NUMERIC(12,6) | NULLABLE | Stage 1 (KYC) cost |
-| stage_2_cost_usd | NUMERIC(12,6) | NULLABLE | Stage 2 (Image Gen) cost |
+| stage_1_cost_usd | NUMERIC(12,6) | NULLABLE | Stage 1 cost bucket |
+| stage_2_cost_usd | NUMERIC(12,6) | NULLABLE | Stage 2 cost bucket |
 | stage_3_cost_usd | NUMERIC(12,6) | NULLABLE | Stage 3 cost (legacy) |
 | stage_4_cost_usd | NUMERIC(12,6) | NULLABLE | Stage 4 cost (legacy) |
 | total_input_tokens | INTEGER | NULLABLE | Total input tokens |
@@ -247,6 +269,84 @@ Structured execution logs for debugging and UI display.
 
 ---
 
+### industry_prompts
+
+Stores default prompts for each industry.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| industry | VARCHAR(64) | PRIMARY KEY | Industry ID (e.g., "jewelry") |
+| prompt_text | TEXT | NOT NULL | Default prompt for the industry |
+| shot_prompts_json | JSON | NULLABLE | Shot type prompts (hero, lifestyle, etc.) |
+| created_at | DATETIME | NOT NULL, TZ | Creation time |
+| updated_at | DATETIME | NOT NULL, TZ | Last update time |
+
+---
+
+### industry_category_prompts
+
+Stores category-specific prompts within an industry.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | VARCHAR(36) | PRIMARY KEY | UUID |
+| industry | VARCHAR(64) | NOT NULL, INDEX | Industry ID |
+| category_key | VARCHAR(128) | NOT NULL | Category identifier |
+| category_label | VARCHAR(255) | NOT NULL | Display label |
+| category_prompt_text | TEXT | NOT NULL | Category prompt instructions |
+| shot_prompts_json | JSON | NULLABLE | Category-specific shot prompts |
+| is_active | BOOLEAN | NOT NULL DEFAULT TRUE | Active flag |
+| created_at | DATETIME | NOT NULL, TZ | Creation time |
+| updated_at | DATETIME | NOT NULL, TZ | Last update time |
+
+**Indexes:**
+- `ix_industry_category_prompts_industry` on `industry`
+
+**Unique Constraints:**
+- `industry` + `category_key` (UQ_industry_category_prompt)
+
+---
+
+### user_prompt_overrides
+
+Stores user-specific prompt overrides.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | VARCHAR(36) | PRIMARY KEY | UUID |
+| user_id | VARCHAR(36) | FK → users.id, INDEX | Owner user |
+| industry | VARCHAR(64) | NOT NULL, INDEX | Industry ID |
+| prompt_text | TEXT | NOT NULL | Override prompt text |
+| shot_prompts_json | JSON | NULLABLE | Override shot prompts |
+| created_at | DATETIME | NOT NULL, TZ | Creation time |
+| updated_at | DATETIME | NOT NULL, TZ | Last update time |
+
+**Unique Constraints:**
+- `user_id` + `industry` (UQ_user_prompt_override_user_industry)
+
+---
+
+### user_category_prompt_overrides
+
+Stores user-specific category prompt overrides.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | VARCHAR(36) | PRIMARY KEY | UUID |
+| user_id | VARCHAR(36) | FK → users.id, INDEX | Owner user |
+| industry | VARCHAR(64) | NOT NULL, INDEX | Industry ID |
+| category_key | VARCHAR(128) | NOT NULL | Category identifier |
+| category_label | VARCHAR(255) | NOT NULL | Display label |
+| category_prompt_text | TEXT | NOT NULL | Override prompt text |
+| shot_prompts_json | JSON | NULLABLE | Override shot prompts |
+| created_at | DATETIME | NOT NULL, TZ | Creation time |
+| updated_at | DATETIME | NOT NULL, TZ | Last update time |
+
+**Unique Constraints:**
+- `user_id` + `industry` + `category_key` (UQ_user_category_prompt_override_user_industry_category)
+
+---
+
 ## Constraints
 
 ### Primary Keys
@@ -254,22 +354,28 @@ Structured execution logs for debugging and UI display.
 - Generated via `uuid.uuid4()`
 
 ### Foreign Keys
-- `jobs.user_id` → `users.id` (ON DELETE CASCADE)
-- `assets.job_id` → `jobs.id` (ON DELETE CASCADE)
-- `assets.generation_id` → `job_generations.id` (ON DELETE SET NULL)
-- `job_generations.job_id` → `jobs.id` (ON DELETE CASCADE)
-- `pricing_snapshots.job_id` → `jobs.id` (ON DELETE CASCADE)
-- `pipeline_logs.job_id` → `jobs.id` (ON DELETE CASCADE)
+- `jobs.user_id` → `users.id`
+- `assets.job_id` → `jobs.id`
+- `assets.generation_id` → `job_generations.id`
+- `job_generations.job_id` → `jobs.id`
+- `pricing_snapshots.job_id` → `jobs.id`
+- `pipeline_logs.job_id` → `jobs.id`
+- `user_prompt_overrides.user_id` → `users.id`
+- `user_category_prompt_overrides.user_id` → `users.id`
 
 ### Unique Constraints
 - `users.email`
 - `jobs.job_id`
 - `assets.storage_key`
 - `pricing_snapshots.job_id`
+- `industry_prompts.industry`
+- `industry_category_prompts.industry` + `category_key`
+- `user_prompt_overrides.user_id` + `industry`
+- `user_category_prompt_overrides.user_id` + `industry` + `category_key`
 
 ### Cascade Behavior
-- Deleting a job cascades to: assets, generations, pricing snapshot, pipeline logs
-- Deleting a generation sets `assets.generation_id` to NULL (preserves assets)
+- ORM relationships are configured with SQLAlchemy cascade for job-owned records
+- Database foreign keys do not currently declare explicit `ON DELETE` actions in the models
 
 ---
 
@@ -281,10 +387,17 @@ Implemented via status flags:
 |-------|--------|--------|
 | jobs | status | 'deleted' |
 | assets | is_deleted | TRUE/FALSE |
+| users | is_deleted | TRUE/FALSE |
+| users | deleted_at | Timestamp (nullable) |
 
 Soft-deleted jobs are filtered out from normal queries using:
 ```python
 select(Job).where(Job.status != SOFT_DELETED_STATUS)
+```
+
+Soft-deleted users are filtered out using:
+```python
+select(User).where(User.is_deleted == False)
 ```
 
 ---
@@ -331,14 +444,26 @@ alembic downgrade -1
 alembic current
 ```
 
-### Known Issues
+### Migration History
 
-**Production Migration Gap:**
-- `jobs.batch_id` and `jobs.batch_name` columns were added manually on production
-- Initial migrations don't include these columns
-- New migration should be created to sync schema
+| Version | Date | Description |
+|---------|------|-------------|
+| `20260311_0001` | 2026-03-11 | Initial schema (users, jobs, assets, pricing_snapshots, pipeline_logs) |
+| `20260312_0002` | 2026-03-12 | Added job_generations table for regeneration rounds |
+| `20260316_0003` | 2026-03-16 | Added image_model column to jobs table |
+| `20260331_0004` | 2026-03-31 | Added user roles and industry prompts (IndustryPrompt, UserPromptOverride) |
+| `20260401_0005` | 2026-04-01 | Migrated legacy superadmin email |
+| `20260402_0006` | 2026-04-02 | Added user default model and job image count |
+| `20260403_0007` | 2026-04-03 | Added prompt shot prompts to industry_prompts |
+| `20260404_0008` | 2026-04-04 | Renamed gpt_image_model to image_model |
+| `20260406_0009` | 2026-04-06 | Added user soft delete (is_deleted, deleted_at) |
+| `20260406_0010` | 2026-04-06 | Added user default batch model (default_batch_image_model) |
+| `20260406_0011` | 2026-04-06 | Added user enable_style_number column |
+| `20260413_0012` | 2026-04-13 | Added prompt categories (IndustryCategoryPrompt, UserCategoryPromptOverride) |
+| `20260416_0013` | 2026-04-16 | Reset prompt hierarchy to jewellery baseline |
+| `20260416_0014` | 2026-04-16 | Enforce jewellery baseline shots |
 
-**Current Alembic Version (production):** `20260311_0002`
+**Current Alembic Version:** `20260416_0014`
 
 ---
 
