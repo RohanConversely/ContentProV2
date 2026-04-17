@@ -32,7 +32,7 @@ interface AdminDefaultPromptPanelProps {
     categoryKey: string,
     next: { category_label: string; category_prompt_text: string; shot_prompts: ShotPrompt[] },
   ) => void;
-  onSaveAll: () => void;
+  onSaveAll: (industryId: string) => void;
 }
 
 const AdminDefaultPromptPanel = ({
@@ -57,6 +57,7 @@ const AdminDefaultPromptPanel = ({
     categories.find((item) => item.category_key === selectedCategoryKey) ?? categories[0] ?? null;
 
   const [selectedShotKey, setSelectedShotKey] = useState("");
+  const [industryName, setIndustryName] = useState("");
   const [newIndustryId, setNewIndustryId] = useState("");
   const [newCategoryLabel, setNewCategoryLabel] = useState("");
   const [isAddingIndustry, setIsAddingIndustry] = useState(false);
@@ -67,6 +68,10 @@ const AdminDefaultPromptPanel = ({
   useEffect(() => {
     setSelectedShotKey(selectedCategory?.shot_prompts?.[0]?.key ?? "");
   }, [selectedCategory?.category_key]);
+
+  useEffect(() => {
+    setIndustryName(selectedIndustry || "");
+  }, [selectedIndustry]);
 
   const selectedShot = useMemo(() => {
     if (!selectedCategory) return null;
@@ -142,7 +147,13 @@ const AdminDefaultPromptPanel = ({
               </option>
             ))}
           </select>
-          <p className="text-xs text-muted-foreground">{industryLabel(selectedIndustry || "")}</p>
+          <input
+            className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm"
+            value={industryName}
+            onChange={(event) => setIndustryName(event.target.value)}
+            placeholder="Industry name"
+          />
+          <p className="text-xs text-muted-foreground">{industryLabel(industryName || "")}</p>
           <textarea
             className="min-h-[260px] w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm"
             value={defaultPrompts[selectedIndustry] ?? ""}
@@ -333,7 +344,7 @@ const AdminDefaultPromptPanel = ({
       <div className="flex justify-center">
         <button
           className="rounded-xl border border-border bg-background px-6 py-2.5 text-sm font-medium hover:bg-secondary"
-          onClick={onSaveAll}
+          onClick={() => onSaveAll(industryName)}
         >
           Save Changes
         </button>
