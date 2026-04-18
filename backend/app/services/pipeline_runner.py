@@ -859,7 +859,10 @@ async def run_regeneration_task(
             )
             await emit_for_job(job, "stage_2", "running", f"Queued regeneration {generation.round_number}.", db)
 
-            await run_stage_2_only(ctx, None)
+            stage_2_result = await run_stage_2_only(ctx, None)
+            for local_path_str in stage_2_result.get("generated_images", []):
+                local_path = Path(local_path_str)
+                await _upload_generated_image(db, job, local_path, generation=generation)
 
             log_stop_event.set()
             await log_monitor_task
