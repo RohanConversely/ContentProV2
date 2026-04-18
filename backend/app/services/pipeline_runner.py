@@ -39,6 +39,7 @@ USER_CANCELLED_MESSAGE = "User cancelled the job."
 FINAL_SIZE = (2048, 2048)
 SOFT_DELETED_STATUS = "deleted"
 BATCH_PROGRESS_STALL_SECONDS = 180
+PENDING_UPLOAD_TIMEOUT_SECONDS = 420
 WATCHDOG_INTERVAL_SECONDS = 30
 STYLE_NUMBER_KEYS = ("style no.", "style no", "style_number", "stylenumber")
 
@@ -506,12 +507,12 @@ async def _requeue_if_batch_progress_stalled() -> None:
             if not batch_jobs:
                 continue
 
-            latest_completed_idx = -1
+            latest_terminal_idx = -1
             for idx, batch_job in enumerate(batch_jobs):
-                if batch_job.status == "completed":
-                    latest_completed_idx = idx
+                if batch_job.status in TERMINAL_JOB_STATUSES:
+                    latest_terminal_idx = idx
 
-            candidate_idx = 0 if latest_completed_idx < 0 else latest_completed_idx + 1
+            candidate_idx = 0 if latest_terminal_idx < 0 else latest_terminal_idx + 1
             if candidate_idx >= len(batch_jobs):
                 continue
 
@@ -552,8 +553,80 @@ async def _requeue_if_batch_progress_stalled() -> None:
             )
 
 
+async def _monitor_batch_pending_upload_timeouts() -> None:
+    timeout_cutoff = datetime.now(timezone.utc) - timedelta(seconds=PENDING_UPLOAD_TIMEOUT_SECONDS)
+    async with AsyncSessionLocal() as db:
+        batch_result = await db.execute(
+            select(Job.batch_id)
+            .where(Job.batch_id.is_not(None), Job.status != SOFT_DELETED_STATUS)
+            .distinct()
+        )
+        batch_ids = [row[0] for row in batch_result.fetchall() if row[0]]
+        for batch_id in batch_ids:
+            while True:
+                jobs_result = await db.execute(
+                    select(Job)
+                    .where(Job.batch_id == batch_id, Job.status != SOFT_DELETED_STATUS)
+                    .order_by(Job.created_at.asc())
+                )
+                batch_jobs = jobs_result.scalars().all()
+                if not batch_jobs:
+                    break
+
+                candidate = next((job for job in batch_jobs if job.status not in TERMINAL_JOB_STATUSES), None)
+                if candidate is None:
+                    break
+
+                if candidate.status == "pending_upload":
+                    if candidate.created_at is not None and candidate.created_at <= timeout_cutoff:
+                        candidate.status = "failed"
+                        candidate.current_stage = "queued"
+                        candidate.error_message = (
+                            "Input upload timeout exceeded 7 minutes while waiting in batch queue."
+                        )
+                        await db.commit()
+                        await emit_for_job(
+                            candidate,
+                            candidate.current_stage or "queued",
+                            "failed",
+                            "Pending upload timed out (>7 minutes). Marked failed and advancing batch.",
+                            db,
+                        )
+                        continue
+                    break
+
+                if candidate.status in {"queued", "pending"}:
+                    if _task_is_running(candidate.job_id):
+                        break
+
+                    raw_assets_result = await db.execute(
+                        select(Asset.id).where(
+                            Asset.job_id == candidate.id,
+                            Asset.asset_type == "raw_image",
+                            Asset.is_deleted.is_(False),
+                        )
+                    )
+                    raw_asset_id = raw_assets_result.scalar_one_or_none()
+                    if raw_asset_id is None:
+                        break
+
+                    await queue_pipeline_task(candidate.job_id)
+                    await emit_for_job(
+                        candidate,
+                        candidate.current_stage or "queued",
+                        "queued",
+                        "Advancing next batch job after previous terminal state.",
+                        db,
+                    )
+                break
+
+
 async def _watchdog_loop(stop_event: asyncio.Event) -> None:
     while not stop_event.is_set():
+        try:
+            await _monitor_batch_pending_upload_timeouts()
+        except Exception:
+            pass
         try:
             await _requeue_if_batch_progress_stalled()
         except Exception:
