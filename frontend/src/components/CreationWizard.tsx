@@ -491,6 +491,15 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
   }
 
   if (showResults) {
+    const generationAssetMap = new Map<string, string[]>();
+    (generationResult?.assets ?? [])
+      .filter((asset) => asset.asset_type === "generated_image" && !asset.is_deleted && asset.generation_id)
+      .forEach((asset) => {
+        if (!asset.generation_id || !asset.presigned_url) return;
+        const existing = generationAssetMap.get(asset.generation_id) ?? [];
+        existing.push(asset.presigned_url);
+        generationAssetMap.set(asset.generation_id, existing);
+      });
     return (
       <GenerationResults
         productData={formData}
@@ -504,7 +513,11 @@ const CreationWizard = ({ mode, onBack }: CreationWizardProps) => {
           createdAt: generation.created_at,
           images: generation.images
             .map((asset) => asset.presigned_url)
-            .filter((value): value is string => Boolean(value)),
+            .filter((value): value is string => Boolean(value)).length > 0
+            ? generation.images
+                .map((asset) => asset.presigned_url)
+                .filter((value): value is string => Boolean(value))
+            : generationAssetMap.get(generation.id) ?? [],
         }))}
         jobId={generationResult?.jobId ?? jobId}
         isLoading={isGenerating}

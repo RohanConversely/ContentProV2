@@ -215,6 +215,7 @@ const ProjectDetailView = ({
   const [regenerationImageCount, setRegenerationImageCount] = useState<1 | 2>(2);
   const [reveShotTypes, setReveShotTypes] = useState<string[]>(["hero"]);
   const [regenerationInputFiles, setRegenerationInputFiles] = useState<File[]>([]);
+  const [regenerationInputPreviews, setRegenerationInputPreviews] = useState<{ name: string; url: string }[]>([]);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [isCancellingJob, setIsCancellingJob] = useState(false);
   const [regenerationError, setRegenerationError] = useState<string | null>(null);
@@ -229,6 +230,17 @@ const ProjectDetailView = ({
     setLocalProject(project);
     setActiveGenerationId(project.detail.activeGenerationId ?? null);
   }, [project]);
+
+  useEffect(() => {
+    const previews = regenerationInputFiles.map((file) => ({
+      name: file.name,
+      url: URL.createObjectURL(file),
+    }));
+    setRegenerationInputPreviews(previews);
+    return () => {
+      previews.forEach((preview) => URL.revokeObjectURL(preview.url));
+    };
+  }, [regenerationInputFiles]);
 
   useEffect(() => {
     if (!showJobLogs) {
@@ -260,10 +272,10 @@ const ProjectDetailView = ({
 
   const generations = detail.generations ?? [];
   const selectedGeneration =
-    generations.find((generation) => generation.id === activeGenerationId && generation.images.length > 0) ??
+    generations.find((generation) => generation.id === activeGenerationId) ??
     [...generations].reverse().find((generation) => generation.images.length > 0) ??
     generations[generations.length - 1];
-  const displayImages = selectedGeneration?.images.length ? selectedGeneration.images : detail.images;
+  const displayImages = selectedGeneration ? selectedGeneration.images : detail.images;
 
   const handleDownloadImage = async (src: string, index: number) => {
     await downloadJobImage(
@@ -731,11 +743,13 @@ const ProjectDetailView = ({
         {(isRegenerating || regenerationTimeline.length > 0) && (
           <div className="rounded-xl border border-border bg-background/50 p-4 space-y-2">
             <p className="text-sm font-medium">{regenerationStatus || "Regenerating images..."}</p>
-            {regenerationTimeline.map((entry, index) => (
-              <p key={`${entry.stage}-${entry.status}-${index}`} className="text-sm text-muted-foreground">
-                {entry.message}
-              </p>
-            ))}
+            {user?.role === "superadmin"
+              ? regenerationTimeline.map((entry, index) => (
+                  <p key={`${entry.stage}-${entry.status}-${index}`} className="text-sm text-muted-foreground">
+                    {entry.message}
+                  </p>
+                ))
+              : null}
           </div>
         )}
 
@@ -772,18 +786,25 @@ const ProjectDetailView = ({
               className="hidden"
             />
           </label>
-          {regenerationInputFiles.length > 0 && (
-            <div className="grid grid-cols-2 gap-2">
-              {regenerationInputFiles.map((file, index) => (
-                <div key={`${file.name}-${index}`} className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2 text-xs">
-                  <span className="truncate pr-2">{file.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeRegenerationInputImage(index)}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+          {regenerationInputPreviews.length > 0 && (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {regenerationInputPreviews.map((preview, index) => (
+                <div key={`${preview.name}-${index}`} className="space-y-2">
+                  <div className="relative aspect-square overflow-hidden rounded-lg border border-border bg-background">
+                    <LazyImage
+                      src={preview.url}
+                      alt={preview.name}
+                      className="h-full w-full"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeRegenerationInputImage(index)}
+                      className="absolute right-2 top-2 rounded-full border border-border bg-card/90 p-1 text-muted-foreground backdrop-blur hover:text-foreground"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <p className="truncate text-xs text-muted-foreground">{preview.name}</p>
                 </div>
               ))}
             </div>

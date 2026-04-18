@@ -436,6 +436,39 @@ function assetUrl(asset: BackendAssetResponse): string | null {
   return asset.presigned_url ?? null;
 }
 
+function buildGenerationImageMap(assets: BackendAssetResponse[]): Map<string, string[]> {
+  const assetsByGeneration = new Map<string, string[]>();
+  assets
+    .filter((asset) => asset.asset_type === "generated_image" && !asset.is_deleted && asset.generation_id)
+    .forEach((asset) => {
+      const url = assetUrl(asset);
+      if (!url || !asset.generation_id) return;
+      const existing = assetsByGeneration.get(asset.generation_id) ?? [];
+      existing.push(url);
+      assetsByGeneration.set(asset.generation_id, existing);
+    });
+  return assetsByGeneration;
+}
+
+function mapGenerationSummaries(job: BackendJobResponse): JobGenerationSummary[] {
+  const assetsByGeneration = buildGenerationImageMap(job.assets);
+  return (job.generations ?? [])
+    .map((generation) => {
+      const generationImages = generation.images
+        .map((asset) => assetUrl(asset))
+        .filter((value): value is string => Boolean(value));
+      return {
+        id: generation.id,
+        roundNumber: generation.round_number,
+        additionalDescription: generation.additional_description ?? undefined,
+        status: generation.status,
+        createdAt: generation.created_at,
+        images: generationImages.length > 0 ? generationImages : assetsByGeneration.get(generation.id) ?? [],
+      };
+    })
+    .sort((a, b) => a.roundNumber - b.roundNumber);
+}
+
 function pickDisplayGeneration(
   generations: JobGenerationSummary[],
   preferredGenerationId?: string | null,
@@ -479,18 +512,7 @@ function mapProject(job: BackendJobResponse, summary?: BackendJobSummaryResponse
     .filter((asset) => asset.asset_type === "raw_image" && !asset.is_deleted)
     .map((asset) => assetUrl(asset))
     .filter((value): value is string => Boolean(value));
-  const generations = (job.generations ?? [])
-    .map((generation) => ({
-      id: generation.id,
-      roundNumber: generation.round_number,
-      additionalDescription: generation.additional_description ?? undefined,
-      status: generation.status,
-      createdAt: generation.created_at,
-      images: generation.images
-        .map((asset) => assetUrl(asset))
-        .filter((value): value is string => Boolean(value)),
-    }))
-    .sort((a, b) => a.roundNumber - b.roundNumber);
+  const generations = mapGenerationSummaries(job);
   const activeGeneration = pickDisplayGeneration(generations);
   const fallbackGeneratedImages = job.assets
     .filter((asset) => asset.asset_type === "generated_image" && !asset.is_deleted)
@@ -1148,14 +1170,7 @@ export async function waitForJobCompletion(
   });
 
   const job = await getJob(jobId);
-  const mappedGenerations = (job.generations ?? [])
-    .map((generation) => ({
-      roundNumber: generation.round_number,
-      images: generation.images
-        .map((asset) => assetUrl(asset))
-        .filter((value): value is string => Boolean(value)),
-    }))
-    .sort((a, b) => a.roundNumber - b.roundNumber);
+  const mappedGenerations = mapGenerationSummaries(job);
   const generatedImages =
     [...mappedGenerations].reverse().find((generation) => generation.images.length > 0)?.images ??
     job.assets

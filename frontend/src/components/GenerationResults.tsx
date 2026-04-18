@@ -124,6 +124,7 @@ const GenerationResults = ({
   const [regenerationImageCount, setRegenerationImageCount] = useState<1 | 2>(2);
   const [reveShotTypes, setReveShotTypes] = useState<string[]>(["hero"]);
   const [regenerationInputFiles, setRegenerationInputFiles] = useState<File[]>([]);
+  const [regenerationInputPreviews, setRegenerationInputPreviews] = useState<{ name: string; url: string }[]>([]);
   const [regenerationError, setRegenerationError] = useState<string | null>(null);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -153,16 +154,27 @@ const GenerationResults = ({
     });
   }, [localGenerations, latestGenerationId]);
 
+  useEffect(() => {
+    const previews = regenerationInputFiles.map((file) => ({
+      name: file.name,
+      url: URL.createObjectURL(file),
+    }));
+    setRegenerationInputPreviews(previews);
+    return () => {
+      previews.forEach((preview) => URL.revokeObjectURL(preview.url));
+    };
+  }, [regenerationInputFiles]);
+
   const selectedGeneration = useMemo(() => {
     if (localGenerations.length === 0) return null;
     return (
-      localGenerations.find((generation) => generation.id === activeGenerationId && generation.images.length > 0) ??
+      localGenerations.find((generation) => generation.id === activeGenerationId) ??
       [...localGenerations].reverse().find((generation) => generation.images.length > 0) ??
       localGenerations[localGenerations.length - 1]
     );
   }, [activeGenerationId, localGenerations]);
 
-  const displayImages = selectedGeneration?.images.length
+  const displayImages = selectedGeneration
     ? selectedGeneration.images
     : Array.isArray(generatedImages)
       ? generatedImages.filter(Boolean)
@@ -172,7 +184,8 @@ const GenerationResults = ({
   const effectiveAllDone = !effectiveLoading && !effectiveError;
   const effectiveStatusMessage = isRegenerating ? localStatus.message : statusMessage;
   const effectiveStatusStage = isRegenerating ? localStatus.stage : statusStage;
-  const effectiveStatusUpdates = isRegenerating ? localTimeline : statusUpdates;
+  const effectiveStatusUpdates =
+    isRegenerating && user?.role !== "superadmin" ? [] : isRegenerating ? localTimeline : statusUpdates;
   const defaultImageModel = user?.defaultImageModel ?? "reve";
   const usesReveRegeneration = defaultImageModel === "reve";
   const hasValidReveShotSelection = !usesReveRegeneration || (reveShotTypes.length >= 1 && reveShotTypes.length <= 2);
@@ -701,18 +714,21 @@ const GenerationResults = ({
                 className="hidden"
               />
             </label>
-            {regenerationInputFiles.length > 0 && (
-              <div className="grid grid-cols-2 gap-2">
-                {regenerationInputFiles.map((file, index) => (
-                  <div key={`${file.name}-${index}`} className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2 text-xs">
-                    <span className="truncate pr-2">{file.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeRegenerationInputImage(index)}
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
+            {regenerationInputPreviews.length > 0 && (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {regenerationInputPreviews.map((preview, index) => (
+                  <div key={`${preview.name}-${index}`} className="space-y-2">
+                    <div className="relative aspect-square overflow-hidden rounded-lg border border-border bg-background">
+                      <img src={preview.url} alt={preview.name} className="h-full w-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeRegenerationInputImage(index)}
+                        className="absolute right-2 top-2 rounded-full border border-border bg-card/90 p-1 text-muted-foreground backdrop-blur hover:text-foreground"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <p className="truncate text-xs text-muted-foreground">{preview.name}</p>
                   </div>
                 ))}
               </div>
