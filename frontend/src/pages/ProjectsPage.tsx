@@ -143,6 +143,16 @@ const toReadableAdditionalInfoValue = (key: string, value: unknown): string => {
   return String(value ?? "");
 };
 
+const getImageGridClassName = (imageCount: number) => {
+  if (imageCount === 2) {
+    return "grid grid-cols-2 gap-4";
+  }
+  if (imageCount === 4) {
+    return "grid grid-cols-2 md:grid-cols-4 gap-4";
+  }
+  return "grid grid-cols-2 md:grid-cols-3 gap-4";
+};
+
 const ImageLightbox = ({
   src,
   onClose,
@@ -276,6 +286,7 @@ const ProjectDetailView = ({
     [...generations].reverse().find((generation) => generation.images.length > 0) ??
     generations[generations.length - 1];
   const displayImages = selectedGeneration ? selectedGeneration.images : detail.images;
+  const imageSlotCount = Math.min(4, Math.max(displayImages.length, isRegenerating ? regenerationImageCount : displayImages.length));
 
   const handleDownloadImage = async (src: string, index: number) => {
     await downloadJobImage(
@@ -644,8 +655,8 @@ const ProjectDetailView = ({
             </button>
           ) : null}
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {Array.from({ length: Math.max(displayImages.length, isRegenerating ? regenerationImageCount : displayImages.length) }).map((_, i) => {
+        <div className={getImageGridClassName(imageSlotCount)}>
+          {Array.from({ length: imageSlotCount }).map((_, i) => {
             const src = displayImages[i];
             if (!src) {
               return (
