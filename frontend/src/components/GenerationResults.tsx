@@ -91,6 +91,16 @@ interface GenerationResultsProps {
   hideMetadataDetails?: boolean;
 }
 
+const getImageGridClassName = (imageCount: number) => {
+  if (imageCount === 2) {
+    return "grid grid-cols-2 gap-4";
+  }
+  if (imageCount === 4) {
+    return "grid grid-cols-2 md:grid-cols-4 gap-4";
+  }
+  return "grid grid-cols-2 md:grid-cols-3 gap-4";
+};
+
 const REVE_SHOT_OPTIONS = [
   { key: "hero", label: "Hero" },
   { key: "lifestyle", label: "Lifestyle" },
@@ -213,6 +223,13 @@ const GenerationResults = ({
   const canCreateVideo = selectedImages.length >= 3;
   const isVideoMode = mode === "video";
   const canCancelJob = Boolean(jobId) && (effectiveLoading || isRegenerating);
+  const imageSlotCount = Math.min(
+    4,
+    Math.max(
+      displayImages.length,
+      effectiveLoading ? (isRegenerating ? regenerationImageCount : requestedImageCount) : displayImages.length,
+    ),
+  );
 
   const handleDownloadImage = async (src: string, index: number) => {
     if (jobId) {
@@ -548,12 +565,9 @@ const GenerationResults = ({
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div className={getImageGridClassName(imageSlotCount)}>
         {Array.from({
-          length: Math.max(
-            displayImages.length,
-            effectiveLoading ? (isRegenerating ? regenerationImageCount : requestedImageCount) : displayImages.length,
-          ),
+          length: imageSlotCount,
         }).map((_, i) => {
           const src = displayImages[i];
           const isSelected = selectedImages.includes(i);
