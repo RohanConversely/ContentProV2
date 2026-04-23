@@ -21,13 +21,44 @@ DEFAULT_BATCH_TEXT_MODEL = "gpt-4.1-mini"
 DEFAULT_BATCH_IMAGE_MODEL = "gpt-image-1.5"
 DEFAULT_BATCH_COMPLETION_WINDOW = "24h"
 DEFAULT_BATCH_POLL_INTERVAL_SECONDS = 20
-DEFAULT_BATCH_TIMEOUT_SECONDS = 1800
+DEFAULT_BATCH_TIMEOUT_SECONDS = 7200
 EXTENSION_MIME_MAP = {
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
     ".png": "image/png",
     ".webp": "image/webp",
 }
+
+def _json_safe(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(v) for v in value]
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        return _json_safe(model_dump())
+    to_dict = getattr(value, "dict", None)
+    if callable(to_dict):
+        return _json_safe(to_dict())
+    value_dict = getattr(value, "__dict__", None)
+    if isinstance(value_dict, dict):
+        return _json_safe({k: v for k, v in value_dict.items() if not str(k).startswith("_")})
+    return str(value)
+
+
+def _batch_debug_fields(batch_obj: Any) -> dict[str, Any]:
+    return {
+        "batch_id": getattr(batch_obj, "id", None),
+        "status": getattr(batch_obj, "status", None),
+        "output_file_id": getattr(batch_obj, "output_file_id", None),
+        "error_file_id": getattr(batch_obj, "error_file_id", None),
+        "request_counts": _json_safe(getattr(batch_obj, "request_counts", None)),
+        "errors": _json_safe(getattr(batch_obj, "errors", None)),
+    }
 
 
 def _preprocess_image(input_path: Path, output_path: Path, max_long_side: int) -> Path:
@@ -301,6 +332,15 @@ def generate_images(
                 }
             )
 
+        image_tool: dict[str, Any] = {
+            "type": "image_generation",
+            "model": image_model,
+            "size": image_size,
+            "quality": image_quality,
+        }
+        if image_model == "gpt-image-1.5":
+            image_tool["input_fidelity"] = input_fidelity
+
         requests.append(
             {
                 "custom_id": f"image_{index}",
@@ -310,15 +350,7 @@ def generate_images(
                     "model": text_model,
                     "tool_choice": {"type": "image_generation"},
                     "input": [{"role": "user", "content": content_items}],
-                    "tools": [
-                        {
-                            "type": "image_generation",
-                            "model": image_model,
-                            "size": image_size,
-                            "quality": image_quality,
-                            "input_fidelity": input_fidelity,
-                        }
-                    ],
+                    "tools": [image_tool],
                 },
             }
         )
@@ -375,9 +407,62 @@ def generate_images(
 
         output_file_id = getattr(batch, "output_file_id", None)
         if not output_file_id:
-            raise RuntimeError(
-                f"OpenAI batch completed without output_file_id (batch_id={batch.id})"
-            )
+            # Some batches briefly report "completed" before output_file_id is attached.
+            last_seen = batch
+            for attempt in range(1, 6):
+                time.sleep(5)
+                refreshed = client.batches.retrieve(batch.id)
+                last_seen = refreshed
+                output_file_id = getattr(refreshed, "output_file_id", None)
+                if output_file_id:
+                    batch = refreshed
+                    break
+
+            if not output_file_id:
+                error_file_id = getattr(last_seen, "error_file_id", None)
+                if error_file_id:
+                    try:
+                        error_content = client.files.content(error_file_id)
+                        if hasattr(error_content, "text"):
+                            text_attr = getattr(error_content, "text")
+                            if callable(text_attr):
+                                error_text = text_attr()
+                            else:
+                                error_text = str(text_attr)
+                        elif hasattr(error_content, "read"):
+                            raw = error_content.read()
+                            error_text = (
+                                raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+                            )
+                        else:
+                            error_text = str(error_content)
+
+                        error_path = output_path / f"openai_batch_{batch.id}_error.jsonl"
+                        error_path.write_text(error_text, encoding="utf-8")
+                        stage_logger.warning(
+                            "OpenAI batch completed without output_file_id; saved error_file_id contents.",
+                            with_context(
+                                log_context,
+                                {
+                                    **_batch_debug_fields(last_seen),
+                                    "error_saved_to": str(error_path),
+                                },
+                            ),
+                        )
+                    except Exception:
+                        stage_logger.warning(
+                            "OpenAI batch completed without output_file_id; failed to fetch error_file_id contents.",
+                            with_context(log_context, _batch_debug_fields(last_seen)),
+                        )
+                else:
+                    stage_logger.warning(
+                        "OpenAI batch completed without output_file_id and no error_file_id.",
+                        with_context(log_context, _batch_debug_fields(last_seen)),
+                    )
+
+                raise RuntimeError(
+                    f"OpenAI batch completed without output_file_id (batch_id={batch.id})"
+                )
 
         file_content = client.files.content(output_file_id)
         if hasattr(file_content, "text"):
