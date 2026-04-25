@@ -1,6 +1,6 @@
 import io
 import zipfile
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -961,14 +961,51 @@ async def cancel_batch(
 
 
 @router.get("/usage", response_model=UsageResponse)
-async def get_usage(current_user: User = Depends(get_current_user)) -> UsageResponse:
-    reset_date = datetime.now(timezone.utc) + timedelta(days=30)
+async def get_usage(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UsageResponse:
+    now = datetime.now(timezone.utc)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if month_start.month == 12:
+        reset_date = month_start.replace(year=month_start.year + 1, month=1)
+    else:
+        reset_date = month_start.replace(month=month_start.month + 1)
+
+    images_this_month = await db.scalar(
+        select(func.count(Asset.id))
+        .select_from(Asset)
+        .join(Job, Asset.job_id == Job.id)
+        .where(
+            Job.user_id == current_user.id,
+            Job.status != SOFT_DELETED_STATUS,
+            Asset.asset_type == "generated_image",
+            Asset.is_deleted.is_(False),
+            Asset.created_at >= month_start,
+            Asset.created_at < reset_date,
+        )
+    )
+
+    videos_this_month = await db.scalar(
+        select(func.count(Job.id)).where(
+            Job.user_id == current_user.id,
+            Job.status != SOFT_DELETED_STATUS,
+            Job.job_type == "video",
+            Job.status == "completed",
+            Job.created_at >= month_start,
+            Job.created_at < reset_date,
+        )
+    )
+
+    image_count = int(images_this_month or 0)
+    video_count = int(videos_this_month or 0)
+
     return UsageResponse(
         plan=current_user.plan,
-        credits_used=0,
+        credits_used=image_count + video_count,
         credits_total=100,
-        images_this_month=0,
-        videos_this_month=0,
+        images_this_month=image_count,
+        videos_this_month=video_count,
         reset_date=reset_date,
     )
 
