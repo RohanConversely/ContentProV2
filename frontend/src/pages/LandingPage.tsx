@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { getLandingGalleryImages, type LandingGalleryImage } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const features = [
   {
@@ -62,12 +63,15 @@ const LandingPage = () => {
             </div>
             <span className="font-display text-lg font-bold tracking-tight">ContentPro</span>
           </div>
-          <button
-            onClick={() => navigate(isAuthenticated ? "/dashboard" : "/login")}
-            className="bg-gradient-primary text-primary-foreground px-5 py-2 rounded-lg text-sm font-semibold shadow-glow hover:opacity-90 transition-opacity"
-          >
-            {isAuthenticated ? "Open App" : "Sign In"}
-          </button>
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <button
+              onClick={() => navigate(isAuthenticated ? "/dashboard" : "/login")}
+              className="bg-gradient-primary text-primary-foreground px-5 py-2 rounded-lg text-sm font-semibold shadow-glow hover:opacity-90 transition-opacity"
+            >
+              {isAuthenticated ? "Open App" : "Sign In"}
+            </button>
+          </div>
         </div>
       </header>
 

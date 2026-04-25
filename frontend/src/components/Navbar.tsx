@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Sparkles, FolderOpen, User, Settings, LogOut, ChevronDown, Layers, Shield } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const Navbar = () => {
   const location = useLocation();
@@ -63,6 +64,8 @@ const Navbar = () => {
 
         {/* Right: upgrade + profile */}
         <div className="flex items-center gap-3">
+          <ThemeToggle />
+
           <button className="hidden sm:block bg-gradient-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-semibold shadow-glow hover:opacity-90 transition-opacity">
             Upgrade Pro
           </button>
