@@ -98,40 +98,36 @@ const AdminUsersList = ({
 
               {isExpanded ? (
                 <div className="mt-4 space-y-3 border-t border-border pt-4">
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <input
-                      className="rounded-xl border border-border bg-card px-3 py-2"
-                      value={user.displayName}
-                      onChange={(event) => updateUser(user.id, { displayName: event.target.value })}
-                    />
-                    <input
-                      className="rounded-xl border border-border bg-card px-3 py-2"
-                      value={user.email}
-                      onChange={(event) => updateUser(user.id, { email: event.target.value })}
-                    />
-                    <select
-                      className="rounded-xl border border-border bg-card px-3 py-2"
-                      value={user.role}
-                      onChange={(event) =>
-                        updateUser(user.id, { role: event.target.value as "user" | "superadmin" })
-                      }
-                    >
-                      <option value="user">User</option>
-                      <option value="superadmin">Superadmin</option>
-                    </select>
-                    <select
-                      className="rounded-xl border border-border bg-card px-3 py-2"
-                      value={user.industry}
-                      onChange={(event) => updateUser(user.id, { industry: event.target.value })}
-                    >
-                      {industryOptions.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                     <label className="space-y-2">
-                      <span className="text-xs font-medium text-muted-foreground">Model for single product</span>
+                      <span className="text-xs font-medium text-muted-foreground">Role</span>
+                      <select
+                        className="w-full rounded-xl border border-border bg-card px-3 py-2"
+                        value={user.role}
+                        onChange={(event) =>
+                          updateUser(user.id, { role: event.target.value as "user" | "superadmin" })
+                        }
+                      >
+                        <option value="user">user</option>
+                        <option value="superadmin">superadmin</option>
+                      </select>
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-xs font-medium text-muted-foreground">Selected Industry</span>
+                      <select
+                        className="w-full rounded-xl border border-border bg-card px-3 py-2"
+                        value={user.industry}
+                        onChange={(event) => updateUser(user.id, { industry: event.target.value })}
+                      >
+                        {industryOptions.map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-xs font-medium text-muted-foreground">Single Product Model</span>
                       <select
                         className="w-full rounded-xl border border-border bg-card px-3 py-2"
                         value={user.defaultImageModel}
@@ -147,7 +143,7 @@ const AdminUsersList = ({
                       </select>
                     </label>
                     <label className="space-y-2">
-                      <span className="text-xs font-medium text-muted-foreground">Model for batch processing</span>
+                      <span className="text-xs font-medium text-muted-foreground">Batch Processing Model</span>
                       <select
                         className="w-full rounded-xl border border-border bg-card px-3 py-2"
                         value={user.defaultBatchImageModel}
@@ -162,7 +158,7 @@ const AdminUsersList = ({
                         <option value="gpt-batch-api">gpt batch api</option>
                       </select>
                     </label>
-                    <label className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 md:col-span-2">
+                    <label className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 self-end">
                       <input
                         type="checkbox"
                         checked={user.enableStyleNumber}

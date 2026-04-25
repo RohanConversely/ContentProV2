@@ -157,6 +157,15 @@ const AdminPromptOverrideModal = ({
 
         <div className="mt-6 space-y-4">
           <div className="space-y-2">
+            <label className="text-sm font-medium">Industry Prompt</label>
+            <textarea
+              className="min-h-[380px] w-full rounded-2xl border border-border bg-background px-4 py-3"
+              value={promptText}
+              onChange={(event) => setPromptText(event.target.value)}
+              disabled={isLoading || isSaving}
+            />
+          </div>
+          <div className="space-y-2">
             <label className="text-sm font-medium">Category</label>
             <select
               className="w-full rounded-2xl border border-border bg-background px-4 py-3"
@@ -192,26 +201,26 @@ const AdminPromptOverrideModal = ({
               ))}
             </select>
           </div>
-          <input
-            className="w-full rounded-2xl border border-border bg-background px-4 py-3"
-            value={categoryLabel}
-            onChange={(event) => setCategoryLabel(event.target.value)}
-            placeholder="Category label"
-            disabled={isLoading || isSaving || selectedCategoryKey === "default"}
-          />
-          <textarea
-            className="min-h-[120px] w-full rounded-2xl border border-border bg-background px-4 py-3"
-            value={categoryPromptText}
-            onChange={(event) => setCategoryPromptText(event.target.value)}
-            placeholder="Category prompt"
-            disabled={isLoading || isSaving}
-          />
-          <textarea
-            className="min-h-[380px] w-full rounded-2xl border border-border bg-background px-4 py-3"
-            value={promptText}
-            onChange={(event) => setPromptText(event.target.value)}
-            disabled={isLoading || isSaving}
-          />
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Category Name</label>
+            <input
+              className="w-full rounded-2xl border border-border bg-background px-4 py-3"
+              value={categoryLabel}
+              onChange={(event) => setCategoryLabel(event.target.value)}
+              placeholder="Category label"
+              disabled={isLoading || isSaving || selectedCategoryKey === "default"}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Category Prompt</label>
+            <textarea
+              className="min-h-[120px] w-full rounded-2xl border border-border bg-background px-4 py-3"
+              value={categoryPromptText}
+              onChange={(event) => setCategoryPromptText(event.target.value)}
+              placeholder="Category prompt"
+              disabled={isLoading || isSaving}
+            />
+          </div>
           <div className="space-y-3">
             <p className="text-sm font-medium text-foreground">Shot prompts</p>
             {shotPrompts.length > 0 ? (

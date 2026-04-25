@@ -144,8 +144,6 @@ const AdminUsersPage = () => {
 
   const handleSaveUser = async (user: AdminUserRecord) => {
     await adminUpdateUser(user.id, {
-      displayName: user.displayName,
-      email: user.email,
       role: user.role,
       industry: user.industry,
       defaultImageModel: user.defaultImageModel,
