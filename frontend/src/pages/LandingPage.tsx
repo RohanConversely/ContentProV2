@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -9,7 +8,6 @@ import {
   ArrowRight,
   Check,
 } from "lucide-react";
-import { getLandingGalleryImages, type LandingGalleryImage } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import ThemeToggle from "@/components/ThemeToggle";
 
@@ -40,21 +38,24 @@ const steps = [
 const freeBenefits = ["10 images / month", "2 videos / month", "Standard resolution"];
 const proBenefits = ["Unlimited images", "Unlimited videos", "4K export", "Priority processing"];
 
+const landingImages = {
+  hero: "/landing_page_images/image1.png",
+  featureA: "/landing_page_images/image2.png",
+  featureB: "/landing_page_images/image3.png",
+  featureC: "/landing_page_images/image4.png",
+  galleryA: "/landing_page_images/image5.png",
+  galleryB: "/landing_page_images/image6.png",
+  galleryC: "/landing_page_images/image7.png",
+  galleryD: "/landing_page_images/image8.png",
+};
+
 const LandingPage = () => {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
-  const [galleryImages, setGalleryImages] = useState<LandingGalleryImage[]>([]);
-
-  useEffect(() => {
-    void (async () => {
-      const imgs = await getLandingGalleryImages();
-      setGalleryImages(imgs);
-    })();
-  }, []);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* ── Nav ── */}
+      {/* Nav */}
       <header className="fixed top-0 left-0 right-0 z-50 glass">
         <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center gap-2">
@@ -75,95 +76,59 @@ const LandingPage = () => {
         </div>
       </header>
 
-      {/* ── Hero ── */}
-      <section className="relative min-h-screen flex items-center overflow-hidden pt-16">
-        {/* Background blobs */}
-        <div className="absolute top-1/4 -left-40 w-[500px] h-[500px] rounded-full bg-primary/5 blur-3xl pointer-events-none" />
-        <div className="absolute bottom-1/4 -right-40 w-[400px] h-[400px] rounded-full bg-primary/8 blur-3xl pointer-events-none" />
-
-        <div className="container relative">
-          <div className="max-w-3xl mx-auto text-center space-y-8">
-            {/* Badge */}
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-primary/30 bg-primary/5 text-sm text-primary font-medium"
-            >
+      {/* Hero */}
+      <section className="relative overflow-hidden border-b border-border/40 pt-28 pb-16">
+        <div className="absolute top-20 -left-32 h-80 w-80 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
+        <div className="absolute bottom-8 -right-32 h-80 w-80 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
+        <div className="container relative grid items-center gap-10 lg:grid-cols-2">
+          <div className="space-y-6">
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-4 py-1.5 text-sm font-medium text-primary">
               <Sparkles className="h-3.5 w-3.5" />
               AI-generated content for Amazon sellers
-            </motion.div>
-
-            {/* Headline */}
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, delay: 0.1 }}
-              className="font-display text-5xl md:text-7xl font-bold leading-[1.05] tracking-tight"
-            >
-              Professional content,{" "}
-              <span className="text-gradient">zero effort.</span>
-            </motion.h1>
-
-            {/* Sub */}
-            <motion.p
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, delay: 0.18 }}
-              className="text-lg md:text-xl text-muted-foreground leading-relaxed max-w-xl mx-auto"
-            >
-              Upload your product photos, enter brand details, and ContentPro
-              generates studio-quality images and videos — ready for Amazon A+,
-              reels, and ads.
-            </motion.p>
-
-            {/* CTA */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, delay: 0.26 }}
-              className="flex flex-col sm:flex-row items-center justify-center gap-4"
-            >
+            </div>
+            <h1 className="font-display text-4xl font-bold leading-tight md:text-6xl">
+              Launch premium product creatives in minutes.
+            </h1>
+            <p className="max-w-xl text-base text-muted-foreground md:text-lg">
+              Transform raw product photos into high-converting brand stories. No design degree required. Boost your conversion rate by up to 25% with our luminous AI engine.
+            </p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <button
                 onClick={() => navigate(isAuthenticated ? "/dashboard" : "/login")}
-                className="flex items-center gap-2 bg-gradient-primary text-primary-foreground px-8 py-3.5 rounded-xl text-base font-semibold shadow-glow hover:opacity-90 transition-opacity"
+                className="flex items-center justify-center gap-2 rounded-xl bg-gradient-primary px-7 py-3 text-sm font-semibold text-primary-foreground shadow-glow hover:opacity-90 transition-opacity"
               >
-                Get Started Free <ArrowRight className="h-4 w-4" />
+                Get Started For Free <ArrowRight className="h-4 w-4" />
               </button>
               <span className="text-sm text-muted-foreground">No credit card required</span>
-            </motion.div>
+            </div>
           </div>
-
-          {/* Floating preview cards */}
-          {galleryImages.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 40 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.4 }}
-              className="mt-20 grid grid-cols-2 md:grid-cols-3 gap-4 max-w-2xl mx-auto"
-            >
-              {galleryImages.map((img, i) => (
-                <motion.div
-                  key={img.id}
-                  initial={{ opacity: 0, scale: 0.92 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.45 + i * 0.07 }}
-                  className="aspect-square rounded-xl overflow-hidden border border-border/50 bg-card"
-                >
-                  <img
-                    src={img.url}
-                    alt=""
-                    className="h-full w-full object-cover opacity-70 hover:opacity-100 transition-opacity duration-500"
-                  />
-                </motion.div>
-              ))}
-            </motion.div>
-          )}
+          <div className="rounded-3xl border border-border/60 bg-card/60 p-3 shadow-card">
+            <img
+              src={landingImages.hero}
+              alt="Landing preview"
+              className="w-full rounded-2xl object-cover"
+            />
+          </div>
         </div>
       </section>
 
-      {/* ── Features ── */}
-      <section className="py-24 border-t border-border/40">
+      {/* Feature visual cards */}
+      <section className="py-20 border-b border-border/40">
+        <div className="container grid gap-6 md:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-card/60 p-3">
+            <img src={landingImages.featureA} alt="Image generation preview" className="h-56 w-full rounded-xl object-cover" />
+          </div>
+          <div className="rounded-2xl border border-border bg-card/60 p-3">
+            <img src={landingImages.featureB} alt="Product layout preview" className="h-56 w-full rounded-xl object-cover" />
+          </div>
+          <div className="rounded-2xl border border-border bg-card/60 p-3">
+            <img src={landingImages.featureC} alt="Output composition preview" className="h-56 w-full rounded-xl object-cover" />
+          </div>
+        </div>
+      </section>
+
+      {/* Features */}
+      <section className="py-24 border-b border-border/40">
         <div className="container">
           <div className="text-center mb-14">
             <p className="text-sm uppercase tracking-widest text-primary font-semibold mb-3">What you get</p>
@@ -190,33 +155,64 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* ── How it works ── */}
-      <section className="py-24 border-t border-border/40">
+      {/* Process + gallery */}
+      <section className="py-24 border-b border-border/40">
         <div className="container">
-          <div className="text-center mb-14">
-            <p className="text-sm uppercase tracking-widest text-primary font-semibold mb-3">Simple process</p>
-            <h2 className="font-display text-3xl md:text-4xl font-bold">Ready in three steps.</h2>
+          <div className="mb-14 text-center">
+            <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-primary">Simple process</p>
+            <h2 className="font-display text-3xl font-bold md:text-4xl">One flow, production-ready output.</h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-3xl mx-auto">
-            {steps.map((s, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.12 }}
-                className="text-center space-y-3 rounded-xl border border-border bg-card/60 p-6 hover:border-primary/30 hover:shadow-glow transition-all duration-300"
-              >
-                <span className="text-5xl font-display font-bold text-primary">{s.number}</span>
-                <h3 className="font-display text-xl font-semibold">{s.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{s.desc}</p>
-              </motion.div>
-            ))}
+          <div className="grid gap-8 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2 rounded-2xl border border-border bg-card/60 p-3">
+                <img src={landingImages.galleryA} alt="Generated creative set" className="h-64 w-full rounded-xl object-cover" />
+              </div>
+              <div className="rounded-2xl border border-border bg-card/60 p-3">
+                <img src={landingImages.galleryC} alt="Creative sample" className="h-44 w-full rounded-xl object-cover" />
+              </div>
+              <div className="rounded-2xl border border-border bg-card/60 p-3">
+                <img src={landingImages.galleryD} alt="Creative icon sample" className="h-44 w-full rounded-xl object-cover" />
+              </div>
+            </div>
+            <div className="grid gap-4">
+              {steps.map((s, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.1 }}
+                  className="rounded-2xl border border-border bg-card/60 p-6"
+                >
+                  <p className="text-3xl font-display font-bold text-primary">{s.number}</p>
+                  <h3 className="mt-2 font-display text-xl font-semibold">{s.title}</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">{s.desc}</p>
+                </motion.div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ── Pricing ── */}
+      {/* Showcase */}
+      <section className="py-24 border-b border-border/40">
+        <div className="container">
+          <div className="mb-12 text-center">
+            <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-primary">Showcase</p>
+            <h2 className="font-display text-3xl font-bold md:text-4xl">Results your catalog can publish immediately.</h2>
+          </div>
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="rounded-2xl border border-border bg-card/60 p-3">
+              <img src={landingImages.galleryB} alt="Hero-style generated output" className="h-[420px] w-full rounded-xl object-cover" />
+            </div>
+            <div className="rounded-2xl border border-border bg-card/60 p-3">
+              <img src={landingImages.featureB} alt="Additional generated output" className="h-[420px] w-full rounded-xl object-cover" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing */}
       <section className="py-24 border-t border-border/40">
         <div className="container">
           <div className="text-center mb-14">
@@ -283,7 +279,7 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* ── Footer ── */}
+      {/* Footer */}
       <footer className="border-t border-border/40 py-10">
         <div className="container flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
