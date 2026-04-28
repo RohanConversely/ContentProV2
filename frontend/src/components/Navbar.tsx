@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Sparkles, FolderOpen, User, Settings, LogOut, ChevronDown, Layers, Shield } from "lucide-react";
+import { Sparkles, FolderOpen, User, Settings, LogOut, ChevronDown, Layers, Shield, BookOpen } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import ThemeToggle from "@/components/ThemeToggle";
 
@@ -12,7 +12,10 @@ const Navbar = () => {
     { label: "Create", icon: Sparkles, path: "/dashboard" },
     { label: "Batch Run", icon: Layers, path: "/batch-run" },
     { label: "Projects", icon: FolderOpen, path: "/projects" },
-    ...(user?.role === "superadmin" ? [{ label: "Admin", icon: Shield, path: "/admin/users" }] : []),
+    ...(user?.role === "superadmin" ? [
+      { label: "Admin", icon: Shield, path: "/admin/users" },
+      { label: "Guide", icon: BookOpen, path: "/admin/guide" },
+    ] : []),
   ];
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
