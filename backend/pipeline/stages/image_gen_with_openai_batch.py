@@ -309,71 +309,79 @@ def generate_images(
     )
     selected_shots = _selected_shot_prompts(shot_prompts, num_images)
 
-    reference_image_urls = [_to_data_url(Path(path)) for path in resolved_image_paths[:5]]
-
     requests: list[dict[str, Any]] = []
-    for index in range(1, max(1, num_images) + 1):
-        shot_prompt = selected_shots[index - 1] if selected_shots else None
-        request_text = _build_request_text(
-            base_prompt=base_prompt,
-            shot_prompt=shot_prompt,
-            additional_description=additional_description,
-            regeneration_only_inputs=regeneration_only_inputs,
-        )
-        content_items: list[dict[str, Any]] = [
-            {"type": "input_text", "text": request_text}
-        ]
-        for reference_image_url in reference_image_urls:
-            content_items.append(
+    with tempfile.TemporaryDirectory(prefix="openai_batch_") as temp_dir:
+        temp_dir_path = Path(temp_dir)
+        reference_sheet_path = temp_dir_path / "reference_sheet.png"
+        if len(resolved_image_paths) == 1:
+            reference_sheet_path.write_bytes(Path(resolved_image_paths[0]).read_bytes())
+        else:
+            _build_reference_sheet(
+                [Path(path) for path in resolved_image_paths[:5]],
+                reference_sheet_path,
+            )
+
+        reference_image_url = _to_data_url(reference_sheet_path)
+
+        for index in range(1, max(1, num_images) + 1):
+            shot_prompt = selected_shots[index - 1] if selected_shots else None
+            request_text = _build_request_text(
+                base_prompt=base_prompt,
+                shot_prompt=shot_prompt,
+                additional_description=additional_description,
+                regeneration_only_inputs=regeneration_only_inputs,
+            )
+            content_items: list[dict[str, Any]] = [
+                {"type": "input_text", "text": request_text},
                 {
                     "type": "input_image",
                     "image_url": reference_image_url,
                     "detail": "low",
+                },
+            ]
+
+            image_tool: dict[str, Any] = {
+                "type": "image_generation",
+                "model": image_model,
+                "size": image_size,
+                "quality": image_quality,
+            }
+            if image_model == "gpt-image-1.5":
+                image_tool["input_fidelity"] = input_fidelity
+
+            requests.append(
+                {
+                    "custom_id": f"image_{index}",
+                    "method": "POST",
+                    "url": "/v1/responses",
+                    "body": {
+                        "model": text_model,
+                        "tool_choice": {"type": "image_generation"},
+                        "input": [{"role": "user", "content": content_items}],
+                        "tools": [image_tool],
+                    },
                 }
             )
 
-        image_tool: dict[str, Any] = {
-            "type": "image_generation",
-            "model": image_model,
-            "size": image_size,
-            "quality": image_quality,
-        }
-        if image_model == "gpt-image-1.5":
-            image_tool["input_fidelity"] = input_fidelity
-
-        requests.append(
-            {
-                "custom_id": f"image_{index}",
-                "method": "POST",
-                "url": "/v1/responses",
-                "body": {
-                    "model": text_model,
-                    "tool_choice": {"type": "image_generation"},
-                    "input": [{"role": "user", "content": content_items}],
-                    "tools": [image_tool],
+        stage_logger.info(
+            "Submitting OpenAI Batch image generation job.",
+            with_context(
+                log_context,
+                {
+                    "provider": "openai_batch",
+                    "text_model": text_model,
+                    "image_model": image_model,
+                    "image_size": image_size,
+                    "image_quality": image_quality,
+                    "input_fidelity": input_fidelity,
+                    "num_requests": len(requests),
+                    "completion_window": completion_window,
+                    "image_paths": resolved_image_paths,
+                    "reference_sheet_path": str(reference_sheet_path.resolve()),
                 },
-            }
+            ),
         )
 
-    stage_logger.info(
-        "Submitting OpenAI Batch image generation job.",
-        with_context(
-            log_context,
-            {
-                "provider": "openai_batch",
-                "text_model": text_model,
-                "image_model": image_model,
-                "image_size": image_size,
-                "image_quality": image_quality,
-                "input_fidelity": input_fidelity,
-                "num_requests": len(requests),
-                "completion_window": completion_window,
-                "image_paths": resolved_image_paths,
-            },
-        ),
-    )
-
-    with tempfile.TemporaryDirectory(prefix="openai_batch_") as temp_dir:
         requests_path = Path(temp_dir) / "requests.jsonl"
         with requests_path.open("w", encoding="utf-8") as f:
             for request in requests:

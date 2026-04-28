@@ -16,6 +16,7 @@ import BatchRunPage from "./pages/BatchRunPage";
 import BatchDetailPage from "./pages/BatchDetailPage";
 import AuthPage from "./pages/AuthPage";
 import AuthCallbackPage from "./pages/AuthCallbackPage";
+import AdminGuidePage from "./pages/AdminGuidePage";
 import AdminUsersPage from "./pages/AdminUsersPage";
 import { ThemeProvider } from "@/components/theme-provider";
 
@@ -87,6 +88,14 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <SettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/guide"
+                  element={
+                    <ProtectedRoute requireRole="superadmin">
+                      <AdminGuidePage />
                     </ProtectedRoute>
                   }
                 />
