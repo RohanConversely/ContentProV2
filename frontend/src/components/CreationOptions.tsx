@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
-import { Image, Layers, Video } from "lucide-react";
+import { Image, Layers } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -35,12 +35,6 @@ const CreationOptions = ({ onSelect }: CreationOptionsProps) => {
       title: "Generate A+ Images",
       description: "Create professional Amazon A+ ready product images from your photos",
       action: () => openChoice("images"),
-    },
-    {
-      icon: Video,
-      title: "Generate a Video",
-      description: "Create engaging video content from your product images",
-      action: () => openChoice("video"),
     },
   ];
 
