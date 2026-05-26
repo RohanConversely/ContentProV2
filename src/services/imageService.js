@@ -7,7 +7,8 @@ async function getProvider() {
   }
 
   if (providerName === "fal") {
-    const mod = await import("./providers/falProvider.js");
+    const path = "./providers/falProvider.js";
+    const mod = await import(/* @vite-ignore */ path);
     return mod;
   }
 
