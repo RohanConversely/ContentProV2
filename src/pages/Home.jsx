@@ -3,10 +3,12 @@ import UploadBox from '../components/UploadBox.jsx';
 import { generateVariant } from '../services/imageService.js';
 
 export default function Home() {
+  const VARIANTS = ['white_background', 'professional', 'with_model', 'with_box'];
   const [uploadedImageUrl, setUploadedImageUrl] = useState('');
   const [category, setCategory] = useState('general');
   const [isGenerating, setIsGenerating] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [results, setResults] = useState([]);
 
   async function handleGenerate() {
     if (!uploadedImageUrl) {
@@ -15,10 +17,13 @@ export default function Home() {
 
     setIsGenerating(true);
     setErrorMessage('');
+    setResults([]);
 
     try {
-      const imageUrl = await generateVariant('white_bg', uploadedImageUrl, category);
-      console.log(imageUrl);
+      const settled = await Promise.all(
+        VARIANTS.map((v) => generateVariant(v, uploadedImageUrl, category))
+      );
+      setResults(settled);
     } catch (error) {
       setErrorMessage(error.message);
     } finally {
@@ -57,6 +62,24 @@ export default function Home() {
       >
         {isGenerating ? 'Generating...' : 'Generate'}
       </button>
+      {results.length > 0 && (
+        <div className="grid grid-cols-2 gap-4">
+          {results.map((result) => (
+            <div key={result.variant} className="space-y-2">
+              <p className="text-sm font-medium text-slate-900">{result.variant}</p>
+              {result.success ? (
+                <img
+                  src={result.outputUrl}
+                  alt={result.variant}
+                  className="aspect-square w-full rounded-md object-cover"
+                />
+              ) : (
+                <p className="text-sm text-red-600">{result.error}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </main>
   );
 }
