@@ -12,6 +12,12 @@ async function getProvider() {
     return mod;
   }
 
+  if (providerName === "openai") {
+    const path = "./providers/openaiProvider.js";
+    const mod = await import(/* @vite-ignore */ path);
+    return mod;
+  }
+
   throw new Error(`Unknown AI provider: ${providerName}`);
 }
 
