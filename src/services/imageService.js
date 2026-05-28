@@ -21,11 +21,11 @@ async function getProvider() {
   throw new Error(`Unknown AI provider: ${providerName}`);
 }
 
-export async function generateVariant(variant, uploadedImageUrl, userPrompt) {
+export async function generateVariant(variant, uploadedImageUrl, userPrompt, options) {
   try {
     const mod = await getProvider();
 
-    return mod.generateImage(variant, uploadedImageUrl, userPrompt);
+    return mod.generateVariant(variant, uploadedImageUrl, userPrompt, options);
   } catch (err) {
     return {
       success: false,

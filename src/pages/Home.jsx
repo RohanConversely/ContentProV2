@@ -9,6 +9,9 @@ export default function Home() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [results, setResults] = useState([]);
+  const [finalizedVariants, setFinalizedVariants] = useState({});
+  const [finalizingVariants, setFinalizingVariants] = useState(new Set());
+  const [finalizeErrors, setFinalizeErrors] = useState({});
 
   async function handleGenerate() {
     if (!uploadedImageUrl) {
@@ -18,6 +21,9 @@ export default function Home() {
     setIsGenerating(true);
     setErrorMessage('');
     setResults([]);
+    setFinalizedVariants({});
+    setFinalizingVariants(new Set());
+    setFinalizeErrors({});
 
     try {
       const settled = await Promise.all(
@@ -28,6 +34,42 @@ export default function Home() {
       setErrorMessage(error.message);
     } finally {
       setIsGenerating(false);
+    }
+  }
+
+  async function handleFinalize(variant) {
+    setFinalizeErrors((current) => {
+      const next = { ...current };
+      delete next[variant];
+      return next;
+    });
+    setFinalizingVariants((current) => new Set(current).add(variant));
+
+    try {
+      const result = await generateVariant(variant, uploadedImageUrl, category, { finalPass: true });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to finalize variant');
+      }
+
+      setFinalizedVariants((current) => ({
+        ...current,
+        [variant]: {
+          outputUrl: result.outputUrl,
+          metadata: result.metadata,
+        },
+      }));
+    } catch (error) {
+      setFinalizeErrors((current) => ({
+        ...current,
+        [variant]: error.message,
+      }));
+    } finally {
+      setFinalizingVariants((current) => {
+        const next = new Set(current);
+        next.delete(variant);
+        return next;
+      });
     }
   }
 
@@ -64,20 +106,55 @@ export default function Home() {
       </button>
       {results.length > 0 && (
         <div className="grid grid-cols-2 gap-4">
-          {results.map((result) => (
-            <div key={result.variant} className="space-y-2">
-              <p className="text-sm font-medium text-slate-900">{result.variant}</p>
-              {result.success ? (
-                <img
-                  src={result.outputUrl}
-                  alt={result.variant}
-                  className="aspect-square w-full rounded-md object-cover"
-                />
-              ) : (
-                <p className="text-sm text-red-600">{result.error}</p>
-              )}
-            </div>
-          ))}
+          {results.map((result) => {
+            const finalizedResult = finalizedVariants[result.variant];
+            const isFinalizing = finalizingVariants.has(result.variant);
+            const cardError = finalizeErrors[result.variant];
+            const outputUrl = finalizedResult?.outputUrl || result.outputUrl;
+
+            return (
+              <div key={result.variant} className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-slate-900">{result.variant}</p>
+                  {finalizedResult && (
+                    <span className="rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-700">
+                      ✓ Finalized
+                    </span>
+                  )}
+                </div>
+                {result.success ? (
+                  <>
+                    <div className="relative">
+                      <img
+                        src={outputUrl}
+                        alt={result.variant}
+                        className="aspect-square w-full rounded-md object-cover"
+                      />
+                      {isFinalizing && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-md bg-slate-950/60 text-sm font-medium text-white">
+                          <span className="h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                          <span>Finalizing...</span>
+                        </div>
+                      )}
+                    </div>
+                    {cardError && <p className="text-sm text-red-600">{cardError}</p>}
+                    {!finalizedResult && (
+                      <button
+                        type="button"
+                        onClick={() => handleFinalize(result.variant)}
+                        disabled={isFinalizing}
+                        className="w-full rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                      >
+                        Finalize
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm text-red-600">{result.error}</p>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </main>

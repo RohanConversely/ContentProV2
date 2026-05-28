@@ -43,7 +43,7 @@ async function createProductFile(uploadedImageUrl) {
   return new File([imageBlob], "product.png", { type: "image/png" });
 }
 
-export async function generateVariant(variant, uploadedImageUrl, userPrompt) {
+export async function generateVariant(variant, uploadedImageUrl, userPrompt, options = {}) {
   try {
     const kycResponse = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
@@ -83,14 +83,17 @@ export async function generateVariant(variant, uploadedImageUrl, userPrompt) {
       " Product details: " +
       JSON.stringify(kycJson);
 
+    const finalPass = options.finalPass === true;
+    const quality = finalPass ? "high" : "low";
+    const n = finalPass ? 1 : 2;
     const image = await createProductFile(uploadedImageUrl);
     const imageResponse = await openai.images.edit({
       model: "gpt-image-1",
       image,
       prompt: finalPrompt,
-      n: 2,
+      n,
       size: "1024x1024",
-      quality: "low",
+      quality,
     });
 
     const item = imageResponse.data?.[0];
@@ -109,7 +112,7 @@ export async function generateVariant(variant, uploadedImageUrl, userPrompt) {
         prompt_used: finalPrompt,
         model: "gpt-image-1",
         kyc: kycJson,
-        quality: "low",
+        quality,
       },
     };
   } catch (err) {
