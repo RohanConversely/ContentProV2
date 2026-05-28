@@ -34,3 +34,7 @@ export async function generateImage(variant, uploadedImageUrl, userPrompt) {
     },
   };
 }
+
+export async function generateVariant(variant, uploadedImageUrl, userPrompt) {
+  return generateImage(variant, uploadedImageUrl, userPrompt);
+}

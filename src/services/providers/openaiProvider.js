@@ -5,6 +5,16 @@ const openai = new OpenAI({
   dangerouslyAllowBrowser: true,
 });
 
+const kycCache = new Map();
+
+function hashString(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (Math.imul(31, hash) + str.charCodeAt(i)) | 0;
+  }
+  return hash.toString();
+}
+
 const VARIANT_PREFIXES = {
   white_background:
     "Product on pure white seamless background, Amazon listing ready, professional studio lighting, no shadows, isolated, DSLR quality",
@@ -45,30 +55,39 @@ async function createProductFile(uploadedImageUrl) {
 
 export async function generateVariant(variant, uploadedImageUrl, userPrompt, options = {}) {
   try {
-    const kycResponse = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
-      messages: [
-        {
-          role: "system",
-          content: KYC_SYSTEM_PROMPT,
-        },
-        {
-          role: "user",
-          content: [
-            { type: "image_url", image_url: { url: uploadedImageUrl } },
-            { type: "text", text: "Extract product KYC JSON for this image." },
-          ],
-        },
-      ],
-    });
+    const cacheKey = hashString(uploadedImageUrl);
+    const kycCached = kycCache.has(cacheKey);
+    let kycJson;
 
-    const kycContent = kycResponse.choices?.[0]?.message?.content;
+    if (kycCached) {
+      kycJson = kycCache.get(cacheKey);
+    } else {
+      const kycResponse = await openai.chat.completions.create({
+        model: "gpt-4.1-mini",
+        messages: [
+          {
+            role: "system",
+            content: KYC_SYSTEM_PROMPT,
+          },
+          {
+            role: "user",
+            content: [
+              { type: "image_url", image_url: { url: uploadedImageUrl } },
+              { type: "text", text: "Extract product KYC JSON for this image." },
+            ],
+          },
+        ],
+      });
 
-    if (!kycContent) {
-      throw new Error("KYC response did not include message content");
+      const kycContent = kycResponse.choices?.[0]?.message?.content;
+
+      if (!kycContent) {
+        throw new Error("KYC response did not include message content");
+      }
+
+      kycJson = parseKycJson(kycContent);
+      kycCache.set(cacheKey, kycJson);
     }
-
-    const kycJson = parseKycJson(kycContent);
     const variantPrefix = VARIANT_PREFIXES[variant];
 
     if (!variantPrefix) {
@@ -112,6 +131,7 @@ export async function generateVariant(variant, uploadedImageUrl, userPrompt, opt
         prompt_used: finalPrompt,
         model: "gpt-image-1",
         kyc: kycJson,
+        kyc_cached: kycCached,
         quality,
       },
     };
