@@ -11,6 +11,7 @@ export default function Home() {
   const [results, setResults] = useState([]);
   const [finalizedVariants, setFinalizedVariants] = useState({});
   const [finalizingVariants, setFinalizingVariants] = useState(new Set());
+  const [rerollingVariants, setRerollingVariants] = useState({});
   const [finalizeErrors, setFinalizeErrors] = useState({});
 
   async function handleGenerate() {
@@ -23,6 +24,7 @@ export default function Home() {
     setResults([]);
     setFinalizedVariants({});
     setFinalizingVariants(new Set());
+    setRerollingVariants({});
     setFinalizeErrors({});
 
     try {
@@ -73,6 +75,43 @@ export default function Home() {
     }
   }
 
+  async function handleReroll(variant) {
+    setFinalizeErrors((current) => {
+      const next = { ...current };
+      delete next[variant];
+      return next;
+    });
+    setFinalizedVariants((current) => {
+      const next = { ...current };
+      delete next[variant];
+      return next;
+    });
+    setRerollingVariants((current) => ({ ...current, [variant]: true }));
+
+    try {
+      const result = await generateVariant(variant, uploadedImageUrl, category, { finalPass: false });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to re-roll variant');
+      }
+
+      setResults((current) =>
+        current.map((item) => (item.variant === variant ? result : item))
+      );
+    } catch (error) {
+      setFinalizeErrors((current) => ({
+        ...current,
+        [variant]: error.message,
+      }));
+    } finally {
+      setRerollingVariants((current) => {
+        const next = { ...current };
+        delete next[variant];
+        return next;
+      });
+    }
+  }
+
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-6 px-6 py-12">
       <div>
@@ -109,6 +148,7 @@ export default function Home() {
           {results.map((result) => {
             const finalizedResult = finalizedVariants[result.variant];
             const isFinalizing = finalizingVariants.has(result.variant);
+            const isRerolling = Boolean(rerollingVariants[result.variant]);
             const cardError = finalizeErrors[result.variant];
             const outputUrl = finalizedResult?.outputUrl || result.outputUrl;
 
@@ -130,24 +170,34 @@ export default function Home() {
                         alt={result.variant}
                         className="aspect-square w-full rounded-md object-cover"
                       />
-                      {isFinalizing && (
+                      {(isFinalizing || isRerolling) && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-md bg-slate-950/60 text-sm font-medium text-white">
                           <span className="h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                          <span>Finalizing...</span>
+                          <span>{isFinalizing ? 'Finalizing...' : 'Re-rolling...'}</span>
                         </div>
                       )}
                     </div>
                     {cardError && <p className="text-sm text-red-600">{cardError}</p>}
-                    {!finalizedResult && (
+                    <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={() => handleFinalize(result.variant)}
-                        disabled={isFinalizing}
-                        className="w-full rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                        onClick={() => handleReroll(result.variant)}
+                        disabled={isRerolling || isFinalizing}
+                        className="flex-1 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
                       >
-                        Finalize
+                        🔄 Re-roll
                       </button>
-                    )}
+                      {!finalizedResult && (
+                        <button
+                          type="button"
+                          onClick={() => handleFinalize(result.variant)}
+                          disabled={isFinalizing || isRerolling}
+                          className="flex-1 rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                        >
+                          Finalize
+                        </button>
+                      )}
+                    </div>
                   </>
                 ) : (
                   <p className="text-sm text-red-600">{result.error}</p>
