@@ -43,7 +43,7 @@ const serviceImages = [
 
 export default function ServicesMarquee() {
   return (
-    <section className="relative overflow-hidden bg-black py-24 text-white">
+    <section className="relative overflow-hidden bg-black pb-24 pt-24 text-white">
       <div className="relative z-10 mx-auto mb-16 max-w-6xl px-6 lg:px-12">
         <p className="text-sm uppercase tracking-[0.2em] text-[#ff5c73]">What We Do</p>
         <h2 className="mt-4 text-4xl font-semibold leading-[1.05] lg:text-6xl">Services.</h2>
