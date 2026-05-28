@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import ContentProHero from '../components/ContentProHero.jsx';
+import ServicesMarquee from '../components/ServicesMarquee.jsx';
 import UploadBox from '../components/UploadBox.jsx';
 import { generateVariant } from '../services/imageService.js';
 
@@ -116,6 +117,7 @@ export default function Home() {
   return (
     <>
       <ContentProHero />
+      <ServicesMarquee />
       <main
         id="generator"
         className="mx-auto flex min-h-screen max-w-3xl scroll-mt-6 flex-col justify-center gap-6 px-6 py-12"
