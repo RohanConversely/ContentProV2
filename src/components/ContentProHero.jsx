@@ -59,7 +59,7 @@ const rotatingKeywords = [
   },
 ];
 
-export default function ContentProHero() {
+export default function ContentProHero({ onSignupComplete }) {
   const [keywordIndex, setKeywordIndex] = useState(0);
   const [isSignupOpen, setIsSignupOpen] = useState(false);
   const activeKeyword = rotatingKeywords[keywordIndex];
@@ -191,7 +191,14 @@ export default function ContentProHero() {
                 </button>
               </div>
 
-              <form className="mt-6 space-y-4" onSubmit={(event) => event.preventDefault()}>
+              <form
+                className="mt-6 space-y-4"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setIsSignupOpen(false);
+                  onSignupComplete?.();
+                }}
+              >
                 <label className="block">
                   <span className="text-xs font-medium uppercase tracking-[0.14em] text-white/50">Name</span>
                   <input

@@ -1,3 +1,5 @@
+import { motion } from 'framer-motion';
+
 const steps = [
   {
     number: '01',
@@ -16,6 +18,33 @@ const steps = [
   },
 ];
 
+const container = {
+  hidden: {},
+  show: {
+    transition: {
+      staggerChildren: 0.15,
+      delayChildren: 0.1,
+    },
+  },
+};
+
+const item = {
+  hidden: {
+    opacity: 0,
+    y: 40,
+    filter: 'blur(6px)',
+  },
+  show: {
+    opacity: 1,
+    y: 0,
+    filter: 'blur(0px)',
+    transition: {
+      duration: 0.6,
+      ease: [0.16, 1, 0.3, 1],
+    },
+  },
+};
+
 export default function HowItWorks() {
   return (
     <section className="relative bg-black py-28 text-white">
@@ -27,18 +56,26 @@ export default function HowItWorks() {
           </h2>
         </div>
 
-        <div className="grid gap-8 md:grid-cols-3">
+        <motion.div
+          variants={container}
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: '-100px' }}
+          className="grid gap-8 md:grid-cols-3"
+        >
           {steps.map((step) => (
-            <div
+            <motion.div
               key={step.number}
+              variants={item}
+              whileHover={{ scale: 1.03 }}
               className="group relative rounded-2xl border border-white/10 bg-white/[0.02] p-6 transition hover:bg-white/[0.04]"
             >
               <span className="text-5xl font-semibold text-white/30">{step.number}</span>
               <h3 className="mt-6 text-xl font-semibold">{step.title}</h3>
               <p className="mt-2 text-white/60">{step.desc}</p>
-            </div>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       </div>
     </section>
   );

@@ -5,10 +5,14 @@ import { Button } from './button.jsx';
 import { cn } from '../../lib/utils.js';
 import { BorderTrail } from './border-trail.jsx';
 
-export function Pricing() {
+export function Pricing({ onSignup }) {
   return (
-    <section className="relative overflow-hidden bg-black py-24 text-white">
-      <div id="pricing" className="mx-auto w-full max-w-6xl space-y-5 px-4">
+    <section className="relative overflow-hidden bg-gradient-to-b from-black via-[#050814] to-[#071a2f] py-24 text-white">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_70%_120%,rgba(90,140,255,0.25),transparent_60%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_100%,rgba(30,80,200,0.15),transparent_60%)]" />
+      <div className="pointer-events-none absolute left-0 top-0 h-32 w-full bg-gradient-to-b from-black to-transparent" />
+
+      <div id="pricing" className="relative z-10 mx-auto w-full max-w-6xl space-y-5 px-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -45,7 +49,7 @@ export function Pricing() {
             viewport={{ once: true }}
             className="mx-auto w-full max-w-2xl space-y-2"
           >
-            <div className="relative grid border border-white/10 bg-black p-4 md:grid-cols-2">
+            <div className="relative grid border border-white/10 bg-black/60 p-4 md:grid-cols-2">
               <PlusIcon className="absolute -left-3 -top-3 size-5.5 text-white/40" />
               <PlusIcon className="absolute -right-3 -top-3 size-5.5 text-white/40" />
               <PlusIcon className="absolute -bottom-3 -left-3 size-5.5 text-white/40" />
@@ -71,7 +75,15 @@ export function Pricing() {
                     <span>/month</span>
                   </div>
                   <Button className="w-full" variant="outline" asChild>
-                    <a href="#">Start Your Journey</a>
+                    <a
+                      href="/generator"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        onSignup?.();
+                      }}
+                    >
+                      Start Your Journey
+                    </a>
                   </Button>
                 </div>
               </div>
@@ -102,7 +114,15 @@ export function Pricing() {
                     <span>/month</span>
                   </div>
                   <Button className="w-full" asChild>
-                    <a href="#">Get Started Now</a>
+                    <a
+                      href="/generator"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        onSignup?.();
+                      }}
+                    >
+                      Get Started Now
+                    </a>
                   </Button>
                 </div>
               </div>
