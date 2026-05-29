@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import UploadBox from '../components/UploadBox.jsx';
-import { generateVariant } from '../services/imageService.js';
+import { generateVariant } from '@ai-services/imageService.js';
 
 export default function Generator() {
   const VARIANTS = ['white_background', 'professional', 'with_model', 'with_box'];
