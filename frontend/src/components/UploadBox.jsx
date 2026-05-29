@@ -56,32 +56,32 @@ export default function UploadBox({ onUploadComplete }) {
   }
 
   return (
-    <div className="rounded-lg border border-dashed border-slate-300 p-6">
+    <div className="rounded-xl border border-dashed border-white/20 bg-white/5 p-6">
       <label className="block">
-        <span className="block text-sm font-medium text-slate-900">Product image</span>
+        <span className="block text-sm font-medium text-white">Product image</span>
         <input
           type="file"
           accept="image/jpeg,image/png"
           onChange={handleFileChange}
-          className="mt-4 block w-full text-sm text-slate-700 file:mr-4 file:rounded-md file:border-0 file:bg-slate-950 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-slate-800"
+          className="mt-4 block w-full text-sm text-white/70 file:mr-4 file:rounded-lg file:border-0 file:bg-[#9db8ff] file:px-4 file:py-2 file:text-sm file:font-medium file:text-black hover:file:bg-[#8da7ef]"
         />
       </label>
       {selectedFile && (
-        <span className="mt-3 block text-sm text-slate-600">Selected: {selectedFile.name}</span>
+        <span className="mt-3 block text-sm text-white/60">Selected: {selectedFile.name}</span>
       )}
       {previewUrl && (
         <img
           src={previewUrl}
           alt="Selected product preview"
-          className="mt-4 max-h-72 rounded-md border border-slate-200 object-contain"
+          className="mt-4 max-h-72 rounded-lg border border-white/10 object-contain"
         />
       )}
-      {errorMessage && <p className="mt-3 text-sm text-red-600">{errorMessage}</p>}
+      {errorMessage && <p className="mt-3 text-sm text-red-400">{errorMessage}</p>}
       <button
         type="button"
         onClick={handleUpload}
         disabled={!selectedFile || isUploading}
-        className="mt-5 rounded-md bg-slate-950 px-5 py-2.5 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+        className="mt-5 rounded-lg bg-[#9db8ff] px-5 py-2.5 text-sm font-medium text-black transition-all hover:bg-[#8da7ef] disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40"
       >
         {isUploading ? 'Uploading...' : 'Upload'}
       </button>
