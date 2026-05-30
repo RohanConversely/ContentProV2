@@ -187,14 +187,26 @@ const TEMPLATE_CATALOGUE = {
         { id: "hf_bb_08", label: "White Background Clean", thumbnail: "https://picsum.photos/seed/hf_bb_08/400/400" },
       ],
       "Living Decor": [
-        { id: "hf_ld_01", label: "Sofa Styled Hero", thumbnail: "https://picsum.photos/seed/hf_ld_01/400/400" },
-        { id: "hf_ld_02", label: "Cushion Flat Lay", thumbnail: "https://picsum.photos/seed/hf_ld_02/400/400" },
-        { id: "hf_ld_03", label: "Curtain Window Light", thumbnail: "https://picsum.photos/seed/hf_ld_03/400/400" },
-        { id: "hf_ld_04", label: "Rug Room Context", thumbnail: "https://picsum.photos/seed/hf_ld_04/400/400" },
-        { id: "hf_ld_05", label: "Texture Detail Closeup", thumbnail: "https://picsum.photos/seed/hf_ld_05/400/400" },
-        { id: "hf_ld_06", label: "Earthy Tones Vignette", thumbnail: "https://picsum.photos/seed/hf_ld_06/400/400" },
-        { id: "hf_ld_07", label: "Festival Home Styling", thumbnail: "https://picsum.photos/seed/hf_ld_07/400/400" },
-        { id: "hf_ld_08", label: "White Background Clean", thumbnail: "https://picsum.photos/seed/hf_ld_08/400/400" },
+        // Group 1 — Lifestyle / With Model
+        { id: "hf_ld_01", label: "Lifestyle 1", thumbnail: "/template/home-furnishing/living-decore/lifestyle_1.jpg", group: "With Model" },
+        { id: "hf_ld_02", label: "Lifestyle 2", thumbnail: "/template/home-furnishing/living-decore/lifestyle_2.jpg", group: "With Model" },
+        { id: "hf_ld_03", label: "Lifestyle 3", thumbnail: "/template/home-furnishing/living-decore/lifestyle_3.jpg", group: "With Model" },
+        { id: "hf_ld_04", label: "Lifestyle 4", thumbnail: "/template/home-furnishing/living-decore/lifestyle_4.jpg", group: "With Model" },
+        // Group 2 — White Background
+        { id: "hf_ld_05", label: "White BG 1", thumbnail: "/template/home-furnishing/living-decore/white_bg_1.jpg", group: "White Background" },
+        { id: "hf_ld_06", label: "White BG 2", thumbnail: "/template/home-furnishing/living-decore/white_bg_2.jpg", group: "White Background" },
+        { id: "hf_ld_07", label: "White BG 3", thumbnail: "/template/home-furnishing/living-decore/white_bg_3.jpg", group: "White Background" },
+        { id: "hf_ld_08", label: "White BG 4", thumbnail: "/template/home-furnishing/living-decore/white_bg_4.jpg", group: "White Background" },
+        // Group 3 — Professional Styled
+        { id: "hf_ld_09", label: "Professional 1", thumbnail: "/template/home-furnishing/living-decore/professional_1.jpg", group: "Professional" },
+        { id: "hf_ld_10", label: "Professional 2", thumbnail: "/template/home-furnishing/living-decore/professional_2.jpg", group: "Professional" },
+        { id: "hf_ld_11", label: "Professional 3", thumbnail: "/template/home-furnishing/living-decore/professional_3.jpg", group: "Professional" },
+        { id: "hf_ld_12", label: "Professional 4", thumbnail: "/template/home-furnishing/living-decore/professional_4.jpg", group: "Professional" },
+        // Group 4 — Flat Lay / Scale
+        { id: "hf_ld_13", label: "Flat Lay 1", thumbnail: "/template/home-furnishing/living-decore/flatlay_1.jpg", group: "Flat Lay" },
+        { id: "hf_ld_14", label: "Flat Lay 2", thumbnail: "/template/home-furnishing/living-decore/flatlay_2.jpg", group: "Flat Lay" },
+        { id: "hf_ld_15", label: "Flat Lay 3", thumbnail: "/template/home-furnishing/living-decore/flatlay_3.jpg", group: "Flat Lay" },
+        { id: "hf_ld_16", label: "Flat Lay 4", thumbnail: "/template/home-furnishing/living-decore/flatlay_4.jpg", group: "Flat Lay" },
       ],
       "Table Linens": [
         { id: "hf_tl_01", label: "Dining Table Set Hero", thumbnail: "https://picsum.photos/seed/hf_tl_01/400/400" },
@@ -296,10 +308,45 @@ export default function Generator() {
   const [brandName, setBrandName] = useState('');
   const [brandWebsite, setBrandWebsite] = useState('');
   const [scratchMode, setScratchMode] = useState(false);
+  const [kycData, setKycData] = useState(null);
+  const [isGeneratingKyc, setIsGeneratingKyc] = useState(false);
+  const [kycError, setKycError] = useState('');
 
   const activeTemplates = (industry && category)
     ? TEMPLATE_CATALOGUE[industry]?.[category] ?? []
     : [];
+
+  async function handleGenerateKyc() {
+    if (!uploadedImageUrl) {
+      setKycError('Please upload a product image first');
+      return;
+    }
+
+    setIsGeneratingKyc(true);
+    setKycError('');
+    setKycData(null);
+
+    try {
+      const { generateKycOnly } = await import('@ai-services/imageService.js');
+      const result = await generateKycOnly(uploadedImageUrl, {
+        productName,
+        brandName,
+        brandWebsite,
+        category,
+        description,
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to generate KYC');
+      }
+
+      setKycData(result.kyc);
+    } catch (error) {
+      setKycError(error.message);
+    } finally {
+      setIsGeneratingKyc(false);
+    }
+  }
 
   async function handleGenerate() {
     if (!uploadedImageUrl) return;
@@ -552,9 +599,42 @@ export default function Generator() {
                     </div>
                   </div>
 
-                  <button className="w-full rounded-xl bg-[#9db8ff] py-3 font-semibold text-black transition hover:bg-white">
-                    Generate KYC
+                  <button
+                    onClick={handleGenerateKyc}
+                    disabled={isGeneratingKyc || !uploadedImageUrl}
+                    className="w-full rounded-xl bg-[#9db8ff] py-3 font-semibold text-black transition hover:bg-white disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40"
+                  >
+                    {isGeneratingKyc ? 'Analyzing...' : 'Generate KYC'}
                   </button>
+
+                  {kycError && <p className="text-sm text-red-400">{kycError}</p>}
+
+                  {kycData && (
+                    <div className="space-y-4 rounded-xl border border-green-500/20 bg-green-500/5 p-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-green-400">✓</span>
+                        <p className="text-sm font-semibold text-green-400">KYC Analysis Complete</p>
+                      </div>
+                      <div className="space-y-3 text-sm">
+                        <div>
+                          <p className="font-medium text-white/70">Product:</p>
+                          <p className="text-white">{kycData.product_basic_kyc?.product_name || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-white/70">Category:</p>
+                          <p className="text-white">{kycData.product_basic_kyc?.category || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-white/70">Description:</p>
+                          <p className="text-white/90">{kycData.product_basic_kyc?.product_description || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-white/70">Primary Keywords:</p>
+                          <p className="text-white/90">{kycData.keyword_oriented_kyc?.primary_keywords?.join(', ') || 'N/A'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
