@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { generateVariant, generateWithQueue } from '@ai-services/imageService.js';
 import Results from './Results.jsx';
 import { fetchCredits, deductCredits } from '../lib/creditsService.js';
@@ -273,6 +274,7 @@ function ProfileMenu({ onCollections, onSignOut, userInitial }) {
 }
 
 export default function Generator() {
+  const navigate = useNavigate();
 
   const { isClientMode, config: clientConfig, setCode, clearCode } = useClientMode();
 
@@ -655,6 +657,15 @@ export default function Generator() {
 
         {/* Right: Credits + Profile */}
         <div className="ml-auto flex items-center gap-4">
+          {user && (
+            <button
+              type="button"
+              onClick={() => navigate('/batch')}
+              className="text-[11px] tracking-[0.15em] uppercase font-['DM_Sans'] text-[#666] hover:text-[#a78bfa] transition-colors border border-transparent hover:border-[#a78bfa]/30 px-3 py-1.5"
+            >
+              Batch Upload
+            </button>
+          )}
           {/* Credit balance */}
           <div className="flex items-center gap-1.5 border border-[#1e1e1e] rounded-full px-3 py-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-[#c9a96e] inline-block" />

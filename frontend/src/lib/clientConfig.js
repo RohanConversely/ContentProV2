@@ -43,5 +43,5 @@ export function useClientMode() {
     setClientCodeState(null);
   }
 
-  return { isClientMode, config, setCode, clearCode };
+  return { isClientMode, config, clientCode, setCode, clearCode };
 }

@@ -379,9 +379,20 @@ SET DETAIL CONSISTENCY: Both pieces must receive equal detail rendering. Earring
       ? `Start with the close-up body part (${SMALL_JEWELRY_BODY_PART[smallJewelryType] || 'relevant body part'}) and the product worn on it, describe the tight framing and lighting. No unnecessary body parts, no environment.`
       : 'Start with the model and their interaction with the product, end with the environment and lighting.';
 
+    const jewelryDrapeBlock = isJewellery ? `
+
+JEWELRY MATERIAL BEHAVIOR (non-negotiable):
+The jewelry should look natural and true to its material — not stiff, rigid, or plastic. Reproduce the physical behavior of the material:
+- Chain necklaces → drape naturally with slight gravity, links flow freely
+- Fabric/thread/beaded bracelets → soft, slightly loose on wrist, natural drape, not rigid like a bangle
+- Metal bangles → solid and rigid is correct, slight reflection on skin
+- Beaded jewelry → individual beads have slight movement, string has natural curve
+- Delicate chains → fine and light, catching light naturally
+- Coin/charm jewelry → charms hang at natural angles with slight sway` : '';
+
     systemMessage = `You are a professional advertising photographer. Your job is to write a precise shot description for a lifestyle photo that MUST include a real human model physically interacting with this product.
 
-NON-NEGOTIABLE: A real human being must appear in this image — hands, arms, or full body. ${modelInteractionDirective}${isJewellery ? '\n- Earrings are worn on ears only — never interpret earrings as rings worn on fingers. Identify each accessory type precisely: necklace=neck, earrings=ears, bracelet=wrist, ring=finger. Do not substitute one accessory type for another.' : ''}${smallJewelryNonNegotiable}
+NON-NEGOTIABLE: A real human being must appear in this image — hands, arms, or full body. ${modelInteractionDirective}${isJewellery ? '\n- Earrings are worn on ears only — never interpret earrings as rings worn on fingers. Identify each accessory type precisely: necklace=neck, earrings=ears, bracelet=wrist, ring=finger. Do not substitute one accessory type for another.\n- Jewelry must look physically natural on the body — not like a 3D render or sticker placed on top. It should interact with skin, light, and gravity naturally. Avoid over-rigidity unless the piece is genuinely a solid metal cuff or bangle.' : ''}${smallJewelryNonNegotiable}${jewelryDrapeBlock}
 
 PRODUCT FIDELITY (non-negotiable): ${PRODUCT_FIDELITY_NON_NEGOTIABLE}
 

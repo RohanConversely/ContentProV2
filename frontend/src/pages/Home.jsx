@@ -1,3 +1,4 @@
+
 import { useNavigate } from 'react-router-dom';
 import ContentProHero from '../components/ContentProHero.jsx';
 import HowItWorks from '../components/HowItWorks.jsx';
