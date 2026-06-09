@@ -1,8 +1,0 @@
-[
-  {"key":"hero","label":"Hero","prompt":"Create a premium front-angle hero shot with the full product clearly visible against a clean editorial background. Preserve exact shape, color, material, branding, and construction details."},
-  {"key":"lifestyle","label":"Lifestyle","prompt":"Create a premium lifestyle image with tasteful fashion styling props and a polished editorial setting. Keep the product fully visible and unchanged in design."},
-  {"key":"wearable","label":"Wearable","prompt":"Create a wearable editorial shot with the product naturally styled on a model. Preserve exact product proportions, construction, branding, and visible detailing."},
-  {"key":"wearable_ethnic","label":"Wearable ethnic","prompt":"Create a second wearable composition with a different styling direction and premium fashion context. Keep the product clearly visible and strictly faithful to the reference."},
-  {"key":"jewellery_box","label":"Jewellery Box","prompt":"Create a premium product-focused composition using props or display surfaces that elevate the product while keeping it fully visible and unchanged."},
-  {"key":"close_detail","label":"Close Detail","prompt":"Create a clean close-detail shot that highlights texture, stitching, finish, and craftsmanship without changing any product details."}
-]

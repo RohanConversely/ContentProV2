@@ -1,8 +1,0 @@
-[
-  {"key":"hero","label":"Hero","prompt":"Create a premium hero shot with the full product clearly visible on a clean luxury background. Preserve exact packaging, label layout, colors, finish, cap, pump, and branding."},
-  {"key":"lifestyle","label":"Lifestyle","prompt":"Create a polished beauty editorial composition with tasteful supporting props and a premium vanity or skincare context. Keep the product fully visible and unchanged."},
-  {"key":"wearable","label":"Wearable","prompt":"Create a realistic in-use or contextual composition when applicable, while preserving the exact packaging and branding details of the product."},
-  {"key":"wearable_ethnic","label":"Wearable ethnic","prompt":"Create a second premium beauty setup with different props and angle variation. Keep the product clearly visible and strictly faithful to the reference."},
-  {"key":"jewellery_box","label":"Jewellery Box","prompt":"Create a premium product-first composition with refined surfaces and minimal beauty props. Preserve exact packaging geometry and branding layout."},
-  {"key":"close_detail","label":"Close Detail","prompt":"Create a detail-focused close shot highlighting packaging material, finish, and applicator details without changing any branding or structure."}
-]

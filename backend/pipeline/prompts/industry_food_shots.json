@@ -1,8 +1,0 @@
-[
-  {"key":"hero","label":"Hero","prompt":"Create a premium hero image with the full packaged food or beverage product clearly visible on a clean background. Preserve exact packaging, label design, branding, colors, and form factor."},
-  {"key":"lifestyle","label":"Lifestyle","prompt":"Create a styled serving or kitchen context with tasteful food-related props. Keep the product fully visible and preserve exact packaging and branding details."},
-  {"key":"wearable","label":"Wearable","prompt":"Create a realistic in-use or serving context where applicable, while preserving exact product packaging, labeling, and material appearance."},
-  {"key":"wearable_ethnic","label":"Wearable ethnic","prompt":"Create a second contextual composition with a different prop setup and angle variation. Keep the product clearly visible and unchanged."},
-  {"key":"jewellery_box","label":"Jewellery Box","prompt":"Create a premium product-focused composition with minimal styled props and strong product emphasis. Preserve exact packaging and branding layout."},
-  {"key":"close_detail","label":"Close Detail","prompt":"Create a close detail image that highlights texture, label quality, packaging finish, or ingredient presentation without altering the product."}
-]

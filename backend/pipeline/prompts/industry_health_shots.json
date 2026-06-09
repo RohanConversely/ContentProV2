@@ -1,8 +1,0 @@
-[
-  {"key":"hero","label":"Hero","prompt":"Create a premium hero image with the full product clearly visible on a clean clinical or wellness-oriented background. Preserve exact packaging, branding, color, and structural details."},
-  {"key":"lifestyle","label":"Lifestyle","prompt":"Create a calm wellness composition with tasteful supporting props and a clean environment. Keep the product fully visible and strictly unchanged."},
-  {"key":"wearable","label":"Wearable","prompt":"Create an in-use or contextual wellness composition where applicable, while preserving the exact product design, packaging, and branding."},
-  {"key":"wearable_ethnic","label":"Wearable ethnic","prompt":"Create a second premium wellness setup with a different angle and contextual variation. Keep the product clearly visible and faithful to the reference."},
-  {"key":"jewellery_box","label":"Jewellery Box","prompt":"Create a product-first premium composition with minimal wellness props and strong product emphasis. Preserve exact design and packaging details."},
-  {"key":"close_detail","label":"Close Detail","prompt":"Create a close detail shot highlighting packaging finish, texture, material quality, or applicator details without changing the product."}
-]
