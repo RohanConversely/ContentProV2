@@ -1,8 +1,0 @@
-[
-  {"key":"hero","label":"Hero","prompt":"Create a premium hero image with the full product clearly visible on a clean or performance-oriented background. Preserve exact shape, branding, construction, color, and material details."},
-  {"key":"lifestyle","label":"Lifestyle","prompt":"Create an energetic lifestyle composition with relevant fitness or sports props and a realistic environment. Keep the product fully visible and unchanged."},
-  {"key":"wearable","label":"Wearable","prompt":"Create an in-use performance context where applicable, while preserving exact product proportions, branding, and construction details."},
-  {"key":"wearable_ethnic","label":"Wearable ethnic","prompt":"Create a second contextual sports composition with a distinct angle and prop variation. Keep the product clearly visible and strictly faithful to the reference."},
-  {"key":"jewellery_box","label":"Jewellery Box","prompt":"Create a premium product-focused setup emphasizing performance design and product clarity. Preserve exact structure, finish, and branding."},
-  {"key":"close_detail","label":"Close Detail","prompt":"Create a detail shot highlighting grip, texture, material finish, stitching, or construction quality without altering product details."}
-]
