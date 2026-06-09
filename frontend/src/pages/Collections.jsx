@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { fetchSessions, fetchSessionImages } from '../lib/collectionsService.js';
+import { fetchSessions, fetchSessionImages, deleteSession } from '../lib/collectionsService.js';
 import { getBatchJobs, getBatchItemsWithResults } from '../lib/batchService.js';
 import { supabase } from '../lib/supabase.js';
 import { useClientMode } from '../lib/clientConfig.js';
@@ -152,6 +152,7 @@ export default function Collections({ onBack, userId }) {
   const [activeSession, setActiveSession] = useState(null);
   const [sessionImages, setSessionImages] = useState([]);
   const [loadingImages, setLoadingImages] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   // Batch state
   const [batchJobs, setBatchJobs] = useState([]);
@@ -218,11 +219,19 @@ export default function Collections({ onBack, userId }) {
   }, [activeTab]);
 
   async function openSession(session) {
+    setConfirmDeleteId(null);
     setActiveSession(session);
     setLoadingImages(true);
     const images = await fetchSessionImages(session.id);
     setSessionImages(images);
     setLoadingImages(false);
+  }
+
+  async function handleDelete(sessionId) {
+    const { error } = await deleteSession(sessionId);
+    if (error) { console.error('Delete failed:', error.message); return; }
+    setSessions(prev => prev.filter(s => s.id !== sessionId));
+    setConfirmDeleteId(null);
   }
 
   async function toggleExpand(jobId) {
@@ -369,10 +378,10 @@ export default function Collections({ onBack, userId }) {
           ) : (
             <div className="flex flex-col gap-3">
               {sessions.map(session => (
-                <button
+                <div
                   key={session.id}
+                  className="w-full flex items-center gap-4 bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 hover:border-[#a78bfa]/40 hover:bg-zinc-800 transition-all cursor-pointer"
                   onClick={() => openSession(session)}
-                  className="w-full flex items-center gap-4 bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 hover:border-[#a78bfa]/40 hover:bg-zinc-800 transition-all text-left"
                 >
                   <div className="w-14 h-14 rounded-lg overflow-hidden border border-white/10 flex-shrink-0 bg-zinc-800">
                     {session.thumbnail_url
@@ -392,8 +401,37 @@ export default function Collections({ onBack, userId }) {
                       )}
                     </div>
                   </div>
-                  <span className="text-white/20 text-lg">›</span>
-                </button>
+                  {/* Delete control */}
+                  <div className="flex-shrink-0 flex items-center" onClick={e => e.stopPropagation()}>
+                    {confirmDeleteId === session.id ? (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleDelete(session.id)}
+                          className="text-xs text-red-400 hover:text-red-300 transition-colors font-medium"
+                        >
+                          Delete
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="text-xs text-zinc-500 hover:text-white transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmDeleteId(session.id)}
+                        className="text-white/20 hover:text-red-400 transition-colors p-1"
+                        title="Delete session"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
               ))}
             </div>
           )

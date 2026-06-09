@@ -19,16 +19,16 @@ const STYLE_TRANSFORMATION_DIRECTIVE = {
     'The product is photographed from a dramatic 3/4 aerial angle at 45 degrees horizontal and 40 degrees elevation, placed on deep navy blue velvet fabric with visible fabric texture. Single raking side light from the far left casting long shadows across the velvet. Product is positioned in the left third of the frame with negative space to the right.',
   ],
   flat_lay: [
-    'directly overhead flat lay on warm white linen, soft diffused window light from top, product centered with subtle shadow beneath',
-    'overhead on dark slate stone surface, hard directional light from upper-right, strong shadow extending left',
-    'overhead on blush pink silk fabric with natural wrinkles, soft even studio light, product slightly rotated 20 degrees',
-    'overhead on aged white marble with natural veining, dual softbox lighting, product dead center',
+    'perfectly overhead 90-degree bird\'s-eye flat lay on warm white linen, camera pointing straight down, soft diffused window light, product centered. All straps and appendages lie fully extended and flat in their natural direction.',
+    'perfectly overhead 90-degree bird\'s-eye flat lay on dark slate stone surface, camera pointing straight down, hard directional light from upper-right, strong shadow extending left. All straps and appendages lie fully extended and flat in their natural direction.',
+    'perfectly overhead 90-degree bird\'s-eye flat lay on blush pink silk fabric with natural wrinkles, camera pointing straight down, soft even studio light, product slightly rotated 20 degrees. All straps and appendages lie fully extended and flat in their natural direction.',
+    'perfectly overhead 90-degree bird\'s-eye flat lay on aged white marble with natural veining, camera pointing straight down, dual softbox lighting, product dead center. All straps and appendages lie fully extended and flat in their natural direction.',
   ],
   white_bg: [
-    'pure white seamless background, product perfectly centered floating with soft drop shadow directly beneath, even studio lighting',
-    'pure white background, product at 25 degree clockwise rotation, longer asymmetric shadow to the lower-right',
-    'pure white background, top-down view, product flat with minimal shadow directly underneath, perfectly sharp',
-    'pure white background, product at 3/4 angle with slight perspective, shadow at lower-left',
+    'pure white seamless background, product upright and perfectly centered with soft drop shadow directly beneath, even studio lighting, 15-degree elevated front angle',
+    'pure white seamless background, product upright at 25-degree clockwise rotation, longer asymmetric shadow to the lower-right, even studio lighting',
+    'pure white seamless background, product upright at a slight side angle showing depth and dimension, soft shadow at base, clean studio lighting',
+    'pure white seamless background, product at 3/4 front angle with slight perspective showing depth, upright, shadow at lower-left, professional e-commerce standard',
   ],
 };
 
@@ -227,6 +227,8 @@ If the product has an irregular or unique shape (animal shape, character, sculpt
 
 If the product has engravings, cutouts, patterns, texture, gemstones, or decorative elements — reproduce every single one exactly as shown.
 
+WATCH/DISPLAY FACES: Preserve all text, numerals, hands, and display elements exactly as in the reference. Do not alter, blur, or reimagine the watch face under any circumstances.
+
 The output product must be immediately recognizable as the same item from the input image. If in doubt, err toward MORE detail not less.`;
 
 const VARIANT_SEED_PHRASES = [
@@ -345,6 +347,7 @@ SET DETAIL CONSISTENCY: Both pieces must receive equal detail rendering. Earring
   const smallJewelryType = isSmallJewelryItem(category) || isSmallJewelryItem(brandContext.productName);
 
   const isHomeDecor = /candle|vase|decor|figurine|statue|pot|planter|frame|bowl|tray|diffuser|holder|stand/.test((category || '').toLowerCase());
+  const isWatch = /watch|timepiece|chrono/.test(((category || '') + ' ' + (brandContext.productName || '')).toLowerCase());
 
   if (styleKey === 'with_model') {
     const SMALL_JEWELRY_NON_NEGOTIABLE = {
@@ -507,7 +510,56 @@ PRODUCT FIDELITY (non-negotiable): ${PRODUCT_FIDELITY_NON_NEGOTIABLE}
 Product fidelity: reproduce every design detail exactly — colors, materials, textures, shape.
 
 Output: 2-3 sentences describing the white background setup, the product positioning, and the dimension annotation lines. No bullet points.`;
+  } else if (styleKey === 'flat_lay') {
+    systemMessage = `You are a professional lifestyle product photographer. Write a precise shot description for a perfectly overhead flat lay composition.
+
+CAMERA (non-negotiable): Exactly 90-degree overhead bird's-eye view. Camera points straight down at the surface. This is NOT a 45-degree angle. Zero perspective distortion — the surface appears completely flat in frame.
+
+SURFACE (non-negotiable): Use a styled surface with visible texture — white marble with natural veining, warm linen, dark slate, blush silk, or light wood grain. NOT plain white. Surface texture must be visible around the product.
+
+PRODUCT PLACEMENT:
+- Product is the absolute hero, centered in the composition
+- STRAPS & APPENDAGES (all products): All straps, handles, ties, laces, or flexible appendages must lie fully extended and flat in their natural direction. No overlapping, folding, or tucking. Each component should be clearly visible and separated.
+- STRAP TAIL: The loose strap tail must be fully extended flat and straight, not tucked through the keeper loop or folded over. No part of the strap should overlap or intrude on top of another part.
+${isWatch ? `- WATCH ORIENTATION: Watch must be oriented vertically (12 o'clock at top, 6 o'clock at bottom). Applies to digital watches too. Both straps extend straight up and straight down from the case, lying flat in the same axis as the watch body. Straps must never cross or be perpendicular to the watch case.` : ''}
+
+PROPS: ${isWatch ? 'One subtle prop in a corner — a small crown piece, a folded leather strap swatch, or a minimal piece of jewelry. Must not overlap the watch.' : 'One or two carefully chosen complementary props in a corner — a natural element, minimal accessory, or small decorative object matching the product lifestyle. Must not overlap the hero product.'}
+
+LIGHTING: Soft even overhead lighting. No harsh shadows. Full surface texture must render clearly.
+
+PRODUCT FIDELITY (non-negotiable): ${PRODUCT_FIDELITY_NON_NEGOTIABLE}
+
+Scene for this variant: "${transformationDirective}"
+
+${isJewellery ? `JEWELLERY FIDELITY RULES:
+- Count and describe stones by section — do not generalize ("many stones" is forbidden)
+- Name every structural component you see
+- The output image must look like the same piece photographed in a new studio setup, not a similar piece` : ''}
+
+Output: 2-3 sentences. Start with the surface and strict overhead camera angle, describe the product layout and strap/prop positioning, end with the lighting. No bullet points.`;
+
+  } else if (styleKey === 'white_bg') {
+    systemMessage = `You are a professional product photographer. Write a precise shot description for a clean white background studio product shot.
+
+NON-NEGOTIABLE:
+- Pure white seamless background — no props, no surface texture, no styled surfaces, no marble or linen
+- Product must be upright or at a slight angle — NOT flat, NOT top-down, NOT overhead
+- Camera angle: 15-30 degree elevated front angle, or slight 3/4 angle — professional e-commerce standard
+- No surface materials visible — clean white only with a faint base shadow directly beneath the product
+
+PRODUCT FIDELITY (non-negotiable): ${PRODUCT_FIDELITY_NON_NEGOTIABLE}
+
+Scene for this variant: "${transformationDirective}"
+
+${isJewellery ? `JEWELLERY FIDELITY RULES:
+- Count and describe stones by section — do not generalize ("many stones" is forbidden)
+- Name every structural component you see
+- The output image must look like the same piece photographed in a new studio setup, not a similar piece` : ''}
+
+Output: 2-3 sentences. Start with the product's upright position and angle on the white background, describe the lighting, end with any distinguishing product details. No bullet points.`;
+
   } else {
+    // fallback for any future style keys
     systemMessage = `You are a professional product photographer writing camera-ready shot descriptions.
 
 STEP 1 — PRODUCT INVENTORY (observe the source image precisely):

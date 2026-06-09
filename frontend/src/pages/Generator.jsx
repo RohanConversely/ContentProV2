@@ -300,25 +300,21 @@ export default function Generator() {
       if (prev && val && prev.id === val.id && prev.email === val.email) {
         return prev;
       }
-      console.log('[setUser] changed:', val?.email ?? val);
       return val;
     });
   };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      console.log('[getSession initial]', data.session?.user?.email ?? null);
       setUser(data.session?.user ?? null);
       setAuthReady(true);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('[onAuthStateChange]', event, session?.user?.email ?? null);
       if (event === 'SIGNED_OUT') {
         // 429 rate-limit failures cause false SIGNED_OUT — verify before clearing
         setTimeout(() => {
           supabase.auth.getSession().then(({ data }) => {
-            console.log('[SIGNED_OUT verify]', data.session?.user?.email ?? 'no session');
             if (!data.session) setUser(null);
           });
         }, 2000);
@@ -422,7 +418,6 @@ export default function Generator() {
     if (!primaryImage?.url) return;
 
     const { data: { user: liveUser } } = await supabase.auth.getUser();
-    console.log('[handleGenerate] liveUser?.id:', liveUser?.id);
     if (!liveUser) {
       setErrorMessage('Please sign in to generate images.');
       return;
@@ -467,7 +462,6 @@ export default function Generator() {
         }
       });
       const earned = settled.filter(r => r?.outputUrl).length;
-      console.log('settled:', settled, 'earned:', earned);
       setResults(settled);
       deductCredits(liveUser.id, earned).then(newBal => {
         if (newBal !== false) setCredits(newBal);
@@ -475,7 +469,6 @@ export default function Generator() {
 
       // Save session to Supabase
       const sourceBase64 = await blobUrlToBase64(primaryImage.url);
-      console.log('primaryImage:', primaryImage, 'sourceBase64 (first 100):', sourceBase64?.slice(0, 100));
       saveSession({
         userId: liveUser.id,
         productName,
@@ -537,8 +530,6 @@ export default function Generator() {
     a.download = `${id}.png`;
     a.click();
   }
-
-  console.log('[render] authReady:', authReady, 'user:', user?.email ?? null);
 
   if (!authReady) return <div className="fixed inset-0 bg-[#080808]" />;
   if (!user) return <AuthModal onSuccess={() => {}} />;
