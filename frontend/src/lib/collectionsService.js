@@ -11,7 +11,6 @@ function base64ToBlob(dataUrl) {
 
 async function uploadImage(path, dataUrl) {
   const blob = base64ToBlob(dataUrl);
-  console.log('uploading blob type:', blob.type, 'size:', blob.size);
   const { error } = await supabase.storage
     .from('contentpro-images')
     .upload(path, blob, { upsert: true, contentType: blob.type });
@@ -68,6 +67,14 @@ export async function saveSession({ userId, productName, brandName, sourceImageB
   ]);
 
   return sessionId;
+}
+
+export async function deleteSession(sessionId) {
+  if (!supabase) return { error: new Error('Supabase not configured') };
+  await supabase.from('session_images').delete().eq('session_id', sessionId);
+  const { error } = await supabase.from('sessions').delete().eq('id', sessionId);
+  if (error) return { error };
+  return {};
 }
 
 export async function fetchSessions(userId) {

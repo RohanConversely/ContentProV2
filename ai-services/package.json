@@ -1,0 +1,17 @@
+{
+  "name": "contentpro-batch-worker",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "batchWorker.js",
+  "scripts": {
+    "start": "node batchWorker.js"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.0.0",
+    "openai": "^6.0.0",
+    "dotenv": "^16.0.0"
+  }
+}
