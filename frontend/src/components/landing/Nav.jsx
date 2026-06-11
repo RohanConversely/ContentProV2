@@ -44,7 +44,7 @@ export function Nav() {
 
         <a
           href="/generator"
-          className="hidden sm:inline-flex group items-center gap-2 px-4 py-2 rounded-full bg-lime text-ink text-sm font-medium hover:bg-lime-deep transition-colors"
+          className="hidden sm:inline-flex group items-center gap-2 px-4 py-2 rounded-full bg-[#C9A96E] text-[#080808] text-sm font-medium hover:opacity-90 transition-colors"
         >
           {user ? "Go to App" : "Login"}
           <span className="transition-transform group-hover:translate-x-0.5">→</span>
@@ -91,7 +91,7 @@ export function Nav() {
           <a
             href="/generator"
             onClick={() => setOpen(false)}
-            className="mt-3 mb-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-full bg-lime text-ink text-sm font-medium"
+            className="mt-3 mb-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-full bg-[#C9A96E] text-[#080808] text-sm font-medium"
           >
             {user ? "Go to App →" : "Login →"}
           </a>
