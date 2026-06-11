@@ -16,10 +16,18 @@ load_dotenv(Path(__file__).resolve().parent / ".env")
 
 app = FastAPI(title="ContentPro Batch Service", version="2.0.0")
 
-frontend_url = os.getenv("FRONTEND_URL", "*")
+frontend_url = os.getenv("FRONTEND_URL")
+origins = [
+    "https://content-pro-v2.vercel.app",
+    "http://localhost:5173",
+]
+if frontend_url and frontend_url != "*" and frontend_url not in origins:
+    origins.append(frontend_url)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[frontend_url] if frontend_url != "*" else ["*"],
+    allow_origins=origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
