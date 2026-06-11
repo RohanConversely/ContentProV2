@@ -1,0 +1,96 @@
+Generate EXACTLY 1 photorealistic premium Amazon A+ lifestyle image of the SAME single pet accessory product.
+
+Product types may include:
+- Dog cap
+- Dog toy (plush)
+- Dog harness
+- Dog bandana
+- Dog bed
+
+PRIMARY REQUIREMENT:
+Full product must be completely visible with margin. Any cropped output is INVALID.
+
+STRICT VALIDATION RULE:
+If any part of the product is cropped, hidden, or frame -> regenerate.
+
+INPUT IMAGE = STRICT GEOMETRY + TEXTURE SOURCE
+
+--- CRITICAL DESIGN FIDELITY (ABSOLUTE) ---
+- Reconstruct product EXACTLY from reference image
+- Preserve exact shape, proportions, stitching, seams, and structure
+- Preserve fabric texture (canvas / cotton / plush / padded material)
+- Maintain original colors EXACTLY (no enhancement or grading)
+- Preserve all prints, patterns, graphics, embroidery precisely
+- Maintain realistic softness, folds, and thickness
+
+--- PRODUCT-SPECIFIC LOGIC (AUTO-ADAPT) ---
+
+IF DOG CAP:
+- Maintain curved brim shape and crown structure
+- Preserve fabric stiffness and seam lines
+- Natural wearable orientation (front-facing)
+
+IF DOG TOY (PLUSH):
+- Maintain stuffing volume and softness
+- Preserve limb shapes and symmetry
+- Fabric must look soft and squeezable (not rigid)
+- If the raw image has multiple color options for one toy then show all color options in one generated image
+
+IF DOG HARNESS:
+- Preserve strap thickness, structure, and D-ring placement
+- Maintain realistic wearable form (not flat like cloth)
+- Keep arm openings and chest structure accurate
+
+IF FABRIC ACCESSORY (BANDANA):
+- Preserve folds, drape, and button/snap details
+- Maintain fabric flow and natural gravity behavior
+
+--- OUTPUT STRUCTURE (STRICT - MUST FOLLOW) ---
+- Create a single premium ecommerce lifestyle image for the requested shot type
+- Follow the shot instruction exactly
+- Apply the scene direction consistently
+
+--- DOG MODEL CONTROL ---
+- Use small-to-medium friendly dog (beagle / indie / lab type)
+- Well-groomed, neutral expression
+- Natural pose (no dramatic action)
+- Realistic proportions
+
+--- SCENE SETUP ---
+- Premium indoor home environment
+- Neutral tones (beige / off-white / warm wood)
+- Slightly textured, non-reflective surface
+- Soft grounding shadows
+
+--- CAMERA (STRICT) ---
+- Lens: 50-70mm
+- Natural perspective (no distortion)
+- Medium-wide framing (NO zoom-in)
+
+--- FRAMING (ABSOLUTE - DO NOT VIOLATE) ---
+- Entire product fully visible in the image
+- Maintain 10% margin (minimum 8%)
+- Product must NOT touch edges
+- Occupies 60-65% of frame (max 70%)
+- All edges, seams, and structure visible
+
+--- LIGHTING ---
+- Soft natural daylight
+- Diffused shadows only
+- No harsh highlights
+- Enhance texture depth naturally
+
+--- MATERIAL REALISM ---
+- Visible fabric fibers / plush texture
+- Natural folds and deformation
+- Accurate stitching detail
+- No plastic look
+- No over-sharpening
+
+--- NEGATIVE CONSTRAINTS ---
+- No redesign or modification
+- No color changes
+- No cropping or zooming
+- No duplicate products
+- No text / watermark / branding
+- No unrealistic shadows or reflections

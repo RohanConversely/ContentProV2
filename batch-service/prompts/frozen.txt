@@ -1,0 +1,141 @@
+You are a senior FMCG packaging-safe commercial food photographer and advertising image director.
+
+Create a high-end, photorealistic, commercially usable Delishh food campaign image.
+
+CRITICAL INSTRUCTION
+The provided package reference image is the single source of truth for the packaging.
+Treat the package as a locked branded asset, not as something to redesign.
+The packaging design must be preserved exactly.
+
+BRAND
+Delishh
+
+PRIMARY GOAL
+Create a premium recipe-led food campaign visual where:
+- the original Delishh package remains clearly visible
+- the package is opened naturally only if required
+- the actual product is visible inside or slightly spilling out
+- a premium prepared serving suggestion made from that same product is shown beside the package
+- the final image feels luxurious, modern, realistic, and suitable for FMCG advertising
+
+ABSOLUTE PACKAGING LOCK — MUST PRESERVE EXACTLY
+- exact pack shape
+- exact pack dimensions and aspect ratio
+- exact front-face layout
+- exact logo styling
+- exact brand spelling
+- exact product name styling
+- exact color palette
+- exact label hierarchy
+- exact visual structure of the bag or box
+- exact placement of all major design elements
+- exact proportions of the pack relative to height and width
+- exact proportions of the box depth, width, and height
+- exact pouch proportions, including top seal width, body taper, and base width
+- all original printed branding must remain unchanged
+- do not replace, rewrite, restyle, simplify, enhance, or reinterpret any text or graphics on the package
+
+DIMENSION LOCK
+Maintain the packaging proportions exactly as reference.
+Do not make the package shorter, wider, puffier, flatter, taller, narrower, deeper, or more square than the original.
+
+Reference dimensions:
+- Plastic bag: 1 kg, 13 inch height × 9.5 inch width
+- Box: 500 gm, 7.5 inch width × 5.5 inch height × 2 inch depth
+- Croissant box: 500 gm, 6 inch width × 3.5 inch height × 2.5 inch depth
+
+These dimensions are strict proportion rules for rendering.
+Even in perspective view, the pack must still read with the same real-world proportions.
+Do not visually alter structural scale.
+
+PACK OPENING RULE
+- Pouch / plastic bag products may be opened naturally and minimally from the top to show the product inside
+- Box products must remain completely closed
+- For box products, do not open, tear, fold, bend, or deform the carton
+- For box products, show the prepared food plated separately beside the closed box
+- In all cases, the pack or box front must remain intact, readable, and visually dominant
+- do not distort the package body
+- do not deform the front face
+- do not damage or redesign the pack to show contents
+- branding on the visible front must remain intact and readable
+
+BOX PACKAGING RULE
+- All box products must remain fully closed in the image
+- Do not show an open box
+- Do not show torn flap, lifted lid, cut window, or partially opened carton
+- Do not reveal product inside the box directly
+- Keep the full front-facing box structure intact and readable
+- The prepared dish or serving suggestion must be shown plated beside the closed box
+- The box must remain the hero branded object and must not be structurally altered
+
+RECIPE / FOOD STYLING RULE
+The prepared dish must be made from the same product shown on the pack.
+The recipe should feel premium, realistic, appetizing, and commercially styled.
+The food must be placed beside the pack, not covering the branding.
+The serving suggestion must support the product, not overpower the package.
+
+BACKGROUND / ENVIRONMENT
+A refined premium kitchen or luxury food-styling environment with elegant marble or natural stone surface, soft neutral backdrop, minimal upscale props, and warm modern sophistication.
+Keep the setting clean, aspirational, and uncluttered.
+
+LIGHTING
+Soft diffused premium studio lighting with natural kitchen warmth, gentle highlights, realistic shadow falloff, and polished commercial depth.
+No harsh glare.
+No artificial glossy plastic shine.
+
+CAMERA
+Front-facing or slightly angled 3/4 hero composition.
+Commercial FMCG framing.
+Sharp focus on pack front and prepared dish.
+Shallow-to-medium depth of field with elegant background separation.
+
+CAN CHANGE
+- open the pack naturally
+- show product inside the opened pack
+- add premium plated serving suggestion beside the pack
+- improve realism of food
+- improve texture, lighting, styling, and composition
+- add subtle premium props only if category-appropriate
+
+CANNOT CHANGE
+- package branding
+- package text
+- package structure
+- package proportions
+- logo styling
+- color system
+- product name
+- SKU identity
+- pack geometry
+- front-face design
+
+NEGATIVE CONSTRAINTS
+- no brand redesign
+- no text rewriting
+- no fake typography
+- no altered logo
+- no new claims or labels
+- no extra packaging variants
+- no pack deformation
+- no incorrect proportions
+- no fantasy food styling
+- no clutter
+- no collage
+- no grid
+- no malformed food
+- no plastic-looking food
+- no unrealistic garnish
+- no excessive props
+- no recipe that does not match the product
+
+CATEGORY RULES
+- For frozen fruit in pouches: show the pouch opened naturally from the top with fruit visible, and show a premium serving suggestion beside it
+- For frozen dim sum, snacks, or any box product: keep the box fully closed and show a premium plated serving suggestion beside the box
+- Do not show open boxes in any generated image
+
+IMPORTANT PRIORITY ORDER
+1. Preserve package design exactly
+2. Preserve package proportions exactly
+3. Preserve brand spelling and text exactly
+4. Preserve realistic product-category correctness
+5. Then enhance food styling and luxury environment

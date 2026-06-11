@@ -1,0 +1,86 @@
+Photorealistic premium Amazon A+ lifestyle image of a single cushion placed on a luxury sofa in a modern living room setting.
+
+PRIMARY REQUIREMENT: Full cushion must be completely visible with margin. Any cropped output is invalid.
+
+STRICT VALIDATION RULE:
+If any part of the cushion is cut, hidden, or خارج frame → regenerate.
+
+INPUT IMAGE = STRICT GEOMETRY + TEXTURE SOURCE
+
+--- CRITICAL DESIGN FIDELITY (ABSOLUTE) ---
+- Reconstruct the cushion EXACTLY from the reference image
+- Preserve exact shape, proportions, thickness, and filling volume
+- Maintain edge piping, frills, stitching, seams, and contour precisely
+- Preserve fabric texture (cotton / linen / quilted / embroidered)
+- Maintain exact pattern placement and embroidery details
+- Preserve original colors EXACTLY (no enhancement or grading)
+- Maintain natural cushion puffiness and softness (no flattening)
+
+--- SCENE SETUP (LUXURY LIVING ROOM) ---
+- Place cushion on a premium upholstered sofa (beige / cream / neutral fabric)
+- Sofa must look soft, clean, and high-end
+- Cushion slightly leaning against backrest (natural placement)
+
+OPTIONAL PROPS (VERY SUBTLE):
+- soft throw blanket (folded, neutral tone)
+- minimal background blur
+- no clutter
+
+- Background must remain soft, warm, and secondary
+- Environment should feel calm, airy, and premium
+
+MATCH COLOR:
+
+Use the uploaded reference image as the strict source of truth.
+
+Match the product color exactly to the original reference image.
+Preserve the exact dusty muted pink base fabric color, the exact brown floral print color, and the exact pink-and-white ruffle stripe colors.
+
+Do not change hue, saturation, brightness, warmth, undertone, or contrast of the product.
+Do not make the product more peach, coral, warm pink, bright pink, or pastel than the original.
+Do not apply color enhancement, color grading, white balance correction, relighting-based recoloring, or tone beautification to the product.
+
+The environment lighting may be premium and soft, but the product itself must retain the exact original color values as seen in the reference image.
+If lighting affects perception, keep the product color visually identical to the source image rather than stylizing it.
+
+--- CAMERA (STRICT — MATCH REFERENCE STYLE) ---
+- Front-oblique product angle (NOT top view, NOT flat)
+- Camera tilt: 10° to 20° downward
+
+- ORIENTATION (CRITICAL):
+  - Cushion facing camera directly (front face visible)
+  - Slight perspective from one side (very mild depth)
+  - Keep cushion centered but slightly offset for natural feel
+
+- Camera height aligned with cushion center
+- Lens: 50–85mm equivalent (portrait product feel)
+- Natural perspective (no distortion)
+
+--- FRAMING (ABSOLUTE — DO NOT VIOLATE) ---
+- Entire cushion MUST be fully visible
+- Maintain 10–15% margin on all sides
+- Cushion must NOT touch frame edges
+- Product occupies 55–65% of frame
+- Maintain clean negative space (bottom or side for text placement)
+- No zoom-in or tight cropping
+
+--- LIGHTING (SOFT LUXURY STYLE) ---
+- Soft natural daylight (window-style from side)
+- Warm neutral tone lighting
+- Diffused shadows only (no harsh edges)
+- Gentle highlights to enhance fabric texture and embroidery
+
+--- MATERIAL REALISM ---
+- Visible fabric weave / stitching detail
+- Natural folds and soft compression where cushion touches sofa
+- Realistic fabric response (no plastic look)
+- No over-sharpening
+
+--- NEGATIVE CONSTRAINTS (STRICT) ---
+- No redesign or pattern change
+- No color changes
+- No additional textures
+- No cropping or zooming
+- No duplicate cushions
+- No text / watermark / branding
+- No unrealistic shadows or reflections

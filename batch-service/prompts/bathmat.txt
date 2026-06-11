@@ -1,0 +1,72 @@
+
+Photorealistic premium Amazon A+ lifestyle image of a single bathmat in a luxury modern bathroom setup.
+
+PRIMARY REQUIREMENT: Full bathmat must be completely visible with margin. Any cropped output is invalid.
+
+STRICT VALIDATION RULE:
+If any part of the bathmat is cut, outside frame, or distorted → regenerate.
+
+INPUT IMAGE = STRICT GEOMETRY + TEXTURE SOURCE
+
+--- CRITICAL DESIGN FIDELITY (ABSOLUTE) ---
+- Reconstruct the bathmat EXACTLY from the reference image
+- Preserve exact silhouette, proportions, and contour (including irregular edges)
+- Maintain tufted / chenille / fabric structure exactly (no smoothing)
+- Preserve pattern placement, segmentation, and design layout precisely
+- Maintain original colors EXACTLY (no enhancement or grading)
+- Preserve pile height, texture density, and fiber depth
+
+--- SCENE SETUP (LUXURY BATHROOM) ---
+- High-end modern bathroom environment
+- Matte neutral flooring (beige / ivory / soft stone texture)
+- Curved or minimal bathtub in background (soft focus)
+- Optional elements:
+  - rolled white towels
+  - subtle green plant
+- Environment must feel premium, minimal, and clean
+- Background must remain soft and secondary
+
+--- CAMERA (STRICT — MATCH REFERENCE ANGLE) ---
+- Top-oblique luxury product angle (NOT flat top view)
+- Camera tilt: 35° to 50° downward
+
+- ORIENTATION (CRITICAL):
+  - Bathmat placed diagonally (not straight horizontal)
+  - One side slightly closer to camera (foreground)
+  - Opposite side slightly farther (background)
+  - Perspective should feel natural and premium
+
+- Camera positioned slightly off-center (NOT symmetrical)
+- Lens: 50–70mm equivalent
+- Natural perspective (no distortion)
+
+--- FRAMING (ABSOLUTE — DO NOT VIOLATE) ---
+- Entire bathmat MUST be fully visible
+- Maintain 10–15% margin around all sides
+- Bathmat must NOT touch image edges
+- Product occupies ~60–70% of frame
+- Maintain clean negative space (especially one side for text placement)
+- No zoom-in or tight cropping
+
+--- LIGHTING (LUXURY STYLE) ---
+- Soft natural daylight (window-style from side/top)
+- Diffused shadows (no harsh edges)
+- Gentle highlights to enhance texture depth
+- Clean, airy, premium lighting feel
+
+--- MATERIAL REALISM ---
+- Ultra-detailed fiber texture visible
+- Natural fabric softness and depth
+- Micro-shadows between fibers
+- No plastic-like rendering
+- No over-sharpening
+
+--- NEGATIVE CONSTRAINTS (STRICT) ---
+- No redesign or reinterpretation
+- No color changes
+- No additional patterns
+- No cropping or zooming
+- No duplicate mats
+- No text / watermark / branding
+- No unrealistic reflections or shadows
+- No change in product design and no product should be distored or cut in any way in the image

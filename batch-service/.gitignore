@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+web_uploads/
+output/
+kyc_cache/
+.env

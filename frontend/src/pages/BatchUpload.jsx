@@ -1,26 +1,16 @@
 import { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import JSZip from 'jszip';
 import Papa from 'papaparse';
 import { supabase } from '../lib/supabase.js';
-import { fetchCredits } from '../lib/creditsService.js';
-import { uploadBatchImage, createBatchJob } from '../lib/batchService.js';
+import { fetchCredits, deductCredits } from '../lib/creditsService.js';
+import { createBatchJob, submitBatchToFastAPI, pollBatchStatus, triggerBatchDownload } from '../lib/batchService.js';
 import { useClientMode } from '../lib/clientConfig.js';
 
-// Reuse the same industry/category map from Generator
 const STYLE_AVAILABILITY = {
-  "Home Furnishing": {
-    "Living Decor": [], "Bed & Bath": [], "Table Linens": [],
-  },
-  "Cosmetics": {
-    "Fragrances & Essential Oils": [], "Haircare & Treatment": [], "Skincare & Wellness": [],
-  },
-  "Apparels": {
-    "Kids Wear": [], "Men": [], "Women": [], "Sustainable & Handlooms": [],
-  },
-  "Footwear": {
-    "Active & Casual": [], "Heels, Flats & Loafers": [], "Ethnic — Juttis & Kolhapuri": [],
-  },
+  "Home Furnishing": { "Living Decor": [], "Bed & Bath": [], "Table Linens": [] },
+  "Cosmetics": { "Fragrances & Essential Oils": [], "Haircare & Treatment": [], "Skincare & Wellness": [] },
+  "Apparels": { "Kids Wear": [], "Men": [], "Women": [], "Sustainable & Handlooms": [] },
+  "Footwear": { "Active & Casual": [], "Heels, Flats & Loafers": [], "Ethnic — Juttis & Kolhapuri": [] },
   "Bags & Accessories": { "Wallets, Belts & Scarves": [] },
   "Food & Beverages": { "Fresh Vegetables & Fruits": [], "Frozen Fruits": [] },
   "Handicraft & Export": { "Artisanal Decor & Wall Art": [], "Dining & Kitchen": [] },
@@ -36,6 +26,8 @@ const STYLE_OPTIONS = [
 ];
 
 const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'webp']);
+const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled', 'expired']);
+const POLL_INTERVAL_MS = 5000;
 
 function SectionLabel({ children }) {
   return (
@@ -45,13 +37,15 @@ function SectionLabel({ children }) {
   );
 }
 
-function DropZone({ accept, onFiles, isDragging, setIsDragging, children, className = '' }) {
+function DropZone({ accept, multiple, onFiles, isDragging, setIsDragging, children, className = '' }) {
   const inputRef = useRef(null);
-
   const handleDrop = useCallback((e) => {
     e.preventDefault();
     setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files);
+    const files = Array.from(e.dataTransfer.files).filter(f => {
+      const ext = f.name.split('.').pop().toLowerCase();
+      return IMAGE_EXTS.has(ext);
+    });
     if (files.length) onFiles(files);
   }, [onFiles, setIsDragging]);
 
@@ -70,6 +64,7 @@ function DropZone({ accept, onFiles, isDragging, setIsDragging, children, classN
         ref={inputRef}
         type="file"
         accept={accept}
+        multiple={multiple}
         className="hidden"
         onChange={(e) => { if (e.target.files?.length) onFiles(Array.from(e.target.files)); e.target.value = ''; }}
       />
@@ -79,7 +74,6 @@ function DropZone({ accept, onFiles, isDragging, setIsDragging, children, classN
 
 function StyledSelect({ value, onChange, disabled, children, placeholder }) {
   const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef(null);
   const buttonRef = useRef(null);
   const [openUpward, setOpenUpward] = useState(false);
 
@@ -92,7 +86,6 @@ function StyledSelect({ value, onChange, disabled, children, placeholder }) {
       else options.push({ value: child.props.value, label: child.props.children });
     }
   });
-
   const selectedOption = options.find(o => o.value === value);
 
   function handleToggle() {
@@ -105,7 +98,7 @@ function StyledSelect({ value, onChange, disabled, children, placeholder }) {
   }
 
   return (
-    <div className="relative w-full" ref={dropdownRef}>
+    <div className="relative w-full">
       <button
         type="button"
         ref={buttonRef}
@@ -152,10 +145,9 @@ export default function BatchUpload() {
   const { clientCode } = useClientMode();
 
   // Section 1 — source
-  const [sourceTab, setSourceTab] = useState('zip'); // 'zip' | 'drive'
-  const [zipImages, setZipImages] = useState([]); // [{ filename, file }]
-  const [zipDragging, setZipDragging] = useState(false);
-  const [zipLoading, setZipLoading] = useState(false);
+  const [sourceTab, setSourceTab] = useState('images');
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [imagesDragging, setImagesDragging] = useState(false);
   const [driveLink, setDriveLink] = useState('');
 
   // Section 2 — CSV
@@ -168,42 +160,29 @@ export default function BatchUpload() {
   const [industry, setIndustry] = useState('');
   const [category, setCategory] = useState('');
   const [selectedStyles, setSelectedStyles] = useState(new Set());
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitStatus, setSubmitStatus] = useState(null); // step description shown in button
-  const [successMessage, setSuccessMessage] = useState('');
+  const [sceneBrief, setSceneBrief] = useState('Create a premium ecommerce product image with a clean premium background.');
 
-  // ── ZIP parsing ──────────────────────────────────────────────
-  async function handleZipFiles(files) {
-    const file = files.find(f => f.name.toLowerCase().endsWith('.zip'));
-    if (!file) return;
-    setZipLoading(true);
-    setZipImages([]);
-    try {
-      const zip = await JSZip.loadAsync(file);
-      const found = [];
-      zip.forEach((relativePath, entry) => {
-        if (entry.dir) return;
-        const parts = relativePath.split('/');
-        const filename = parts[parts.length - 1];
-        if (filename.startsWith('.') || filename.startsWith('__')) return;
-        if (parts.some(p => p === '__MACOSX')) return;
-        const ext = filename.split('.').pop().toLowerCase();
-        if (!IMAGE_EXTS.has(ext)) return;
-        found.push({ filename, entry });
-      });
-      const extracted = await Promise.all(
-        found.map(async ({ filename, entry }) => {
-          const blob = await entry.async('blob');
-          const file = new File([blob], filename, { type: `image/${filename.split('.').pop().toLowerCase()}` });
-          return { filename, file };
-        })
-      );
-      setZipImages(extracted);
-    } catch {
-      setZipImages([]);
-    } finally {
-      setZipLoading(false);
-    }
+  // Submission state
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+
+  // Polling state
+  const [pollingJobs, setPollingJobs] = useState([]); // [{ batchId, label, status, counts, downloaded }]
+  const pollTimerRef = useRef(null);
+
+  // ── Image selection ───────────────────────────────────────────
+  function handleImageFiles(files) {
+    const images = files.filter(f => IMAGE_EXTS.has(f.name.split('.').pop().toLowerCase()));
+    if (images.length) setSelectedImages(prev => {
+      const names = new Set(prev.map(f => f.name));
+      return [...prev, ...images.filter(f => !names.has(f.name))];
+    });
+  }
+
+  function removeImage(name) {
+    setSelectedImages(prev => prev.filter(f => f.name !== name));
   }
 
   // ── CSV parsing ──────────────────────────────────────────────
@@ -222,18 +201,14 @@ export default function BatchUpload() {
           setCsvRows([]);
           return;
         }
-        // Normalise keys to lowercase
         const rows = results.data.map(row => {
-          const normalised = {};
-          for (const [k, v] of Object.entries(row)) normalised[k.trim().toLowerCase()] = v;
-          return normalised;
+          const n = {};
+          for (const [k, v] of Object.entries(row)) n[k.trim().toLowerCase()] = v;
+          return n;
         });
         setCsvRows(rows);
       },
-      error: () => {
-        setCsvError('Failed to parse CSV. Please check the file format.');
-        setCsvRows([]);
-      },
+      error: () => { setCsvError('Failed to parse CSV.'); setCsvRows([]); },
     });
   }
 
@@ -241,14 +216,57 @@ export default function BatchUpload() {
   function toggleStyle(key) {
     setSelectedStyles(prev => {
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+      next.has(key) ? next.delete(key) : next.add(key);
       return next;
     });
   }
 
-  // ── Derived values ───────────────────────────────────────────
-  const hasSource = sourceTab === 'zip' ? zipImages.length > 0 : driveLink.trim().length > 0;
+  // ── Polling ──────────────────────────────────────────────────
+  function startPolling(jobs, supabaseJobId) {
+    if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+
+    async function tick(currentJobs) {
+      let allDone = true;
+      const updated = await Promise.all(currentJobs.map(async job => {
+        if (TERMINAL_STATUSES.has(job.status)) return job;
+        try {
+          const data = await pollBatchStatus(job.batchId);
+          const newStatus = data.status || 'unknown';
+          const counts = data.request_counts || {};
+          const isDone = TERMINAL_STATUSES.has(newStatus);
+          if (!isDone) allDone = false;
+
+          if (newStatus === 'completed' && data.output_file_id && !job.downloaded) {
+            try {
+              await triggerBatchDownload(job.batchId, supabaseJobId);
+            } catch {
+              // non-fatal — results may still appear in Supabase
+            }
+            return { ...job, status: newStatus, counts, downloaded: true };
+          }
+          return { ...job, status: newStatus, counts };
+        } catch {
+          allDone = false;
+          return job;
+        }
+      }));
+
+      setPollingJobs(updated);
+
+      if (!allDone) {
+        pollTimerRef.current = setTimeout(() => tick(updated), POLL_INTERVAL_MS);
+      } else {
+        setSubmitStatus('');
+        setSuccessMessage('All batches complete. Check Collections for your results.');
+        setTimeout(() => navigate('/collections'), 2500);
+      }
+    }
+
+    tick(jobs);
+  }
+
+  // ── Submit ───────────────────────────────────────────────────
+  const hasSource = sourceTab === 'images' ? selectedImages.length > 0 : driveLink.trim().length > 0;
   const hasCsv = csvRows.length > 0 && !csvError;
   const hasStyles = selectedStyles.size > 0;
   const estimatedCredits = csvRows.length * selectedStyles.size;
@@ -257,75 +275,85 @@ export default function BatchUpload() {
   async function handleSubmit() {
     setIsSubmitting(true);
     setSuccessMessage('');
-    try {
-      // Step 1: verify auth
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        alert('Please log in to submit a batch job.');
-        return;
-      }
+    setErrorMessage('');
+    setPollingJobs([]);
+    if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
 
-      // Step 2: check credits
+    try {
+      // Step 1: auth
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { alert('Please log in first.'); return; }
+
+      // Step 2: credits gate
+      setSubmitStatus('Checking credits...');
       const balance = await fetchCredits(user.id);
       const required = csvRows.length * selectedStyles.size;
       if (balance < required) {
-        alert(`Insufficient credits. You need ${required} credits but have ${balance}.`);
+        alert(`Insufficient credits. Need ${required}, have ${balance}.`);
         return;
       }
 
-      // Step 3: upload images or map drive rows
-      let uploadedItems = [];
-      if (sourceTab === 'zip') {
-        const total = zipImages.length;
-        for (let i = 0; i < total; i++) {
-          const { filename, file } = zipImages[i];
-          setSubmitStatus(`Uploading ${i + 1} of ${total}...`);
-          const csvRow = csvRows.find(r => r.filename === filename);
-          if (!csvRow) continue;
-          const tempJobId = crypto.randomUUID();
-          const imageUrl = await uploadBatchImage(file, tempJobId);
-          uploadedItems.push({
-            product_name: csvRow.product_name,
-            brand_name: csvRow.brand_name || null,
-            category: csvRow.category || null,
-            image_url: imageUrl,
-            original_filename: filename,
-          });
-        }
-      } else {
-        uploadedItems = csvRows.map(row => ({
-          product_name: row.product_name,
-          brand_name: row.brand_name || null,
-          category: row.category || null,
-          image_url: '',
-          original_filename: row.filename,
-        }));
-      }
+      // Step 3: send images to FastAPI
+      setSubmitStatus('Uploading images to batch service...');
+      const imagesToSend = sourceTab === 'images' ? selectedImages : [];
+      const batchResult = await submitBatchToFastAPI(imagesToSend, {
+        scene_brief: sceneBrief,
+        category: category || 'pets_accessories',
+        completion_window: '24h',
+        input_fidelity: 'low',
+        image_count: 1,
+      });
 
-      // Step 4: create batch job
-      setSubmitStatus('Creating batch job...');
-      const batchJobId = await createBatchJob({
+      const batchIds = batchResult.batch_ids || [];
+      if (!batchIds.length) throw new Error('No batch IDs returned from server.');
+
+      // Step 4: create Supabase job record
+      setSubmitStatus('Creating job record...');
+      const items = csvRows.map(row => ({
+        product_name: row.product_name,
+        brand_name: row.brand_name || null,
+        category: row.category || null,
+        image_url: '',
+        original_filename: row.filename,
+      }));
+
+      const supabaseJobId = await createBatchJob({
         userId: user.id,
         clientCode: clientCode || null,
         styles: [...selectedStyles],
         industry: industry || null,
         category: category || null,
         driveLink: sourceTab === 'drive' ? driveLink : null,
-        items: uploadedItems,
+        items,
+        batchIds,
+        status: 'submitted',
       });
 
-      // Step 5: success
-      setSubmitStatus(null);
-      const queued = uploadedItems.length;
-      setSuccessMessage(`Batch job submitted! ${queued} ${queued === 1 ? 'product' : 'products'} queued. Check Collections for progress.`);
-      setTimeout(() => navigate('/collections'), 2000);
+      // Step 5: deduct credits
+      setSubmitStatus('Deducting credits...');
+      await deductCredits(user.id, required);
+
+      // Step 6: start polling
+      setSubmitStatus('Processing — polling for results...');
+      const jobs = (batchResult.batches || batchIds.map((id, i) => ({ batch_id: id, label: `Batch ${i + 1}/${batchIds.length}` }))).map(b => ({
+        batchId: b.batch_id,
+        label: b.label || b.batch_id,
+        status: b.status || 'validating',
+        counts: {},
+        downloaded: false,
+      }));
+      setPollingJobs(jobs);
+      startPolling(jobs, supabaseJobId);
+
     } catch (err) {
-      setSubmitStatus(null);
-      alert(err.message || 'Submission failed. Please try again.');
+      setErrorMessage(err.message || 'Submission failed.');
+      setSubmitStatus('');
     } finally {
       setIsSubmitting(false);
     }
   }
+
+  const isPolling = pollingJobs.length > 0 && !successMessage;
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-[#aaaaaa] font-['DM_Sans']">
@@ -349,16 +377,14 @@ export default function BatchUpload() {
         <span className="text-[11px] tracking-[0.2em] uppercase text-[#555]">Batch Upload</span>
       </nav>
 
-      {/* PAGE BODY */}
       <div className="pt-14 max-w-3xl mx-auto px-6 py-12 flex flex-col gap-8">
 
-        {/* Page heading */}
         <div className="mb-2">
           <h1 className="font-['Cormorant_Garamond'] text-[32px] font-light text-[#f0ede8]">
             Batch Image Generation
           </h1>
           <p className="text-[13px] text-[#666] mt-1">
-            Upload a ZIP of product images and a CSV of metadata to generate multiple listings at once.
+            Upload product images and a CSV of metadata to generate multiple listings at once.
           </p>
         </div>
 
@@ -366,17 +392,14 @@ export default function BatchUpload() {
         <section className="bg-zinc-900 border border-white/10 p-6">
           <SectionLabel>01 — Product Images Source</SectionLabel>
 
-          {/* Tabs */}
           <div className="flex border-b border-white/10 mb-6">
-            {[['zip', 'Upload ZIP'], ['drive', 'Google Drive Link']].map(([tab, label]) => (
+            {[['images', 'Upload Images'], ['drive', 'Google Drive Link']].map(([tab, label]) => (
               <button
                 key={tab}
                 type="button"
                 onClick={() => setSourceTab(tab)}
                 className={`px-5 py-2.5 text-xs tracking-[0.15em] uppercase font-medium transition-colors border-b-2 -mb-px ${
-                  sourceTab === tab
-                    ? 'border-[#a78bfa] text-[#a78bfa]'
-                    : 'border-transparent text-[#555] hover:text-[#888]'
+                  sourceTab === tab ? 'border-[#a78bfa] text-[#a78bfa]' : 'border-transparent text-[#555] hover:text-[#888]'
                 }`}
               >
                 {label}
@@ -384,57 +407,58 @@ export default function BatchUpload() {
             ))}
           </div>
 
-          {/* ZIP tab */}
-          {sourceTab === 'zip' && (
+          {sourceTab === 'images' && (
             <div>
               <DropZone
-                accept=".zip"
-                onFiles={handleZipFiles}
-                isDragging={zipDragging}
-                setIsDragging={setZipDragging}
+                accept="image/png,image/jpeg,image/webp"
+                multiple
+                onFiles={handleImageFiles}
+                isDragging={imagesDragging}
+                setIsDragging={setImagesDragging}
                 className="py-10 flex flex-col items-center justify-center gap-3"
               >
-                {zipLoading ? (
-                  <span className="text-[#a78bfa] text-xs tracking-widest uppercase animate-pulse">Parsing ZIP...</span>
-                ) : zipImages.length > 0 ? (
+                {selectedImages.length > 0 ? (
                   <>
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
                     </svg>
-                    <span className="text-[#a78bfa] text-sm font-medium">{zipImages.length} images found in ZIP</span>
-                    <span className="text-[#555] text-xs">Click or drop to replace</span>
+                    <span className="text-[#a78bfa] text-sm font-medium">{selectedImages.length} image{selectedImages.length !== 1 ? 's' : ''} selected</span>
+                    <span className="text-[#555] text-xs">Click or drop to add more</span>
                   </>
                 ) : (
                   <>
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
                     </svg>
-                    <span className="text-[#888] text-sm">Drag & drop a ZIP file here, or click to browse</span>
-                    <span className="text-[#444] text-xs">.zip only — images inside will be extracted</span>
+                    <span className="text-[#888] text-sm">Drag & drop images here, or click to browse</span>
+                    <span className="text-[#444] text-xs">PNG, JPG, WEBP</span>
                   </>
                 )}
               </DropZone>
 
-              {zipImages.length > 0 && (
+              {selectedImages.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2 max-h-28 overflow-y-auto">
-                  {zipImages.slice(0, 30).map(({ filename }) => (
+                  {selectedImages.slice(0, 30).map(f => (
                     <span
-                      key={filename}
-                      className="text-[10px] font-['DM_Sans'] text-[#666] bg-[#111] border border-white/5 px-2 py-0.5 truncate max-w-[180px]"
-                      title={filename}
+                      key={f.name}
+                      className="text-[10px] font-['DM_Sans'] text-[#666] bg-[#111] border border-white/5 px-2 py-0.5 flex items-center gap-1.5 max-w-[200px]"
                     >
-                      {filename}
+                      <span className="truncate">{f.name}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); removeImage(f.name); }}
+                        className="text-[#444] hover:text-[#a78bfa] flex-shrink-0"
+                      >×</button>
                     </span>
                   ))}
-                  {zipImages.length > 30 && (
-                    <span className="text-[10px] text-[#555] px-2 py-0.5">+{zipImages.length - 30} more</span>
+                  {selectedImages.length > 30 && (
+                    <span className="text-[10px] text-[#555] px-2 py-0.5">+{selectedImages.length - 30} more</span>
                   )}
                 </div>
               )}
             </div>
           )}
 
-          {/* Drive tab */}
           {sourceTab === 'drive' && (
             <div className="flex flex-col gap-3">
               <input
@@ -445,7 +469,7 @@ export default function BatchUpload() {
                 className="bg-transparent border-b border-[#333] py-3 text-[#f0ede8] text-sm placeholder-[#555] focus:outline-none focus:border-[#a78bfa] transition-colors w-full"
               />
               <p className="text-[11px] text-[#555]">
-                Folder must be set to "Anyone with the link can view"
+                Coming soon — Google Drive ingestion is not yet wired to the batch service.
               </p>
             </div>
           )}
@@ -482,39 +506,30 @@ export default function BatchUpload() {
           </DropZone>
 
           {csvError && (
-            <p className="mt-3 text-[12px] text-red-400 flex items-center gap-2">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-              </svg>
-              {csvError}
-            </p>
+            <p className="mt-3 text-[12px] text-red-400">{csvError}</p>
           )}
 
           {csvRows.length > 0 && !csvError && (
-            <div className="mt-5">
-              <div className="overflow-x-auto">
-                <table className="w-full text-[12px] font-['DM_Sans'] border-collapse">
-                  <thead>
-                    <tr className="border-b border-white/10">
-                      {['Filename', 'Product Name', 'Brand', 'Category'].map(col => (
-                        <th key={col} className="text-left text-[10px] tracking-[0.2em] uppercase text-[#555] pb-2 pr-4 font-medium">
-                          {col}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {csvRows.slice(0, 5).map((row, i) => (
-                      <tr key={i} className="border-b border-white/5 last:border-0">
-                        <td className="py-2 pr-4 text-[#888] truncate max-w-[160px]">{row.filename || '—'}</td>
-                        <td className="py-2 pr-4 text-[#f0ede8] truncate max-w-[180px]">{row.product_name || '—'}</td>
-                        <td className="py-2 pr-4 text-[#888] truncate max-w-[120px]">{row.brand_name || '—'}</td>
-                        <td className="py-2 pr-4 text-[#888] truncate max-w-[140px]">{row.category || '—'}</td>
-                      </tr>
+            <div className="mt-5 overflow-x-auto">
+              <table className="w-full text-[12px] font-['DM_Sans'] border-collapse">
+                <thead>
+                  <tr className="border-b border-white/10">
+                    {['Filename', 'Product Name', 'Brand', 'Category'].map(col => (
+                      <th key={col} className="text-left text-[10px] tracking-[0.2em] uppercase text-[#555] pb-2 pr-4 font-medium">{col}</th>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                  </tr>
+                </thead>
+                <tbody>
+                  {csvRows.slice(0, 5).map((row, i) => (
+                    <tr key={i} className="border-b border-white/5 last:border-0">
+                      <td className="py-2 pr-4 text-[#888] truncate max-w-[160px]">{row.filename || '—'}</td>
+                      <td className="py-2 pr-4 text-[#f0ede8] truncate max-w-[180px]">{row.product_name || '—'}</td>
+                      <td className="py-2 pr-4 text-[#888] truncate max-w-[120px]">{row.brand_name || '—'}</td>
+                      <td className="py-2 pr-4 text-[#888] truncate max-w-[140px]">{row.category || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
               <p className="mt-3 text-[11px] text-[#555]">
                 {csvRows.length} {csvRows.length === 1 ? 'product' : 'products'} loaded
                 {csvRows.length > 5 && ' · showing first 5 rows'}
@@ -523,45 +538,38 @@ export default function BatchUpload() {
           )}
         </section>
 
-        {/* ── SECTION 3: Job Settings + Submit ── */}
+        {/* ── SECTION 3: Job Settings ── */}
         <section className="bg-zinc-900 border border-white/10 p-6">
           <SectionLabel>03 — Job Settings</SectionLabel>
 
-          {/* Industry + Category */}
           <div className="flex gap-6 mb-6">
             <div className="flex-1">
               <p className="text-[10px] tracking-[0.2em] uppercase text-[#555] mb-1">Industry</p>
-              <StyledSelect
-                value={industry}
-                onChange={e => { setIndustry(e.target.value); setCategory(''); }}
-                placeholder="Select industry"
-              >
+              <StyledSelect value={industry} onChange={e => { setIndustry(e.target.value); setCategory(''); }} placeholder="Select industry">
                 <option value="" disabled>Select industry</option>
-                {Object.keys(STYLE_AVAILABILITY).map(ind => (
-                  <option key={ind} value={ind}>{ind}</option>
-                ))}
+                {Object.keys(STYLE_AVAILABILITY).map(ind => <option key={ind} value={ind}>{ind}</option>)}
               </StyledSelect>
             </div>
             <div className="flex-1">
               <p className="text-[10px] tracking-[0.2em] uppercase text-[#555] mb-1">Category</p>
-              <StyledSelect
-                value={category}
-                onChange={e => setCategory(e.target.value)}
-                disabled={!industry}
-                placeholder="Select category"
-              >
+              <StyledSelect value={category} onChange={e => setCategory(e.target.value)} disabled={!industry} placeholder="Select category">
                 <option value="" disabled>Select category</option>
-                {industry && Object.keys(STYLE_AVAILABILITY[industry]).map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
+                {industry && Object.keys(STYLE_AVAILABILITY[industry]).map(cat => <option key={cat} value={cat}>{cat}</option>)}
               </StyledSelect>
             </div>
           </div>
-          <p className="text-[11px] text-[#555] mb-6 -mt-3">
-            Job-level defaults — per-row "category" in CSV overrides these if present.
-          </p>
+          <p className="text-[11px] text-[#555] mb-4 -mt-3">Job-level defaults — per-row "category" in CSV overrides if present.</p>
 
-          {/* Style chips */}
+          <div className="mb-4">
+            <p className="text-[10px] tracking-[0.2em] uppercase text-[#555] mb-2">Scene Brief</p>
+            <textarea
+              value={sceneBrief}
+              onChange={e => setSceneBrief(e.target.value)}
+              rows={2}
+              className="w-full bg-transparent border border-[#222] text-[#f0ede8] text-sm px-3 py-2 resize-none focus:outline-none focus:border-[#444] font-['DM_Sans'] placeholder-[#555]"
+            />
+          </div>
+
           <div className="mb-6">
             <p className="text-[10px] tracking-[0.2em] uppercase text-[#555] mb-3">Styles</p>
             <div className="flex flex-wrap gap-2">
@@ -573,9 +581,7 @@ export default function BatchUpload() {
                     type="button"
                     onClick={() => toggleStyle(key)}
                     className={`px-4 py-2 text-xs font-medium tracking-wide transition-all border ${
-                      active
-                        ? 'bg-violet-600 border-violet-500 text-white'
-                        : 'bg-zinc-800 border-white/10 text-[#888] hover:border-white/20 hover:text-[#bbb]'
+                      active ? 'bg-violet-600 border-violet-500 text-white' : 'bg-zinc-800 border-white/10 text-[#888] hover:border-white/20 hover:text-[#bbb]'
                     }`}
                   >
                     {label}
@@ -583,18 +589,40 @@ export default function BatchUpload() {
                 );
               })}
             </div>
-            {!hasStyles && (
-              <p className="mt-2 text-[11px] text-[#555]">Select at least one style.</p>
-            )}
           </div>
 
-          {/* Credits estimate */}
           <div className="flex items-center justify-between border border-white/10 px-5 py-3 mb-6 bg-[#111]">
             <span className="text-[11px] tracking-[0.2em] uppercase text-[#555]">Estimated Credits</span>
             <span className={`font-['Cormorant_Garamond'] text-2xl ${estimatedCredits > 0 ? 'text-[#c9a96e]' : 'text-[#333]'}`}>
               {estimatedCredits}
             </span>
           </div>
+
+          {/* Polling status */}
+          {pollingJobs.length > 0 && (
+            <div className="mb-4 border border-white/10 bg-[#0d0d0d] px-4 py-3 flex flex-col gap-2">
+              {pollingJobs.map(job => {
+                const counts = job.counts || {};
+                const total = counts.total || 0;
+                const done = (counts.completed || 0) + (counts.failed || 0);
+                const pct = total ? Math.round((done / total) * 100) : 0;
+                return (
+                  <div key={job.batchId} className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-[#888]">{job.label}</span>
+                      <span className="text-[11px] text-[#666]">{job.status}{total ? ` · ${done}/${total}` : ''}</span>
+                    </div>
+                    {total > 0 && (
+                      <div className="h-1 bg-[#1a1a1a] rounded-full overflow-hidden">
+                        <div className="h-full bg-violet-500 transition-all" style={{ width: `${pct}%` }} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {submitStatus && <p className="text-[11px] text-[#a78bfa] mt-1">{submitStatus}</p>}
+            </div>
+          )}
 
           {successMessage && (
             <div className="mb-4 flex items-start gap-3 border border-[#a78bfa]/30 bg-[#a78bfa]/5 px-4 py-3">
@@ -605,13 +633,18 @@ export default function BatchUpload() {
             </div>
           )}
 
-          {/* Submit */}
+          {errorMessage && (
+            <div className="mb-4 px-4 py-3 border border-red-500/30 bg-red-500/5">
+              <p className="text-[12px] text-red-400">{errorMessage}</p>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={submitDisabled}
+            disabled={submitDisabled || isPolling}
             className={`w-full h-14 tracking-widest text-sm uppercase font-['DM_Sans'] font-medium transition-all flex items-center justify-center gap-3 ${
-              submitDisabled
+              submitDisabled || isPolling
                 ? 'bg-[#111] text-[#333] cursor-not-allowed border border-[#1e1e1e]'
                 : 'bg-gradient-to-r from-[#6d4aff] to-[#a78bfa] hover:opacity-90 text-white shadow-[0_0_20px_rgba(109,74,255,0.3)] cursor-pointer'
             }`}
@@ -624,9 +657,7 @@ export default function BatchUpload() {
                 </svg>
                 {submitStatus || 'Submitting...'}
               </>
-            ) : (
-              'Submit Batch Job'
-            )}
+            ) : isPolling ? 'Processing...' : 'Submit Batch Job'}
           </button>
         </section>
 
